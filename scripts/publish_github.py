@@ -94,11 +94,11 @@ def main():
     if hits:
         raise SystemExit("publish_github: personal data in the public copy, nothing committed:\n  " + "\n  ".join(hits))
     git("add", "-A")
-    if not git("status", "--porcelain").strip():
-        print("publish_github: nothing changed")
-        return
-    git("commit", "-q", "-m", msg)
-    print(git("log", "--oneline", "-1").strip())
+    if git("status", "--porcelain").strip():
+        git("commit", "-q", "-m", msg)
+        print(git("log", "--oneline", "-1").strip())
+    else:
+        print("publish_github: no new changes")
     if "--dry" in sys.argv:
         print("publish_github: --dry, not pushed (%s)" % PUBLIC)
         return
