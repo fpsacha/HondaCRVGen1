@@ -1,0 +1,22 @@
+{
+    "Tooltip_CRV_GateClosed": "Open the tailgate first",
+    "Tooltip_CRV_Armour_Magazine": "Welded plate, expanded-metal mesh and arch guards for the Honda CRV: teaches how to make every piece of CRV survival armour.",
+    "Tooltip_Recipe_HondaCRVKnowHow": "How the first CRV goes together: more Mechanics experience from work on a CRV.",
+    "Tooltip_CRV_Function_Manual": "Honda's owner's manual for the first CRV.<br>Reading it teaches Basic Mechanics, and how this car goes together:<br>more Mechanics experience from work on a CRV.",
+    "Tooltip_CRV_Lift_Kit": "A 3 in. suspension lift for the Honda CRV: longer springs, spacers, shocks, four 30x9.50R15 all-terrain tyres and a set of black steel wheels.",
+    "Tooltip_CRV_Lift_Magazine": "Teaches how to build a lift kit for a compact SUV.",
+    "Tooltip_CRV_Lift_Needs": "Needs: ",
+    "Tooltip_CRV_Lift_NeedKit": "a CRV lift kit",
+    "Tooltip_CRV_Lift_NeedWrench": "a wrench",
+    "Tooltip_CRV_Lift_NeedLugWrench": "a lug wrench",
+    "Tooltip_CRV_Lift_NeedJack": "a jack",
+    "Tooltip_CRV_Lift_NeedSkill": "Mechanics level %1",
+    "Tooltip_CRV_Lift_Passengers": "Everybody out of the car first",
+    "Tooltip_CRV_Lift_Trailer": "Unhitch the trailer first",
+    "Tooltip_CRV_Lift_Key": "Take the key out of the ignition and off the door",
+    "Tooltip_CRV_Lift_Engine": "Stop the engine first",
+    "Tooltip_CRV_Lift_Ground": "Needs open ground or a parking spot",
+    "Tooltip_CRV_Lift_Burnt": "The car is a wreck",
+    "Tooltip_CRV_Lift_Busy": "Everybody else stand back from the car",
+    "Tooltip_CRV_Lift_Time": "Takes a long time. The kit comes back when the lift is removed."
+}

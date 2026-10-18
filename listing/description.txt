@@ -1,0 +1,52 @@
+[h1]Honda CRV (1st Gen, RD1)[/h1]
+I really like the first-gen CRV and I really wanted one in Zomboid, so I made it. It's the 1997-2001 model with real-time 4WD, the side-hinged tailgate with the spare hanging off it, the picnic table hidden under the cargo floor, and a B20B that just won't quit.
+
+[b]AI disclaimer:[/b] I used AI (Claude, by Anthropic) to help make this mod. I directed it and tested everything in game. It's still new, so expect a few rough edges, and let me know if something's broken.
+
+[b]Requires:[/b] Build 42. No other mods needed.
+
+[h2]The car[/h2]
+[list]
+[*] All eight factory colours, from Electron Blue Pearl to Naples Gold
+[*] Fold the back seats flat for a long load floor, or sleep in it. Nobody can ride in the back while they're folded
+[*] There's a storage well under the cargo floor. Lift the floor to get to it
+[*] Take the picnic table out and set it up behind the tailgate
+[*] Roof rack with cargo you can actually see, bull bar, window bars, spare cover
+[*] An owner's manual in every glove box, with the last owner's notes in the margins
+[/list]
+
+[h2]Off-road[/h2]
+[list]
+[*] 3 inch lift with all-terrain tyres, on the stock alloys or black steelies. You can take it back off and you keep all your parts and whatever's in the trunk
+[*] Find the kit as rare loot, build it at a workbench, or learn it from the "4x4 Off-Road: CRV Edition" magazine
+[*] Snorkel, skid plate, steel rear bumper with a hitch, ladder up to the roof rack
+[*] Jerry cans on the tailgate and in the roof rack, and they hold real fuel
+[/list]
+
+[h2]Armour[/h2]
+[list]
+[*] Bolt-on door plates, window mesh, arch guards and a rear glass plate. It's heavy bare steel and zombies can't reach through it
+[*] Craft it, find it in garages or military and police loot, or learn it from a magazine
+[/list]
+
+[h2]Under the hood[/h2]
+[list]
+[*] A full engine bay done from photos of a real B20B. Open the hood and the prop rod swings up to hold it
+[*] Proper headlights, and the tail lights light up when you brake
+[*] Its own engine sound, horn and door sounds
+[*] Its own damage, rust and blood textures
+[*] Spawns in suburbs, on farm roads, in parking lots and in traffic jams
+[*] Sandbox options for spawn rate, accessory chance, loot rarity, armour strength and engine volume
+[*] Made with multiplayer in mind (I'm still testing it on dedicated servers, see below)
+[/list]
+
+[h2]Known issues[/h2]
+[list]
+[*] Version 0.3.0, still early. If you hit a bug, please post it with your console log
+[*] Not tested on a dedicated server yet
+[*] I just changed how the lifted version handles hard braking and turns, so tell me how it feels
+[*] Damage dents are still soft blotches for now
+[/list]
+
+[h2]Credits[/h2]
+Vehicle mesh based on [url=https://sketchfab.com/3d-models/3565e8277a484f14b45c6888ca61a2b2]"Honda CR-V 2001"[/url] by kotris666 on Sketchfab, licensed [url=https://creativecommons.org/licenses/by/4.0/]CC BY 4.0[/url]. Changes: split into game parts, decimated, re-unwrapped and retextured; the engine bay and all textures are original. Surface grain from PolyHaven (CC0). Honda, CR-V and the H emblem are Honda Motor Co. trademarks, used in a free fan mod.

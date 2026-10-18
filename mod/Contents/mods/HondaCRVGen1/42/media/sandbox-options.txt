@@ -1,0 +1,51 @@
+VERSION = 1,
+
+option HondaCRVGen1.ArmourStrength
+{
+	type = double,
+	min = 0.1,
+	max = 10.0,
+	default = 1.0,
+	page = HondaCRVGen1,
+	translation = HondaCRVGen1_ArmourStrength,
+}
+
+option HondaCRVGen1.FunctionSpawnRate
+{
+	type = integer,
+	min = 0,
+	max = 500,
+	default = 100,
+	page = HondaCRVGen1,
+	translation = HondaCRVGen1_FunctionSpawnRate,
+}
+
+option HondaCRVGen1.FunctionAccessoryChance
+{
+	type = integer,
+	min = 0,
+	max = 500,
+	default = 100,
+	page = HondaCRVGen1,
+	translation = HondaCRVGen1_FunctionAccessoryChance,
+}
+
+option HondaCRVGen1.FunctionLootRarity
+{
+	type = double,
+	min = 0.0,
+	max = 4.0,
+	default = 1.0,
+	page = HondaCRVGen1,
+	translation = HondaCRVGen1_FunctionLootRarity,
+}
+
+option HondaCRVGen1.PolishEngineVolume
+{
+	type = integer,
+	min = 0,
+	max = 200,
+	default = 100,
+	page = HondaCRVGen1,
+	translation = HondaCRVGen1_PolishEngineVolume,
+}

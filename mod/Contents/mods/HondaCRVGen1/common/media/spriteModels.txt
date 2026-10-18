@@ -1,0 +1,29 @@
+spriteModel
+{
+    VERSION = 1,
+
+    tileset
+    {
+        name = crvgen1_table_01,
+
+        tile
+        {
+            xy = 0 0,
+            modelScript = Base.CRVGen1_TableStand,
+            translate = 0.0000 0.0000 0.0000,
+            rotate = 0.0000 180.0000 0.0000,
+            scale = 1.0000,
+        }
+
+        tile
+        {
+            xy = 1 0,
+            modelScript = Base.CRVGen1_TableStand,
+            translate = 0.0000 0.0000 0.0000,
+            rotate = 0.0000 -90.0000 0.0000,
+            scale = 1.0000,
+        }
+
+    }
+
+}

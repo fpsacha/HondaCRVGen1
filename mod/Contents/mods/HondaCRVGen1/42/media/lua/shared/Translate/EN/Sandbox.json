@@ -1,0 +1,13 @@
+{
+    "Sandbox_HondaCRVGen1": "Honda CRV (RD1)",
+    "Sandbox_HondaCRVGen1_ArmourStrength": "CRV armour strength",
+    "Sandbox_HondaCRVGen1_ArmourStrength_tooltip": "How long the CRV's survival armour lasts. 1 = very strong (a door plate takes hundreds of zombie hits); 2 = twice as long; 0.5 = half.",
+    "Sandbox_HondaCRVGen1_FunctionSpawnRate": "CRV spawn rate (percent)",
+    "Sandbox_HondaCRVGen1_FunctionSpawnRate_tooltip": "How often the CRV turns up in driveways, suburbs, farms, parking lots and traffic jams. 100 is the mod's normal rate, 0 none at all.",
+    "Sandbox_HondaCRVGen1_FunctionAccessoryChance": "CRV accessory chance (percent)",
+    "Sandbox_HondaCRVGen1_FunctionAccessoryChance_tooltip": "Scales the chance that a spawned CRV carries accessories (bull bar, roof rack, window guards, spare tyre cover, and the off-road snorkel, skid plate, rear bumper, ladder and jerry cans). 100 is normal, 0 bare cars. The picnic table is standard equipment.",
+    "Sandbox_HondaCRVGen1_FunctionLootRarity": "CRV loot multiplier",
+    "Sandbox_HondaCRVGen1_FunctionLootRarity_tooltip": "Multiplies how often the CRV's kits, armour, magazines and owner's manuals are found as loot. 1 is normal, 0 never, 4 four times as often.",
+    "Sandbox_HondaCRVGen1_PolishEngineVolume": "CRV engine layer volume (percent)",
+    "Sandbox_HondaCRVGen1_PolishEngineVolume_tooltip": "Loudness of the CRV's own synthesised B20B layer over the game's small-car engine. 0 turns it off."
+}

@@ -1,0 +1,14 @@
+{
+    "ContextMenu_CRV_TakeTable": "Take out the picnic table",
+    "ContextMenu_CRV_PutTable": "Put the picnic table back",
+    "ContextMenu_CRV_FoldBed": "Fold the rear seats into a bed",
+    "ContextMenu_CRV_UnfoldBed": "Put the rear seats back",
+    "ContextMenu_CRV_Function_LiftFloor": "Lift the cargo floor",
+    "ContextMenu_CRV_Function_BrowseManual": "Browse the owner's manual",
+    "ContextMenu_CRV_Lift_Menu": "Lift kit",
+    "ContextMenu_CRV_Lift_Alloy": "Fit the 3 in. lift kit (EX alloys)",
+    "ContextMenu_CRV_Lift_Steel": "Fit the 3 in. lift kit (black steel wheels)",
+    "ContextMenu_CRV_Lift_Remove": "Remove the lift kit",
+    "ContextMenu_CRV_Lift_ToSteel": "Swap to black steel wheels",
+    "ContextMenu_CRV_Lift_ToAlloy": "Swap to the EX alloys"
+}

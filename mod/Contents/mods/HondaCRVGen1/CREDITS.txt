@@ -1,0 +1,29 @@
+Honda CR-V (1st Gen) for Project Zomboid - credits and licences
+================================================================
+
+Vehicle mesh
+  "Honda CR-V 2001" by kotris666, Sketchfab
+  https://sketchfab.com/3d-models/3565e8277a484f14b45c6888ca61a2b2
+  Licence: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+  Changes: split into game parts, decimated, re-unwrapped, retextured; engine bay, arch liners,
+  hood insulator, antenna and all textures are original work for this mod.
+
+Surface textures (grain only, greyscale, tinted) - PolyHaven, CC0 1.0 (https://polyhaven.com/license)
+  Poly Wool Herringbone by colormass, Rico Cilliers
+  Dirty Carpet by Rohit Seervi
+  Fabric Leather 01 by Rob Tuytel
+  Metal Plate 02 by Rob Tuytel
+  Denim Fabric 03 by colormass, Rico Cilliers
+
+Shaders
+  vehicle_crvgen1_norandom.frag / .vert / _static.vert are generated from Project Zomboid's own
+  media/shaders/vehicle_(norandom_)multiuv* files (The Indie Stone) with a skinned vertex path, specular,
+  rim and gloss additions (scripts/gen_shaders.py in the source repository). Game-derived code,
+  for use inside Project Zomboid mods only.
+
+Reference material (not shipped): Wikimedia Commons photographs, public domain / CC0 only.
+
+Brand names and badges (Honda, CR-V, the H emblem, B20B) are trademarks of Honda Motor Co.,
+used descriptively in a free, non-commercial fan mod.
+
+No assets from other Project Zomboid mods are used.

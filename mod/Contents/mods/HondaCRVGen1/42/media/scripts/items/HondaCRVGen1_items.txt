@@ -1,0 +1,313 @@
+module Base
+{
+	item CRVGen1_Bullbar
+	{
+		DisplayCategory = VehicleMaintenance,
+		Weight = 16.0,
+		ItemType = base:normal,
+		DisplayName = CRV Bull Bar,
+		Icon = CRVGen1_Bullbar,
+		ConditionMax = 100,
+		ChanceToSpawnDamaged = 20,
+		MechanicsItem = true,
+		Tags = base:hasmetal,
+	}
+
+	item CRVGen1_RoofRack
+	{
+		DisplayCategory = VehicleMaintenance,
+		Weight = 14.0,
+		ItemType = base:normal,
+		DisplayName = CRV Roof Rack,
+		Icon = CRVGen1_RoofRack,
+		ConditionMax = 100,
+		ChanceToSpawnDamaged = 20,
+		MechanicsItem = true,
+		MaxCapacity = 50,
+		ConditionAffectsCapacity = false,
+		Tags = base:hasmetal,
+	}
+
+	item CRVGen1_GuardWindshield
+	{
+		DisplayCategory = VehicleMaintenance,
+		Weight = 14.0,
+		ItemType = base:normal,
+		DisplayName = CRV Windshield Guard,
+		Icon = CRVGen1_GuardWindshield,
+		ConditionMax = 100,
+		ChanceToSpawnDamaged = 20,
+		MechanicsItem = true,
+		Tags = base:hasmetal,
+	}
+
+	item CRVGen1_GuardRearGlass
+	{
+		DisplayCategory = VehicleMaintenance,
+		Weight = 10.0,
+		ItemType = base:normal,
+		DisplayName = CRV Rear Glass Guard,
+		Icon = CRVGen1_GuardRearGlass,
+		ConditionMax = 100,
+		ChanceToSpawnDamaged = 20,
+		MechanicsItem = true,
+		Tags = base:hasmetal,
+	}
+
+	item CRVGen1_GuardWindowFront
+	{
+		DisplayCategory = VehicleMaintenance,
+		Weight = 7.0,
+		ItemType = base:normal,
+		DisplayName = CRV Front Window Guard,
+		Icon = CRVGen1_GuardWindowFront,
+		ConditionMax = 100,
+		ChanceToSpawnDamaged = 20,
+		MechanicsItem = true,
+		Tags = base:hasmetal,
+	}
+
+	item CRVGen1_GuardWindowRear
+	{
+		DisplayCategory = VehicleMaintenance,
+		Weight = 6.0,
+		ItemType = base:normal,
+		DisplayName = CRV Rear Window Guard,
+		Icon = CRVGen1_GuardWindowRear,
+		ConditionMax = 100,
+		ChanceToSpawnDamaged = 20,
+		MechanicsItem = true,
+		Tags = base:hasmetal,
+	}
+
+	item CRVGen1_SpareCover
+	{
+		DisplayCategory = VehicleMaintenance,
+		Weight = 1.5,
+		ItemType = base:normal,
+		DisplayName = CRV Spare Tire Cover,
+		Icon = CRVGen1_SpareCover,
+		ConditionMax = 100,
+		ChanceToSpawnDamaged = 20,
+		MechanicsItem = true,
+	}
+
+	item CRVGen1_PicnicTable
+	{
+		DisplayCategory = Furniture,
+		ItemType = base:moveable,
+		Weight = 6.0,
+		DisplayName = CRV Picnic Table,
+		Icon = CRVGen1_PicnicTable,
+		WorldObjectSprite = crvgen1_table_01_0,
+		WorldStaticModel = CRVGen1_TableWI,
+		ConditionMax = 100,
+		MechanicsItem = true,
+		Tags = base:hasmetal,
+	}
+
+	item CRVGen1_ArmourDoorFront
+	{
+		DisplayCategory = VehicleMaintenance,
+		Weight = 22.0,
+		ItemType = base:normal,
+		DisplayName = CRV Front Door Armour Plate,
+		Icon = CRVGen1_ArmourDoorFront,
+		ConditionMax = 100,
+		ChanceToSpawnDamaged = 20,
+		MechanicsItem = true,
+		Tags = base:hasmetal,
+	}
+
+	item CRVGen1_ArmourDoorRear
+	{
+		DisplayCategory = VehicleMaintenance,
+		Weight = 19.0,
+		ItemType = base:normal,
+		DisplayName = CRV Rear Door Armour Plate,
+		Icon = CRVGen1_ArmourDoorRear,
+		ConditionMax = 100,
+		ChanceToSpawnDamaged = 20,
+		MechanicsItem = true,
+		Tags = base:hasmetal,
+	}
+
+	item CRVGen1_ArmourArchFront
+	{
+		DisplayCategory = VehicleMaintenance,
+		Weight = 6.0,
+		ItemType = base:normal,
+		DisplayName = CRV Front Wheel Arch Guard,
+		Icon = CRVGen1_ArmourArchFront,
+		ConditionMax = 100,
+		ChanceToSpawnDamaged = 20,
+		MechanicsItem = true,
+		Tags = base:hasmetal,
+	}
+
+	item CRVGen1_ArmourArchRear
+	{
+		DisplayCategory = VehicleMaintenance,
+		Weight = 4.5,
+		ItemType = base:normal,
+		DisplayName = CRV Rear Wheel Arch Guard,
+		Icon = CRVGen1_ArmourArchRear,
+		ConditionMax = 100,
+		ChanceToSpawnDamaged = 20,
+		MechanicsItem = true,
+		Tags = base:hasmetal,
+	}
+
+	item CRVGen1_ArmourMeshFront
+	{
+		DisplayCategory = VehicleMaintenance,
+		Weight = 9.0,
+		ItemType = base:normal,
+		DisplayName = CRV Front Window Armour Mesh,
+		Icon = CRVGen1_ArmourMeshFront,
+		ConditionMax = 100,
+		ChanceToSpawnDamaged = 20,
+		MechanicsItem = true,
+		Tags = base:hasmetal,
+	}
+
+	item CRVGen1_ArmourMeshRear
+	{
+		DisplayCategory = VehicleMaintenance,
+		Weight = 8.0,
+		ItemType = base:normal,
+		DisplayName = CRV Rear Window Armour Mesh,
+		Icon = CRVGen1_ArmourMeshRear,
+		ConditionMax = 100,
+		ChanceToSpawnDamaged = 20,
+		MechanicsItem = true,
+		Tags = base:hasmetal,
+	}
+
+	item CRVGen1_ArmourRearPlate
+	{
+		DisplayCategory = VehicleMaintenance,
+		Weight = 16.0,
+		ItemType = base:normal,
+		DisplayName = CRV Rear Glass Armour Plate,
+		Icon = CRVGen1_ArmourRearPlate,
+		ConditionMax = 100,
+		ChanceToSpawnDamaged = 20,
+		MechanicsItem = true,
+		Tags = base:hasmetal,
+	}
+
+	item CRVGen1_ArmourMagazine
+	{
+		DisplayCategory = RecipeResource,
+		ItemType = base:literature,
+		Weight = 0.5,
+		DisplayName = Survival Armour: Steel for Your CRV,
+		Icon = CRVGen1_ArmourMagazine,
+		BoredomChange = -20,
+		StressChange = -15,
+		LearnedRecipes = CRVGen1_MakeArmourDoorFront;CRVGen1_MakeArmourDoorRear;CRVGen1_MakeArmourArchFront;CRVGen1_MakeArmourArchRear;CRVGen1_MakeArmourMeshFront;CRVGen1_MakeArmourMeshRear;CRVGen1_MakeArmourRearPlate,
+		Tooltip = Tooltip_CRV_Armour_Magazine,
+		StaticModel = Magazine,
+		WorldStaticModel = MagazineMec1Ground,
+		Tags = base:magazine,
+		OnCreate = ItemCodeOnCreate.onCreateRecipeMagazine,
+	}
+
+	item CRVGen1_OwnersManual
+	{
+		DisplayCategory = RecipeResource,
+		ItemType = base:literature,
+		Weight = 0.3,
+		Icon = CRVGen1_OwnersManual,
+		DisplayName = Honda CRV Owner's Manual,
+		BoredomChange = -5,
+		LearnedRecipes = Basic Mechanics;HondaCRVKnowHow,
+		Tooltip = Tooltip_CRV_Function_Manual,
+		StaticModel = BookGrey,
+		WorldStaticModel = BookClosedGrey_Ground,
+		OnCreate = HondaCRVGen1.Function.OnCreateManual,
+	}
+
+	item CRVGen1_LiftKit
+	{
+		DisplayCategory = VehicleMaintenance,
+		Weight = 25.0,
+		ItemType = base:normal,
+		DisplayName = CRV Lift Kit (3 in.),
+		Icon = CRVGen1_LiftKit,
+		ConditionMax = 100,
+		MechanicsItem = true,
+		Tags = base:hasmetal,
+		Tooltip = Tooltip_CRV_Lift_Kit,
+	}
+
+	item CRVGen1_LiftMagazine
+	{
+		DisplayCategory = RecipeResource,
+		ItemType = base:literature,
+		Weight = 0.5,
+		DisplayName = 4x4 Off-Road: CRV Edition,
+		Icon = CRVGen1_LiftMagazine,
+		BoredomChange = -20,
+		StressChange = -15,
+		LearnedRecipes = CRVGen1_MakeLiftKit,
+		Tooltip = Tooltip_CRV_Lift_Magazine,
+		StaticModel = Magazine,
+		WorldStaticModel = MagazineMec1Ground,
+		Tags = base:magazine,
+		OnCreate = ItemCodeOnCreate.onCreateRecipeMagazine,
+	}
+
+	item CRVGen1_OffroadSnorkel
+	{
+		DisplayCategory = VehicleMaintenance,
+		Weight = 3.5,
+		ItemType = base:normal,
+		DisplayName = CRV Snorkel,
+		Icon = CRVGen1_OffroadSnorkel,
+		ConditionMax = 100,
+		ChanceToSpawnDamaged = 20,
+		MechanicsItem = true,
+	}
+
+	item CRVGen1_OffroadSkidPlate
+	{
+		DisplayCategory = VehicleMaintenance,
+		Weight = 9.0,
+		ItemType = base:normal,
+		DisplayName = CRV Skid Plate,
+		Icon = CRVGen1_OffroadSkidPlate,
+		ConditionMax = 100,
+		ChanceToSpawnDamaged = 20,
+		MechanicsItem = true,
+		Tags = base:hasmetal,
+	}
+
+	item CRVGen1_OffroadRearBumper
+	{
+		DisplayCategory = VehicleMaintenance,
+		Weight = 24.0,
+		ItemType = base:normal,
+		DisplayName = CRV Rear Steel Bumper,
+		Icon = CRVGen1_OffroadRearBumper,
+		ConditionMax = 100,
+		ChanceToSpawnDamaged = 20,
+		MechanicsItem = true,
+		Tags = base:hasmetal,
+	}
+
+	item CRVGen1_OffroadLadder
+	{
+		DisplayCategory = VehicleMaintenance,
+		Weight = 6.0,
+		ItemType = base:normal,
+		DisplayName = CRV Roof Ladder,
+		Icon = CRVGen1_OffroadLadder,
+		ConditionMax = 100,
+		ChanceToSpawnDamaged = 20,
+		MechanicsItem = true,
+		Tags = base:hasmetal,
+	}
+
+}
