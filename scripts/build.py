@@ -233,6 +233,10 @@ def main():
             run([sys.executable, os.path.join(S, "tilepack.py")], step + " (pack)")
             run([BLENDER, "-b", "--factory-startup", "--python", os.path.join(S, "spriteview.py")],   # the placed model as the game
                 step + " (model on the tile)")                                                       # draws it, against the sprite
+            # Project Viewpoint draws a pack-bound tile from the pack's OBJ, never from spriteModels.txt
+            # (WorldMesher.drawnElsewhere): re-export it from the world model (it kept the 0.56 m table)
+            run([BLENDER, "-b", "--factory-startup", "--python", os.path.join(S, "features", "_polish_viewpoint.py")],
+                step + " (Viewpoint table)")
         elif step == "check":
             run([sys.executable, os.path.join(S, "audit_mod.py")], step + " (audit)")
             # --gz 150: every view also saved at 150 px/m (<view>_gz.png, a zoomed-out player); the only files

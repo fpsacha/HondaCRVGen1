@@ -170,7 +170,52 @@ function getWorld()
                  setPos = function() end, stopSound = function() end, isPlaying = function() return true end, id = EMITTERS }
     end }
 end
-function getPlayerRadialMenu() return { isReallyVisible = function() return false end, undisplay = function() end } end
+-- the game's radial menu (lua_harness newRadial) and the car V picks (ISVehicleMenu.getVehicleToInteractWith)
+RADIAL = newRadial()
+RADIAL_TARGET = false                  -- (false, not nil: the global exists from the start)
+function getPlayerRadialMenu() return RADIAL end
+function getTexture(path) return path end
+-- the radial against the context menu: each slice past the game's has an option (submenus included) of the same
+-- text, handler and arguments, or (a blocked slice, no command) a greyed option whose text starts its label.
+-- Returns the slices matched and the texts of those without such an option.
+function radialVsMenu(radial, ctx)
+    local opts = {}
+    local function walk(c)
+        for _, o in ipairs(c.options) do
+            opts[#opts + 1] = o
+            if o.subOption then walk(o.subOption) end
+        end
+    end
+    walk(ctx)
+    local matched, missing = 0, {}
+    for _, s in ipairs(radial.slices) do
+        if s.text ~= "VANILLA_MECHANICS" then
+            local found = false
+            for _, o in ipairs(opts) do
+                if s.fn then
+                    if o.name == s.text and o.onSelect == s.fn and o.target == s.args[1] and not o.notAvailable then
+                        local p, same = { o.param1, o.param2, o.param3, o.param4 }, true
+                        for i = 2, s.n do if s.args[i] ~= p[i - 1] then same = false end end
+                        if same then found = true end
+                    end
+                elseif o.notAvailable and string.sub(s.text, 1, #o.name + 2) == o.name .. " [" then
+                    found = true
+                end
+            end
+            if found then matched = matched + 1 else missing[#missing + 1] = s.text end
+        end
+    end
+    return matched, table.concat(missing, ",")
+end
+-- what the timed-action queue holds, as text: type, then the walk's area or the action's car / setting
+function queued()
+    local t = {}
+    for _, a in ipairs(QUEUE) do
+        t[#t + 1] = tostring(a.Type) .. ":" .. tostring(a.area or (a.vehicle and a.vehicle.id)) .. ":" .. tostring(a.on)
+                    .. ":" .. tostring(a.target)
+    end
+    return table.concat(t, ",")
+end
 
 -- items
 ITEMDEF = {
@@ -654,6 +699,8 @@ function ISVehicleMenu.FillMenuOutsideVehicle(player, context, vehicle, test)
 end
 ENTERED = {}
 function ISVehicleMenu.onEnter(playerObj, vehicle, seat) table.insert(ENTERED, seat) end
+function ISVehicleMenu.getVehicleToInteractWith(playerObj) return playerObj:getVehicle() or RADIAL_TARGET end
+ISVehicleMenu.showRadialMenuOutside = VANILLA_RADIAL_OUTSIDE
 ''',
     "client/Vehicles/ISUI/ISCarMechanicsOverlay.lua": r'''
 ISCarMechanicsOverlay = { CarList = {}, PartList = { EngineDoor = { img = "hood", vehicles = {} } } }
@@ -1262,6 +1309,56 @@ def action_params(g):
             g.run("ACT = nil")
 
 
+def radial_menus(g):
+    """The outside radial menu (V) and Project Viewpoint's quick-interact list, which harvests it through a stand-in
+    menu: every wrapper of every feature chained over vanilla's showRadialMenuOutside; on the CR-V each slice is
+    a context-menu option (same text, handler, arguments; blocked = greyed), picking one queues the same action."""
+    g.run("RADIAL = newRadial(); RADIAL_TARGET = suv")
+    ok, r = g.try_run("ISVehicleMenu.showRadialMenuOutside(PLAYER)")
+    check(ok and g.eval("RADIAL:texts()") == "VANILLA_MECHANICS" and g.eval("RADIAL.shown") is True,
+          "radial on a vanilla car: the game's slices only, shown (%s, %s)" % (r, g.eval("RADIAL:texts()")))
+    g.run("RADIAL = newRadial(); RADIAL_TARGET = v")
+    ok, r = g.try_run("ISVehicleMenu.showRadialMenuOutside(PLAYER)")
+    texts = g.eval("RADIAL:texts()") if ok else ""
+    print("     CR-V radial:", texts)
+    slices = texts.split(",")
+    check(ok and slices[:1] == ["VANILLA_MECHANICS"] and slices.count("VANILLA_MECHANICS") == 1,
+          "radial on the CR-V: the game's slices first, once (%s)" % r)
+    check(any(s.startswith("ContextMenu_CRV_FoldBed") for s in slices)
+          and any(s.startswith("ContextMenu_CRV_Function_LiftFloor") for s in slices)
+          and any(s.startswith("ContextMenu_CRV_TakeTable") for s in slices),
+          "the fold-bed, cargo floor and picnic table slices are all on the CR-V's radial")
+    check(g.eval("(function() for _, s in ipairs(RADIAL.slices) do if not s.texture then return false end end return true end)()"),
+          "every slice has an icon")
+    g.run("ctx = newCtx(); ISVehicleMenu.FillMenuOutsideVehicle(0, ctx, v, false)")
+    matched, missing = g.eval("radialVsMenu(RADIAL, ctx)")
+    check(missing == "" and matched == len(slices) - 1,
+          "each CR-V slice is its context-menu option: text, handler, arguments, availability (%d matched; without: %s)"
+          % (matched, missing))
+    n = g.eval("#RADIAL.slices")
+    ok, r = g.try_run("ISVehicleMenu.showRadialMenuOutside(PLAYER)")
+    check(ok and g.eval("RADIAL.shown") is False and g.eval("#RADIAL.slices") == n, "V again closes the menu, adds nothing (%s)" % r)
+    g.run("RADIAL_TARGET = false")
+    # Project Viewpoint: the same slices through its stand-in, and picking one queues what the context option queues
+    ok, r = g.try_eval("viewpointRadial(PLAYER, v):texts()")
+    check(ok and r == texts, "Project Viewpoint's harvest sees the same slices (%s)" % r)
+    ok, r = g.try_eval("viewpointRadial(PLAYER, suv):texts()")
+    check(ok and r == "VANILLA_MECHANICS", "Project Viewpoint on a vanilla car: the game's slices only (%s)" % r)
+    g.run("QUEUE = {}")
+    ok, r = g.try_run("local m = viewpointRadial(PLAYER, v); m:pick(m:find('ContextMenu_CRV_FoldBed'))")
+    by_slice = g.eval("queued()")
+    g.run("QUEUE = {}")
+    g.run("for _, o in ipairs(ctx.options) do if o.name == 'ContextMenu_CRV_FoldBed' then "
+          "o.onSelect(o.target, o.param1, o.param2, o.param3, o.param4) end end")
+    by_option = g.eval("queued()")
+    check(ok and by_slice != "" and by_slice == by_option and "ISCRVFoldSeats" in by_slice,
+          "the fold-bed slice queues what the option does (%s; option: %s; %s)" % (by_slice, by_option, r))
+    g.run("QUEUE = {}; PLAYER.vehicle = v")
+    ok, r = g.try_eval("viewpointRadial(PLAYER, v):texts()")
+    check(ok and r == "", "from inside the car: no outside radial (%s)" % r)
+    g.run("PLAYER.vehicle = nil")
+
+
 def single_player():
     print("\n=== single player: every file loaded in the game's order, OnGameStart")
     g = Game("sp").boot()
@@ -1306,6 +1403,7 @@ def single_player():
                       "o.onSelect(o.target, o.param1, o.param2, o.param3, o.param4) end end")
     check(ok and g.eval("#QUEUE") >= 1, "the fold-bed option queues an action (%s, %s queued)" % (r, g.eval("#QUEUE")))
     g.run("QUEUE = {}")
+    radial_menus(g)
     action_params(g)
 
     # armour plate + window mesh
@@ -1442,6 +1540,9 @@ def multiplayer():
         check(c.eval("vis(v, 'CRVRoofRack')") == "CRVRoofRack,RackLoad2", "%s: rack load 2 (%s)" % (c.name, c.eval("vis(v, 'CRVRoofRack')")))
         check(c.eval("HondaCRVGen1.Shared.isBed(v)") is True and c.eval("HondaCRVGen1.Function.isFloorFound(v)") is True,
               "%s: folded, floor found" % c.name)
+        ok, r = c.try_eval("viewpointRadial(PLAYER, v):texts()")
+        check(ok and "ContextMenu_CRV_UnfoldBed" in r and "ContextMenu_CRV_FoldBed" not in r and "LiftFloor" not in r,
+              "%s: the radial follows the synced state: put the seats back, no floor to lift (%s)" % (c.name, r))
         ok, r = c.try_eval("{guarded(Vehicles.UninstallTest.Default, v, v.parts.CRVRoofRack, PLAYER)}")
         check(ok and r[1] is True and r[2] is False, "%s: the rack is locked under the roof can (%s)" % (c.name, dict(r) if ok else r))
         ok, r = c.try_eval("{guarded(Vehicles.UninstallTest.Default, v, v.parts.DoorFrontLeft, PLAYER)}")

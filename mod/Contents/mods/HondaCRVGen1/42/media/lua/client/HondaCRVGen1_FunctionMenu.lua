@@ -1,7 +1,8 @@
 --[[
 Honda CR-V (RD1), function feature, client UI:
   * right-click on the car (outside): "Lift the cargo floor" until the under-floor storage is found
-    (timed action ISCRVFunctionLiftFloor; the state changes in its complete(), on the server);
+    (timed action ISCRVFunctionLiftFloor; the state changes in its complete(), on the server), and the same on the
+    outside radial menu (V, and Project Viewpoint's quick-interact list);
   * right-click on the owner's manual: "Browse the owner's manual" opens its designed pages in the print media window (text only, nothing
     changes; reading it the vanilla way teaches it, and opens the same window).
   * the manual is three spreads (F.MANUAL_SPREADS). Vanilla's print media window shows one page, so the manual's window
@@ -23,23 +24,44 @@ local M = F.Menu
 
 M.PAGES = 6                                -- IGUI_CRV_Function_Manual_Page1..N (the text-only fallback)
 M.NAV_TEX = { [-1] = "media/textures/CRVGen1_ManualPrev.png", [1] = "media/textures/CRVGen1_ManualNext.png" }
+M.FLOOR_ICON = "media/ui/vehicles/vehicle_exit.png"        -- vanilla's open-the-trunk slice
 
 function M.onLiftFloor(playerObj, vehicle)
     ISTimedActionQueue.add(ISPathFindAction:pathToVehicleArea(playerObj, vehicle, "TruckBed"))
     ISTimedActionQueue.add(ISCRVFunctionLiftFloor:new(playerObj, vehicle))
 end
 
+-- nil while the car has no cargo floor to lift; else ok, and the key of the reason when blocked (both menus)
+function M.liftFloorState(playerObj, vehicle)
+    if not vehicle:getPartById(F.FLOOR_PART) or F.isFloorFound(vehicle) then return nil end
+    local ok, why = F.canLiftFloor(vehicle, playerObj)
+    if not ok and why then return false, why end
+    return true
+end
+
 function M.fillVehicle(player, context, vehicle)
     local playerObj = getSpecificPlayer(player)
     if not playerObj or playerObj:getVehicle() then return end
-    if not vehicle:getPartById(F.FLOOR_PART) or F.isFloorFound(vehicle) then return end
+    local ok, why = M.liftFloorState(playerObj, vehicle)
+    if ok == nil then return end
     local option = context:addOption(getText("ContextMenu_CRV_Function_LiftFloor"), playerObj, M.onLiftFloor, vehicle)
-    local ok, why = F.canLiftFloor(vehicle, playerObj)
-    if not ok and why then
+    if not ok then
         local tip = ISWorldObjectContextMenu.addToolTip()
         tip.description = getText(why)
         option.toolTip = tip
         option.notAvailable = true
+    end
+end
+
+-- the outside radial menu: a blocked lift is a slice without a command, its reason in the label
+function M.radialVehicle(playerObj, menu, vehicle)
+    local ok, why = M.liftFloorState(playerObj, vehicle)
+    if ok == nil then return end
+    local text = getText("ContextMenu_CRV_Function_LiftFloor")
+    if ok then
+        menu:addSlice(text, getTexture(M.FLOOR_ICON), M.onLiftFloor, playerObj, vehicle)
+    else
+        menu:addSlice(text .. " [" .. getText(why) .. "]", getTexture(M.FLOOR_ICON), nil)
     end
 end
 
@@ -48,6 +70,21 @@ function ISVehicleMenu.FillMenuOutsideVehicle(player, context, vehicle, test)
     local result = fillOutside(player, context, vehicle, test)
     if not test and S.isCRV(vehicle) then
         M.fillVehicle(player, context, vehicle)
+    end
+    return result
+end
+
+-- V and Project Viewpoint's quick-interact list (see HondaCRVGen1_Menu.lua): after the game's slices, unless the
+-- key has just closed an open menu
+local showOutside = ISVehicleMenu.showRadialMenuOutside
+function ISVehicleMenu.showRadialMenuOutside(playerObj)
+    local menu = getPlayerRadialMenu(playerObj:getPlayerNum())
+    local closing = menu ~= nil and menu:isReallyVisible()
+    local result = showOutside(playerObj)
+    if not menu or closing or playerObj:getVehicle() then return result end
+    local vehicle = ISVehicleMenu.getVehicleToInteractWith(playerObj)
+    if vehicle and S.isCRV(vehicle) then
+        M.radialVehicle(playerObj, menu, vehicle)
     end
     return result
 end

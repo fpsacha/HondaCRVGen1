@@ -29,6 +29,11 @@ does nothing outside a server); and fake objects with the Java methods the mod c
                                       (.visible[model], .calls) ; .models = { modelIds } for the reset
     newContainer(max, weight)         ItemContainer: getMaxWeight getCapacityWeight isEmpty (.items)
     newPlayer(name, x, y)             IsoPlayer: getX getY getVehicle getUsername isLocalPlayer
+    newRadial()                       ISRadialMenu: addSlice clear isEmpty isReallyVisible addToUIManager
+                                      undisplay (.slices = { text, texture, fn, args, n }); :texts() :find(prefix)
+                                      :pick(slice)
+    VANILLA_RADIAL_OUTSIDE(player)    vanilla's ISVehicleMenu.showRadialMenuOutside, its shape (for the stubs)
+    viewpointRadial(player, vehicle)  the radial as Project Viewpoint's quick-interact list harvests it
 
 Mod data sync: a server's transmitPartModData(part) queues a copy of that part's mod data for every
 client (VehicleUpdatePacket's VehiclePartModData); Net.pump replaces the client part's mod data with
@@ -160,6 +165,62 @@ function Player:getY() return self.y end
 function Player:getVehicle() return self.vehicle end
 function Player:getUsername() return self.name end
 function Player:isLocalPlayer() return true end
+
+-- radial menus: newRadial() records every addSlice(text, texture, fn, ...) in order, shown by addToUIManager and
+-- closed by undisplay (ISRadialMenu); radial:texts() is "text,text!,..." (! = no command, a blocked slice);
+-- radial:find(prefix) the first slice whose text starts so; radial:pick(slice) runs its command as the game does
+Radial = {}
+Radial.__index = Radial
+function newRadial() return setmetatable({ slices = {}, shown = false }, Radial) end
+function Radial:addSlice(text, texture, fn, ...)
+    table.insert(self.slices, { text = text, texture = texture, fn = fn, args = { ... }, n = select("#", ...) })
+end
+function Radial:clear() self.slices = {} end
+function Radial:isEmpty() return #self.slices == 0 end
+function Radial:isReallyVisible() return self.shown end
+function Radial:addToUIManager() self.shown = true end
+function Radial:undisplay() self.shown = false end
+function Radial:texts()
+    local t = {}
+    for _, s in ipairs(self.slices) do t[#t + 1] = s.text .. (s.fn and "" or "!") end
+    return table.concat(t, ",")
+end
+function Radial:find(prefix)
+    for _, s in ipairs(self.slices) do
+        if string.sub(s.text, 1, #prefix) == prefix then return s end
+    end
+    return nil
+end
+function Radial:pick(s) if s and s.fn then return s.fn(unpack(s.args, 1, s.n)) end end
+
+-- vanilla's ISVehicleMenu.showRadialMenuOutside (42.21), its shape: nothing from inside a car; the key closes an
+-- open menu; else clear, the game's slices for the car the player can reach (one here), show
+function VANILLA_MECHANICS() end
+function VANILLA_RADIAL_OUTSIDE(playerObj)
+    if playerObj:getVehicle() then return end
+    local menu = getPlayerRadialMenu(playerObj:getPlayerNum())
+    if menu:isReallyVisible() then menu:undisplay(); return end
+    menu:clear()
+    local vehicle = ISVehicleMenu.getVehicleToInteractWith(playerObj)
+    if vehicle then menu:addSlice("VANILLA_MECHANICS", "media/ui/vehicles/vehicle_repair.png", VANILLA_MECHANICS, playerObj, vehicle) end
+    if menu:isEmpty() then return end
+    menu:addToUIManager()
+end
+
+-- Project Viewpoint's quick-interact list for a car (Viewpoint_Interact.lua radialEntries, mod 3809306528):
+-- getPlayerRadialMenu and ISVehicleMenu.getVehicleToInteractWith swapped for a stand-in menu (reports itself
+-- visible once it holds a slice) and the target car, showRadialMenuOutside(player) called, both put back
+function viewpointRadial(player, vehicle)
+    local standIn = newRadial()
+    function standIn:isReallyVisible() return #self.slices > 0 end
+    local radialOf, pick = getPlayerRadialMenu, ISVehicleMenu.getVehicleToInteractWith
+    getPlayerRadialMenu = function() return standIn end
+    ISVehicleMenu.getVehicleToInteractWith = function() return vehicle end
+    local ok, err = pcall(ISVehicleMenu.showRadialMenuOutside, player)
+    getPlayerRadialMenu, ISVehicleMenu.getVehicleToInteractWith = radialOf, pick
+    if not ok then error(err) end
+    return standIn
+end
 '''
 
 

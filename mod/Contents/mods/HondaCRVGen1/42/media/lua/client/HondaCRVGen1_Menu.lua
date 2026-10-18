@@ -7,6 +7,7 @@ Honda CR-V (RD1): right-click options on the car and the rules that follow from 
     fitted, empty and unoccupied. While folded, nobody can take a rear seat (ISEnterVehicle /
     ISSwitchVehicleSeat refuse them), the rear seat containers refuse items (server rule), and
     sleeping in the car counts as a good bed instead of the usual bad one.
+  * Both on the outside radial menu too (V, and Project Viewpoint's quick-interact list, which is built from it).
 ]]
 
 require "Vehicles/ISUI/ISVehicleMenu"
@@ -20,6 +21,9 @@ require "TimedActions/ISCRVFoldSeats"
 local S = HondaCRVGen1.Shared
 local Menu = {}
 HondaCRVGen1.Menu = Menu
+
+Menu.TABLE_ICON = "media/textures/Item_CRVGen1_PicnicTable.png"
+Menu.BED_ICON = "media/ui/vehicles/vehicle_sleep.png"             -- vanilla's "Sleep" slice in the car
 
 local function tooltip(option, key)
     local tip = ISWorldObjectContextMenu.addToolTip()
@@ -43,32 +47,56 @@ function Menu.onFold(playerObj, vehicle, on)
     ISTimedActionQueue.add(ISCRVFoldSeats:new(playerObj, vehicle, on))
 end
 
-function Menu.fill(player, context, vehicle)
-    local playerObj = getSpecificPlayer(player)
-    if playerObj:getVehicle() then return end
+-- what the car offers playerObj from outside, for both menus: { text = key, icon, fn, args = { ... }, why = key
+-- of the reason it is blocked, or nil }; the handlers take playerObj first, then args
+function Menu.actions(playerObj, vehicle)
+    local list = {}
     -- picnic table
     local part = S.tablePart(vehicle)
     if part then
+        local why = not S.gateOpen(vehicle) and "Tooltip_CRV_GateClosed" or nil
         if part:getInventoryItem() then
-            local option = context:addOption(getText("ContextMenu_CRV_TakeTable"), playerObj, Menu.onTakeTable, vehicle, part)
-            if not S.gateOpen(vehicle) then tooltip(option, "Tooltip_CRV_GateClosed") end
+            list[#list + 1] = { text = "ContextMenu_CRV_TakeTable", icon = Menu.TABLE_ICON, fn = Menu.onTakeTable,
+                                args = { vehicle, part }, why = why }
         else
             local item = playerObj:getInventory():getFirstTypeRecurse(S.TABLE_ITEM)
             if item then
-                local option = context:addOption(getText("ContextMenu_CRV_PutTable"), playerObj, Menu.onPutTable, vehicle, part, item)
-                if not S.gateOpen(vehicle) then tooltip(option, "Tooltip_CRV_GateClosed") end
+                list[#list + 1] = { text = "ContextMenu_CRV_PutTable", icon = Menu.TABLE_ICON, fn = Menu.onPutTable,
+                                    args = { vehicle, part, item }, why = why }
             end
         end
     end
     -- fold-flat bed
     if S.isBed(vehicle) then
-        local option = context:addOption(getText("ContextMenu_CRV_UnfoldBed"), playerObj, Menu.onFold, vehicle, false)
         local ok, why = S.canUnfold(vehicle)                -- function feature: the folded load floor must be empty
-        if not ok then tooltip(option, why) end
+        list[#list + 1] = { text = "ContextMenu_CRV_UnfoldBed", icon = Menu.BED_ICON, fn = Menu.onFold,
+                            args = { vehicle, false }, why = not ok and why or nil }
     else
-        local option = context:addOption(getText("ContextMenu_CRV_FoldBed"), playerObj, Menu.onFold, vehicle, true)
         local ok, why = S.canFold(vehicle)
-        if not ok then tooltip(option, why) end
+        list[#list + 1] = { text = "ContextMenu_CRV_FoldBed", icon = Menu.BED_ICON, fn = Menu.onFold,
+                            args = { vehicle, true }, why = not ok and why or nil }
+    end
+    return list
+end
+
+function Menu.fill(player, context, vehicle)
+    local playerObj = getSpecificPlayer(player)
+    if playerObj:getVehicle() then return end
+    for _, a in ipairs(Menu.actions(playerObj, vehicle)) do
+        local option = context:addOption(getText(a.text), playerObj, a.fn, unpack(a.args))
+        if a.why then tooltip(option, a.why) end
+    end
+end
+
+-- the same actions on the outside radial menu: a blocked one is a slice without a command, its reason in the label
+-- (vanilla's radial ignores a slice without one; Project Viewpoint lists it greyed)
+function Menu.radial(playerObj, menu, vehicle)
+    for _, a in ipairs(Menu.actions(playerObj, vehicle)) do
+        if a.why then
+            menu:addSlice(getText(a.text) .. " [" .. getText(a.why) .. "]", getTexture(a.icon), nil)
+        else
+            menu:addSlice(getText(a.text), getTexture(a.icon), a.fn, playerObj, unpack(a.args))
+        end
     end
 end
 
@@ -77,6 +105,22 @@ function ISVehicleMenu.FillMenuOutsideVehicle(player, context, vehicle, test)
     local result = fillOutside(player, context, vehicle, test)
     if not test and S.isCRV(vehicle) then
         Menu.fill(player, context, vehicle)
+    end
+    return result
+end
+
+-- the outside radial menu (V; Project Viewpoint's quick-interact list reads it through a stand-in menu that
+-- getPlayerRadialMenu returns): our slices after the game's. The key toggles the menu, so when it was open the
+-- game has just closed it and nothing is added.
+local showOutside = ISVehicleMenu.showRadialMenuOutside
+function ISVehicleMenu.showRadialMenuOutside(playerObj)
+    local menu = getPlayerRadialMenu(playerObj:getPlayerNum())
+    local closing = menu ~= nil and menu:isReallyVisible()
+    local result = showOutside(playerObj)
+    if not menu or closing or playerObj:getVehicle() then return result end
+    local vehicle = ISVehicleMenu.getVehicleToInteractWith(playerObj)
+    if vehicle and S.isCRV(vehicle) then
+        Menu.radial(playerObj, menu, vehicle)
     end
     return result
 end

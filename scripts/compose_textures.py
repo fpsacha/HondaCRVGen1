@@ -827,8 +827,15 @@ def main():
     # zone within 0.01, so at half size every zone edge lost about a texel, which cut a dark notched rim
     # into each lit lamp (tail 1.4 % of lit fragments, 0.4 % at full size) and an unlit line down the
     # high stop lamp. 16 MB of video memory at the 2048 cap; nothing at the default 512.
+    # The SHIPPED Mask is RGB, no alpha (2026-10-18): whenever the game shrinks a sheet to the player's vehicle
+    # texture size (default 512) it multiplies the colour by the alpha (ImageData.getMipMapData ->
+    # performPreMultipliedAlpha), and with the gloss in the alpha every zone colour left the shader's 0.01
+    # match: no lamp lit and damage / blood / removed-part zones failed, in the game and in Project
+    # Viewpoint, for everyone below the 2048 setting. The zones + gloss copy stays a build file for the
+    # polish feature (damage art, skin HSV); the shader's gloss is a constant (gen_shaders.GLOSS).
+    mask.save(os.path.join(BAKE_DIR, "shell_mask_gloss.png"))
     p = os.path.join(a.out, "%s_Mask.png" % PT.NAME)
-    mask.save(p)
+    zones.convert("RGB").save(p)
     written.append(p)
     p = os.path.join(a.out, "%s_Lights.png" % PT.NAME)
     if pp is not None:

@@ -135,7 +135,9 @@ def COMPOSE(report, ctx):
         raise RuntimeError("polish: the UV dump failed\n" + "\n".join(out.splitlines()[-20:]))
     report("FEATURE polish: " + next(ln for ln in out.splitlines() if ln.startswith("POLISH uv2dump:")))
     from features import _polish_damage as D
-    mask = os.path.join(ctx["out"], "%s_Mask.png" % D.NAME)
+    mask = os.path.join(ctx["bake"], "shell_mask_gloss.png")          # compose: zones + gloss (the shipped Mask is RGB)
+    if not os.path.exists(mask):
+        mask = os.path.join(ctx["out"], "%s_Mask.png" % D.NAME)
     D.build(npz, mask, ctx["out"], report)
     hsv = _skin_hsv(ctx["out"], mask)
     have = _lua_skin_hsv(os.path.normpath(os.path.join(ctx["out"], "..", "..", "..", "..")))   # .../HondaCRVGen1

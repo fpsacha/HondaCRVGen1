@@ -398,7 +398,12 @@ def side(role, net=None, player="tester", menu=False):
 
 
 MENU_FAKE = r'''
-ISVehicleMenu = { FillMenuOutsideVehicle = function() return "vanilla" end }
+ISVehicleMenu = { FillMenuOutsideVehicle = function() return "vanilla" end,
+                  showRadialMenuOutside = VANILLA_RADIAL_OUTSIDE,
+                  getVehicleToInteractWith = function(playerObj) return playerObj:getVehicle() or RADIAL_TARGET end }
+RADIAL = newRadial()
+function getPlayerRadialMenu(n) return RADIAL end
+function getTexture(path) return path end
 Ctx = {}
 Ctx.__index = Ctx
 function newCtx() return setmetatable({ options = {}, subs = {} }, Ctx) end
@@ -625,16 +630,45 @@ def menu():
     check(sp.eval("#%s" % sub) == 2 and sp.eval("%s[1].text" % sub) == "ContextMenu_CRV_Lift_Alloy", "stock: alloy and steel")
     check(sp.eval("%s[1].notAvailable" % sub) is True and "Tooltip_CRV_Lift_NeedKit" in sp.eval("%s[1].toolTip.description" % sub),
           "no kit: greyed, the tooltip says why")
+    # the outside radial (Project Viewpoint's harvest): without a kit the stock car offers no fitting at all
+    radial = "viewpointRadial(PLAYER, %s):texts()"
+    check(sp.eval(radial % "v") == "VANILLA_MECHANICS", "radial, no kit: no lift slices (%s)" % sp.eval(radial % "v"))
     sp.run("PLAYER:getInventory():AddItem('Base.CRVGen1_LiftKit'); ctx = newCtx(); ISVehicleMenu.FillMenuOutsideVehicle(0, ctx, v, false)")
     check(sp.eval("%s[2].notAvailable" % sub) is None, "with the kit: available")
+    want = ",".join(["VANILLA_MECHANICS"] + [sp.eval("%s[%d].text" % (sub, i)) + ("" if sp.eval("%s[%d].notAvailable" % (sub, i)) is None
+                                                                               else " [...]!") for i in (1, 2)])
+    got = sp.eval(radial % "v")
+    check(re.sub(r" \[[^\]]*\]!", " [...]!", got) == want, "radial with the kit: the submenu's options, in order (%s)" % got)
+    check(sp.eval("viewpointRadial(PLAYER, v):find('ContextMenu_CRV_Lift_Steel').texture") == "media/textures/Item_CRVGen1_LiftKit.png",
+          "the kit's icon")
+    # the slice runs the option's handler with the option's arguments: the same walk and conversion
+    sp.run("QUEUE = {}; m = viewpointRadial(PLAYER, v); s = m:find('ContextMenu_CRV_Lift_Steel')")
+    check(sp.eval("s.fn == %s[2].fn and s.args[1] == %s[2].args[1] and s.args[2] == %s[2].args[2] and s.args[3] == %s[2].args[3]"
+                  % (sub, sub, sub, sub)) is True, "the steel slice is the steel option (handler and arguments)")
+    sp.run("m:pick(s)")
+    check(sp.eval("QUEUE[2].target") == "steel" and sp.eval("QUEUE[1].path") == "TireFrontLeft", "radial: walk to the car, then the action")
+    sp.run("QUEUE = {}")
     sp.run("o = %s[2]; o.fn(o.args[1], o.args[2], o.args[3])" % sub)
     check(sp.eval("QUEUE[2].target") == "steel" and sp.eval("QUEUE[1].path") == "TireFrontLeft", "walk to the car, then the action")
     sp.run("n = newCRV(5, 'Base.HondaCRVGen1LiftSteel'); ctx = newCtx(); ISVehicleMenu.FillMenuOutsideVehicle(0, ctx, n, false)")
     check(sp.eval("%s[1].text" % sub) == "ContextMenu_CRV_Lift_Remove" and sp.eval("%s[2].text" % sub) == "ContextMenu_CRV_Lift_ToAlloy",
           "lifted: remove, swap")
+    got = sp.eval(radial % "n")
+    check(re.match(r"VANILLA_MECHANICS,ContextMenu_CRV_Lift_Remove( \[[^\]]+\]!)?,ContextMenu_CRV_Lift_ToAlloy( \[[^\]]+\]!)?$", got)
+          is not None, "radial, lifted: remove, swap (%s)" % got)
+    # a blocked slice has no command and says what is missing, in one line
+    sp.run("n.running = true")
+    got = sp.eval(radial % "n")
+    check("ContextMenu_CRV_Lift_Remove [" in got and "Tooltip_CRV_Lift_Engine" in got and "<LINE>" not in got
+          and sp.eval("viewpointRadial(PLAYER, n):find('ContextMenu_CRV_Lift_Remove').fn") is None,
+          "radial, engine running: blocked, the reason in the label (%s)" % got)
+    sp.run("n.running = false")
     sp.run("ctx = newCtx(); ISVehicleMenu.FillMenuOutsideVehicle(0, ctx, newVehicle(6, {}, 'Base.SUV'), false)")
     check(sp.eval("#ctx.options") == 0, "no menu on other cars")
-    print("LIFT menu: submenu, greyed options with reasons, walk then act")
+    check(sp.eval(radial % "newVehicle(7, {}, 'Base.SUV')") == "VANILLA_MECHANICS", "no slices on other cars")
+    sp.run("RADIAL = newRadial(); RADIAL_TARGET = v; ISVehicleMenu.showRadialMenuOutside(PLAYER)")
+    check(sp.eval("RADIAL:texts()") == sp.eval(radial % "v") and sp.eval("RADIAL.shown") is True, "the game's V: the same slices")
+    print("LIFT menu: submenu, greyed options with reasons, walk then act; the radial: the same, no fitting without a kit")
 
 
 def multiplayer():

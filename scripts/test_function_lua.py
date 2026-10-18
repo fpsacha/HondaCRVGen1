@@ -521,7 +521,13 @@ def seats_look():
 
 UI = r'''
 ISVehicleMenu = { FillMenuOutsideVehicle = function(player, context, vehicle, test) return "vanilla" end,
-                  onEnter = function(playerObj, vehicle, seat) ENTERED = seat end }
+                  onEnter = function(playerObj, vehicle, seat) ENTERED = seat end,
+                  showRadialMenuOutside = VANILLA_RADIAL_OUTSIDE,
+                  getVehicleToInteractWith = function(playerObj) return playerObj:getVehicle() or RADIAL_TARGET end }
+RADIAL = newRadial()
+function getPlayerRadialMenu(n) return RADIAL end
+function getTexture(path) return path end
+function Player:getPlayerNum() return 0 end
 ISWorldObjectContextMenu = { addToolTip = function() return {} end, getBedQuality = function() return "badBed" end }
 ISEnterVehicle = { isValid = function(self) return true end }
 ISSwitchVehicleSeat = { isValid = function(self) return true end }
@@ -558,16 +564,46 @@ def client_menus():
     c.run("v = newCRV(1); PLAYER.area = 'TruckBed'")
     menu = "(function() local ctx = newContext(); ISVehicleMenu.FillMenuOutsideVehicle(0, ctx, v, false); return optionNames(ctx) end)()"
     check(c.eval(menu) == "ContextMenu_CRV_FoldBed,ContextMenu_CRV_Function_LiftFloor!", "closed gate: %s" % c.eval(menu))
+    # the outside radial, as Project Viewpoint harvests it: the same options after the game's slices, a blocked
+    # one without a command and with its reason
+    radial = "viewpointRadial(PLAYER, v):texts()"
+    want = "VANILLA_MECHANICS,ContextMenu_CRV_FoldBed,ContextMenu_CRV_Function_LiftFloor [Tooltip_CRV_GateClosed]!"
+    check(c.eval(radial) == want, "radial, closed gate: %s" % c.eval(radial))
+    c.run("RADIAL = newRadial(); RADIAL_TARGET = v; ISVehicleMenu.showRadialMenuOutside(PLAYER)")
+    check(c.eval("RADIAL:texts()") == want and c.eval("RADIAL.shown") is True, "the game's V: the same slices, shown")
+    c.run("ISVehicleMenu.showRadialMenuOutside(PLAYER)")
+    check(c.eval("RADIAL:texts()") == want and c.eval("RADIAL.shown") is False, "V again closes it, nothing added")
+    check(c.eval("viewpointRadial(PLAYER, newVehicle(9, {}, 'Base.SUV')):texts()") == "VANILLA_MECHANICS",
+          "radial on another car: the game's slices only")
     c.run("v.parts.TrunkDoor.door.open = true")
     check(c.eval(menu) == "ContextMenu_CRV_FoldBed,ContextMenu_CRV_Function_LiftFloor", "open gate: %s" % c.eval(menu))
+    check(c.eval(radial) == "VANILLA_MECHANICS,ContextMenu_CRV_FoldBed,ContextMenu_CRV_Function_LiftFloor",
+          "radial, open gate: %s" % c.eval(radial))
+    # picking the slice queues what the option does: the walk to the cargo area, then the lift
+    c.run("QUEUE = {}; local m = viewpointRadial(PLAYER, v); m:pick(m:find('ContextMenu_CRV_Function_LiftFloor')); BY_SLICE = QUEUE")
+    c.run("QUEUE = {}; local ctx = newContext(); ISVehicleMenu.FillMenuOutsideVehicle(0, ctx, v, false); "
+          "for _, o in ipairs(ctx.options) do if o.name == 'ContextMenu_CRV_Function_LiftFloor' then o.fn(o.target, o.a1, o.a2) end end; "
+          "BY_OPTION = QUEUE")
+    same = ("#BY_SLICE == 2 and #BY_OPTION == 2 and BY_SLICE[1].path == 'TruckBed' and BY_OPTION[1].path == 'TruckBed' "
+            "and getmetatable(BY_SLICE[2]) == ISCRVFunctionLiftFloor and getmetatable(BY_OPTION[2]) == ISCRVFunctionLiftFloor "
+            "and BY_SLICE[2].vehicle == v and BY_OPTION[2].vehicle == v "
+            "and BY_SLICE[2].character == PLAYER and BY_OPTION[2].character == PLAYER")
+    check(c.eval(same) is True, "the cargo floor slice queues the option's walk and ISCRVFunctionLiftFloor")
+    c.run("QUEUE = {}")
     c.run("HondaCRVGen1.Shared.setBed(v, true); v.parts.CRVFunctionCargo.cont.items = 1")
     check(c.eval(menu) == "ContextMenu_CRV_UnfoldBed!,ContextMenu_CRV_Function_LiftFloor", "folded, loaded: %s" % c.eval(menu))
+    check(c.eval(radial) == "VANILLA_MECHANICS,ContextMenu_CRV_UnfoldBed [IGUI_CRV_Function_CargoNotEmpty]!,"
+          "ContextMenu_CRV_Function_LiftFloor", "radial, folded, loaded: %s" % c.eval(radial))
+    c.run("PLAYER.vehicle = v")
+    check(c.eval(radial) == "", "no outside radial from inside the car")
+    c.run("PLAYER.vehicle = nil")
     c.run("ENTERED = nil; HALO = {}; ISVehicleMenu.onEnter(PLAYER, v, 2)")
     check(c.eval("ENTERED") is None and c.eval("HALO[1]") == "IGUI_CRV_Function_SeatsAreFolded", "rear seat refused with a reason")
     c.run("ISVehicleMenu.onEnter(PLAYER, v, 1)")
     check(c.eval("ENTERED") == 1, "front seat as usual")
     c.run("HondaCRVGen1.Function.setFloorFound(v)")
     check("LiftFloor" not in c.eval(menu), "no lift option once found")
+    check("LiftFloor" not in c.eval(radial), "no lift slice once found")
     c.run("ctx = newContext(); HondaCRVGen1.Function.Menu.OnFillInventoryObjectContextMenu(0, ctx, { { items = { newItem('Base.CRVGen1_OwnersManual') } } })")
     check(c.eval("optionNames(ctx)") == "ContextMenu_CRV_Function_BrowseManual", "manual menu")
     c.run("ctx.options[1].fn(ctx.options[1].target)")

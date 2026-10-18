@@ -93,6 +93,61 @@ def _single_material(ob):
         poly.material_index = 0
 
 
+GLASS_MATS = ("Vitre", "Vitre_noir")
+
+
+def _inner_glass(ob):
+    """An inward-facing copy of every pane (2026-10-18). Panes are single-sided and every renderer here culls
+    back faces, Project Viewpoint included (ModelPass.cull), so from the seats no window had glass: no tint,
+    they read as open. The copy shares the pane's texels (same window zone: Viewpoint draws it at its glass
+    opacity, an open or removed window discards it with the pane) and its bone weights (a door glass winds
+    down with it); its corner normals are the pane's, negated. From outside it faces away and is culled."""
+    import bmesh
+    me = ob.data
+    names = [m.name if m else "" for m in me.materials]
+    if not any(n in GLASS_MATS for n in names):
+        return 0
+    before = [tuple(c.vector) for c in me.corner_normals]
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bm.faces.ensure_lookup_table()
+    src = [f for f in bm.faces if f.material_index < len(names) and names[f.material_index] in GLASS_MATS]
+    if not src:
+        bm.free()
+        return 0
+    n_old = len(bm.faces)
+    old_loops = sum(len(f.loops) for f in bm.faces)
+    dup = bmesh.ops.duplicate(bm, geom=src)
+    fmap = {new: old for old, new in dup["face_map"].items() if isinstance(new, bmesh.types.BMFace)}
+    new_faces = [g for g in dup["geom"] if isinstance(g, bmesh.types.BMFace)]
+    vback = {new: old for old, new in dup["vert_map"].items()}
+    bmesh.ops.reverse_faces(bm, faces=new_faces)
+    bm.faces.index_update()
+    bm.faces.ensure_lookup_table()
+    # the pane's corner normal per (source face, source vertex), negated for the copy
+    loop_index = {}
+    i = 0
+    for f in sorted(bm.faces, key=lambda f: f.index)[:n_old]:
+        for lp in f.loops:
+            loop_index[(f.index, lp.vert.index)] = i
+            i += 1
+    copy_normals = []
+    for f in sorted(new_faces, key=lambda f: f.index):
+        s = fmap[f]
+        for lp in f.loops:
+            sv = vback[lp.vert]
+            j = loop_index.get((s.index, sv.index))
+            n = before[j] if j is not None and j < len(before) else tuple(-c for c in s.normal)
+            copy_normals.append(tuple(-c for c in n))
+    bm.to_mesh(me)
+    bm.free()
+    me.update()
+    normals = list(before[:old_loops]) + copy_normals
+    if len(normals) == len(me.loops):
+        me.normals_split_custom_set(normals)
+    return len(new_faces)
+
+
 def _unskin(ob):
     for m in list(ob.modifiers):
         if m.type == 'ARMATURE':
@@ -219,6 +274,9 @@ def prepare():
         if ob.name not in ANIMATED:
             _unskin(ob)
         _bake_transform(ob)
+        ng = _inner_glass(ob)
+        if ng:
+            print("EXPORT %s: %d inward glass faces (seen from the seats)" % (ob.name, ng))
         _single_material(ob)
         if ob.data.get("uv_baked"):
             pass                                           # bake_atlas.py already unwrapped and baked this mesh
