@@ -200,8 +200,10 @@ def wire_path(k):
 def build_ignition(b):
     for k in range(4):
         pts, radii = wire_path(k)
-        # both ends are buried (the spine boot, the cap): no end caps
-        b.add("plug_wire_%d" % (k + 1), tube_data(pts, radii, 6, caps=False), "WireGrey", sharp=70)
+        # both ends are buried (the spine boot, the cap): no end caps. Four sides smooth-shaded (sharp 100: the
+        # 90-degree edges stay smooth) read as the six-sided round wire at every zoom (2-5 px wide): 84 -> 56 tris
+        # each (performance pass 2026-10-19)
+        b.add("plug_wire_%d" % (k + 1), tube_data(pts, radii, 4, caps=False), "WireGrey", sharp=100)
     # the bundle clip straddles all four lanes
     b.box("loom_clip", 0.064, 0.077, 1.364, 1.410, 0.957, 0.982, "Steel")
     # distributor: grey housing out of the head's +x end, black cap
@@ -221,11 +223,12 @@ def build_timing_end(b):
     lo = [(1.300, 0.600), (1.470, 0.600), (1.482, 0.640), (1.482, 0.775), (1.290, 0.775), (1.282, 0.640)]
     b.prism("timing_cover_lower", lo, "yz", -0.404, -0.360, "Plastic")
     # crank pulley, alternator and belt (one plane at x -0.428)
-    b.cyl("crank_pulley", (-0.442, 1.405, 0.650), (-0.411, 1.405, 0.650), 0.064, "Steel", seg=12)
+    # (against the left apron, under the mount: seg 12 / 10 / 10 -> 8, performance pass 2026-10-19)
+    b.cyl("crank_pulley", (-0.442, 1.405, 0.650), (-0.411, 1.405, 0.650), 0.064, "Steel", seg=8)
     b.cyl("crank_hub", (-0.447, 1.405, 0.650), (-0.442, 1.405, 0.650), 0.024, "Iron", seg=6)
-    b.cyl("alternator_pulley", (-0.440, 1.545, 0.785), (-0.414, 1.545, 0.785), 0.029, "Steel", seg=10)
+    b.cyl("alternator_pulley", (-0.440, 1.545, 0.785), (-0.414, 1.545, 0.785), 0.029, "Steel", seg=8)
     b.lathe("alternator", [(0.046, 0.0), (0.057, 0.012), (0.057, 0.088), (0.044, 0.106)],
-            (-0.414, 1.545, 0.785), (1, 0, 0), "AluDull", seg=10)
+            (-0.414, 1.545, 0.785), (1, 0, 0), "AluDull", seg=8)
     b.belt("alt_belt", [(Vector((-0.427, 1.405, 0.650)), 0.064), (Vector((-0.427, 1.545, 0.785)), 0.029)],
            width=0.016, thick=0.004, per=1)
     # upper engine mount: a bracket off the timing-end top, across the front of the left tower to
@@ -279,10 +282,11 @@ def build_cooling(b):
     b.cyl("lower_neck", (0.170, 1.450, 0.640), (0.170, 1.470, 0.640), 0.020, "AluDull", seg=6)
     # heater hoses: off the +x rear of the head / block, back under the throttle body to the firewall
     b.box("heater_outlet", 0.120, 0.160, 1.236, 1.255, 0.790, 0.875, "AluDull")
+    # (mostly in the throttle body's shadow: four sides smooth-shaded, 56 -> 36 tris each, 2026-10-19)
     b.add("heater_hose_1", tube_data([(0.150, 1.245, 0.858), (0.180, 1.222, 0.858), (0.200, 1.140, 0.862),
-                                      (0.180, 1.040, 0.870), (0.165, 1.000, 0.872)], 0.0095, 6), "Rubber", sharp=70)
+                                      (0.180, 1.040, 0.870), (0.165, 1.000, 0.872)], 0.0095, 4), "Rubber", sharp=100)
     b.add("heater_hose_2", tube_data([(0.135, 1.245, 0.805), (0.170, 1.200, 0.808), (0.222, 1.110, 0.825),
-                                      (0.228, 1.040, 0.838), (0.222, 1.000, 0.842)], 0.0095, 6), "Rubber", sharp=70)
+                                      (0.228, 1.040, 0.838), (0.222, 1.000, 0.842)], 0.0095, 4), "Rubber", sharp=100)
 
 
 def build(b):

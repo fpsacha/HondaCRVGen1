@@ -15,10 +15,10 @@ the feel only):
     front sheet faces out on both sides (the left plates were built inside-out until 2026-10-13).
   * window mesh acc_armour_mesh_<fl|fr|rl|rr>: a flat-bar frame like the bar guards' (same glass
     outline, same sash clearance) holding EXPANDED METAL as real geometry: a diamond lattice of 14 mm
-    strands (14 x 7 cm diamonds), a closed solid 2.5 mm thick (front and back layers joined by walls
-    along every hole edge: two open sheets showed the ground through their culled backs edge-on)
-    so the far-side windows still read from inside the cabin. The second model of the guard part (an
-    alternative to the bars).
+    strands (14 x 7 cm diamonds), built since 2026-10-19 as the lattice's two families of straight
+    strands, each a front and a back sheet 0.5 mm apart (the far-side windows still read from inside
+    the cabin; the closed 2.5 mm ring per diamond before it cost ~2.2k triangles a window). The second
+    model of the guard part (an alternative to the bars).
   * rear glass plate acc_armour_rear_plate: a plate over the flip-up glass on the guard's frame line
     with a horizontal viewing slot, border, bolts, weld beads inside the border and round the slot
     lip. Rides trunkglass_bone (second model of CRVGuardWindshieldRear).
@@ -81,7 +81,9 @@ ARCH_CLEAR = 0.035                        # plate edge off the wheel opening (re
 # window mesh
 STRAND = 0.014                            # expanded-metal strand width
 DIAMOND = (0.14, 0.07)                    # long way (along the glass's u), short way
-MESH_LAYER = 0.0025                       # front / back layer spacing
+MESH_LAYER = 0.0025                       # the second strand family this far under the first
+MESH_T = 0.0005                           # a strand's front / back sheets (no walls: build_window_mesh)
+MESH_TOL = 0.0004                         # a strand bends where a straight run would leave the glass's curve
 MESH_FRAME_W, MESH_FRAME_T = 0.034, 0.010
 
 # rear plate
@@ -163,6 +165,9 @@ def _texel_by_side(ob, inward, seen=W_SEEN):
 
 
 def _finish(name, bm, inward, shade_k=0.40, seen=W_SEEN):
+    loose = [v for v in bm.verts if not v.link_faces]       # (the back sheets' inner vertices, now unused)
+    if loose:
+        bmesh.ops.delete(bm, geom=loose, context='VERTS')
     ob = _new_object(name, bm)
     _texel_by_side(ob, inward, seen)
     BA._shade(ob, shade_k)
@@ -215,20 +220,6 @@ def _point_in(poly, p):
     return inside
 
 
-def _nearest_on(poly, p):
-    best, bd = None, 1e9
-    n = len(poly)
-    for i in range(n):
-        a, b = Vector(poly[i - 1]), Vector(poly[i])
-        ab = b - a
-        t = 0.0 if ab.length_squared < 1e-12 else max(0.0, min(1.0, (Vector(p) - a).dot(ab) / ab.length_squared))
-        q = a + ab * t
-        d = (q - Vector(p)).length
-        if d < bd:
-            bd, best = d, (q.x, q.y)
-    return best
-
-
 def _grid_lines(lo, hi, step, extra=()):
     k = max(1, int(math.ceil((hi - lo) / step)))
     vals = [lo + (hi - lo) * i / k for i in range(k + 1)] + list(extra)
@@ -236,10 +227,12 @@ def _grid_lines(lo, hi, step, extra=()):
     return vals
 
 
-def _sheet(bm, poly, us, vs, place, holes=(), mat=PLATE, t=PLATE_T):
+def _sheet(bm, poly, us, vs, place, holes=(), mat=PLATE, t=PLATE_T, back=True):
     """A closed plate: the 2D polygon poly cut by the grid lines us x vs (holes: rectangles of whole
     cells dropped), every vertex placed by place(u, v) -> (outer point, outward unit normal); the back
-    is the same sheet t further in, walls along every boundary edge. Returns the front faces."""
+    is the same sheet t further in, walls along every boundary edge. back=False leaves the back sheet out
+    (a plate standing 8 mm off an opaque skin: its back faces the skin and no camera is ever between
+    them). Returns the front faces."""
     key = {}
 
     def vert(u, v):
@@ -286,9 +279,10 @@ def _sheet(bm, poly, us, vs, place, holes=(), mat=PLATE, t=PLATE_T):
                 continue
             f.material_index = mat
             f.smooth = True                                  # one bent plate, not facets
-            g = bm.faces.new([b for _a, b in reversed(vv)])
-            g.material_index = mat
-            g.smooth = False
+            if back:
+                g = bm.faces.new([b for _a, b in reversed(vv)])
+                g.material_index = mat
+                g.smooth = False
             fronts.append(f)
     # walls on the boundary edges of the front sheet
     pair = {}
@@ -331,15 +325,19 @@ def _hex_bolt(bm, p, n, r=BOLT_R, h=BOLT_H):
 
 
 def _weld(bm, ring, closed=True):
-    """A weld bead along ring [(point on the plate surface, its outward normal)]: a low rounded fillet
-    WELD_W wide and WELD_H tall, its base 1 mm inside the plate (a closed piece: PZ culls back faces
-    and nothing can look into it)."""
+    """A weld bead along ring [(point on the plate surface, its outward normal)]: a low fillet WELD_W wide
+    and WELD_H tall, its base 1 mm inside the plate. Since 2026-10-19 (performance pass) a smooth-shaded
+    ridge (two slopes; the five-sided rounded section cost 464 of a door plate's ~1,200 triangles) with no
+    base face: the base lies inside the plate, where no camera is."""
     if len(ring) < 2:
         return
     w, h = WELD_W / 2, WELD_H
-    prof = [(-w, -0.001), (w, -0.001), (0.72 * w, 0.62 * h), (0.0, h), (-0.72 * w, 0.62 * h)]
-    BA._sweep(bm, [p for p, _n in ring], prof, ups=[n for _p, n in ring], closed=closed, smooth=True,
-              cap=not closed, mat=WELD)
+    prof = [(-w, -0.001), (w, -0.001), (0.0, h)]
+    faces = BA._sweep(bm, [p for p, _n in ring], prof, ups=[n for _p, n in ring], closed=closed, smooth=True,
+                      cap=not closed, mat=WELD)
+    m = len(prof)
+    segs = len(ring) if closed else len(ring) - 1
+    bmesh.ops.delete(bm, geom=[faces[i * m] for i in range(segs)], context='FACES_ONLY')   # profile edge 0: the base
 
 
 def _bolts_along(bm, pts, every, offset=0.0):
@@ -502,7 +500,7 @@ def build_door_plate(tag, report):
     # grid lines on the notch's edges too: every cell the outline cuts is then convex
     us = _grid_lines(y0, y1, GRID, extra=[e for e in ((notch[0], notch[2]) if notch else ()) if y0 < e < y1])
     vs = _grid_lines(z0, z1, GRID, extra=[notch[1]] if notch else ())
-    _sheet(bm, pts, us, vs, place)
+    _sheet(bm, pts, us, vs, place, back=False)               # (its back faces the door skin 8 mm away: 2026-10-19)
     # border: flat bar along the outline inset by half its width, on the plate
     inner = BA._inset(pts, BORDER_W / 2)
     ring = [place(y, z) for y, z in BA._densify(inner, True, 0.15)]
@@ -633,97 +631,153 @@ def _frame_bar(bm, g, w, t, mat=PLATE):
     return tabs
 
 
+def _clip_convex(poly, clipper):
+    """Sutherland-Hodgman: 2D polygon poly clipped to the CONVEX counter-clockwise polygon clipper."""
+    out = list(poly)
+    m = len(clipper)
+    for i in range(m):
+        a, b = clipper[i], clipper[(i + 1) % m]
+        ex, ey = b[0] - a[0], b[1] - a[1]
+        pts, out = out, []
+        for k in range(len(pts)):
+            p, q = pts[k - 1], pts[k]
+            sp = ex * (p[1] - a[1]) - ey * (p[0] - a[0])           # > 0: left of the edge, inside
+            sq = ex * (q[1] - a[1]) - ey * (q[0] - a[0])
+            if sq >= 0:
+                if sp < 0:
+                    t = sp / (sp - sq)
+                    out.append((p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t))
+                out.append(q)
+            elif sp >= 0:
+                t = sp / (sp - sq)
+                out.append((p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t))
+        if not out:
+            return []
+    return out
+
+
+def _dp3(pts, tol):
+    """Indices kept by Douglas-Peucker on an open 3D polyline (the ends always)."""
+    keep = {0, len(pts) - 1}
+
+    def rec(i, j):
+        if j - i < 2:
+            return
+        a, b = pts[i], pts[j]
+        ab = b - a
+        L2 = max(ab.length_squared, 1e-12)
+        best, k = -1.0, None
+        for m in range(i + 1, j):
+            t = max(0.0, min(1.0, (pts[m] - a).dot(ab) / L2))
+            d = (pts[m] - (a + ab * t)).length
+            if d > best:
+                best, k = d, m
+        if best > tol:
+            keep.add(k)
+            rec(i, k)
+            rec(k, j)
+    rec(0, len(pts) - 1)
+    return sorted(keep)
+
+
+def _ccw(poly):
+    return poly if _area(poly) > 0 else poly[::-1]
+
+
 def build_window_mesh(tag, report):
+    """The frame bar and the expanded metal as its two families of straight strands (performance pass
+    2026-10-19). The diamond lattice's strands lie on two families of parallel lines (the diamonds' edges):
+    each line is one strand, a strip STRAND wide clipped to the clamp outline under the frame bar, bent only
+    where the glass's curve needs it (stations kept by Douglas-Peucker at MESH_TOL along its centre line).
+    The second family runs MESH_LAYER under the first (an expanded metal's strands step at every bond).
+    Each strand is a front and a back sheet MESH_T apart with no walls: edge-on the gap is a tenth of a pixel
+    at 326 px/m. The closed 2.5 mm ring per diamond it replaces (front, back and hole walls: 24 triangles a
+    cell, ~90 cells) cost 2.2-2.3k triangles a window. Same diamonds, strand width, heights over the glass and
+    the same 4 mm step over the front doors' sail (ACC-9)."""
     g = _glass_frame("window_" + tag, ("door_" + tag, "body"), MESH_FRAME_W, MESH_FRAME_T)
     n, out = g["n"], g["out"]
     bm = bmesh.new()
     tabs = _frame_bar(bm, g, MESH_FRAME_W, MESH_FRAME_T)
-    # expanded metal: diamond cells (centres on a staggered grid), each the ring between its outer
-    # diamond (shared with its neighbours) and its hole; vertices outside the frame line are pulled
-    # onto a line under the frame bar
     L, S = DIAMOND
     a, b = L / 2, S / 2
-    d_edge = a * b / math.hypot(a, b)
-    k = max(0.3, 1.0 - (STRAND / 2) / d_edge)
-    clamp_poly = BA._inset(g["frame2"], -(MESH_FRAME_W / 2 - 0.006))
+    h = math.hypot(a, b)
+    clamp_poly = _ccw(BA._inset(g["frame2"], -(MESH_FRAME_W / 2 - 0.006)))
     us = [p[0] for p in clamp_poly]
     vs = [p[1] for p in clamp_poly]
-    u0, u1, v0, v1 = min(us) - L, max(us) + L, min(vs) - S, max(vs) + S
-    h_front, h_back = out - 0.0015, out - 0.0015 - MESH_LAYER
-    cache = {}
-    fronts = []
+    u0, v0 = min(us) - L, min(vs) - S                       # the old lattice's origin: the same diamonds
+    h_front = out - 0.0015
+    w = STRAND / 2
+    strands = pieces = 0
+    # (direction along the strand, unit normal across it): the diamonds' two edge directions
+    for fam, (du, dv), (nu, nv) in ((0, (-a / h, b / h), (b / h, a / h)), (1, (a / h, b / h), (-b / h, a / h))):
+        h_fam = h_front - fam * MESH_LAYER
+        cs = [nu * x + nv * y for x, y in clamp_poly]
+        ts = [du * x + dv * y for x, y in clamp_poly]
+        c0 = nu * (u0 + a) + nv * v0                         # through a diamond vertex; the lines are 2ab/h apart
+        step = 2 * a * b / h
+        k = int(math.floor((min(cs) - w - c0) / step))
+        t_lo, t_hi = min(ts) - 0.1, max(ts) + 0.1
+        while c0 + k * step <= max(cs) + w:
+            c = c0 + k * step
+            k += 1
 
-    def put(p2):
-        if not _point_in(clamp_poly, p2):
-            p2 = _nearest_on(clamp_poly, p2)
-        key = (round(p2[0], 5), round(p2[1], 5))
-        if key not in cache:
-            sp, need = g["lift"](p2[0], p2[1])
-            hf, hb = h_front, h_back
-            if hb - 0.004 < need < hf + 0.004:               # a surface under the mesh (the front doors' sail at
-                hf, hb = need + 0.004 + MESH_LAYER, need + 0.004   # the mirror) as high as its strands: 4 mm over it
-            cache[key] = (bm.verts.new(sp + n * hf), bm.verts.new(sp + n * hb), p2)   # (37 cm2 of z-fight, ACC-9)
-        return cache[key]
+            def at(t, s=0.0, c=c):
+                return (nu * (c + s) + du * t, nv * (c + s) + dv * t)
+            poly = _clip_convex(_ccw([at(t_lo, -w), at(t_hi, -w), at(t_hi, w), at(t_lo, w)]), clamp_poly)
+            if len(poly) < 3 or abs(_area(poly)) < 1e-6:
+                continue
+            tp = [du * x + dv * y for x, y in poly]
+            ta, tb = min(tp), max(tp)
 
-    cells = 0
-    j = 0
-    vc = v0
-    while vc <= v1:
-        uc = u0 + (L / 2 if j % 2 else 0.0)
-        while uc <= u1:
-            outer = [(uc + a, vc), (uc, vc + b), (uc - a, vc), (uc, vc - b)]
-            inside = [_point_in(clamp_poly, p) for p in outer]
-            if any(inside) or _point_in(clamp_poly, (uc, vc)):
-                hole = [(uc + a * k, vc), (uc, vc + b * k), (uc - a * k, vc), (uc, vc - b * k)]
-                ov = [put(p) for p in outer]
-                hv = [put(p) for p in hole]
-                for i in range(4):
-                    quad2 = [ov[i][2], ov[(i + 1) % 4][2], hv[(i + 1) % 4][2], hv[i][2]]
-                    if abs(_area(quad2)) < 2e-6:
-                        continue
-                    fv = [ov[i][0], ov[(i + 1) % 4][0], hv[(i + 1) % 4][0], hv[i][0]]
-                    bv = [ov[i][1], ov[(i + 1) % 4][1], hv[(i + 1) % 4][1], hv[i][1]]
-                    if len(set(fv)) < 4:
-                        continue
-                    try:
-                        f = bm.faces.new(fv)
-                        f.material_index, f.smooth = MESH, False
-                        f.normal_update()
-                        if f.normal.dot(n) < 0:
-                            f.normal_flip()
-                        gb = bm.faces.new(bv)
-                        gb.material_index, gb.smooth = MESH, False
-                        gb.normal_update()
-                        if gb.normal.dot(n) > 0:
-                            gb.normal_flip()
-                        fronts.append(f)
-                    except ValueError:
-                        pass
-                cells += 1
-            uc += L
-        vc += b
-        j += 1
-    # close the strands: a wall between the two layers along every edge of the front layer that only
-    # one strand face uses (the diamond holes, the run clamped under the frame bar). Two open sheets
-    # seen edge-on (the far doors opened, over the roof) showed their culled backs: ground through
-    # the lattice (visual review 2026-10-13: +156 / +181 leak px at open_000 / open_180)
-    back_of = {fv: bv for fv, bv, _p2 in cache.values()}
-    fset = set(fronts)
-    walls = 0
-    for f in fronts:
-        for loop in f.loops:
-            if sum(1 for lf in loop.edge.link_faces if lf in fset) != 1:
-                continue
-            a, c = loop.vert, loop.link_loop_next.vert
-            try:
-                wf = bm.faces.new((c, a, back_of[a], back_of[c]))   # faces away from the strand (into the hole)
-            except ValueError:
-                continue
-            wf.material_index, wf.smooth = MESH, False
-            walls += 1
+            def height(p2, h_fam=h_fam):
+                sp, need = g["lift"](p2[0], p2[1])
+                hh = h_fam
+                if h_front - MESH_LAYER - 0.004 < need < h_front + 0.004:   # a surface under the mesh (the front
+                    hh = need + 0.004 + (h_fam - h_front + MESH_LAYER)       # doors' sail at the mirror) as high as
+                return sp, hh                                               # its strands: 4 mm over it (ACC-9)
+            nk = max(2, int(math.ceil((tb - ta) / 0.01)) + 1)
+            tt = [ta + (tb - ta) * i / (nk - 1) for i in range(nk)]
+            line = []
+            for t in tt:
+                sp, hh = height(at(t))
+                line.append(sp + n * hh)
+            st = [tt[i] for i in _dp3(line, MESH_TOL)]
+            cache = {}
+
+            def vert(p2, height=height, cache=cache):
+                key = (round(p2[0], 6), round(p2[1], 6))
+                if key not in cache:
+                    sp, hh = height(p2)
+                    cache[key] = (bm.verts.new(sp + n * hh), bm.verts.new(sp + n * (hh - MESH_T)))
+                return cache[key]
+            for i in range(len(st) - 1):
+                # the piece between two stations: the clipped strand cut by the lines t = st[i] and st[i + 1]
+                band = _ccw([at(st[i], -1.0), at(st[i + 1], -1.0), at(st[i + 1], 1.0), at(st[i], 1.0)])
+                clean = []
+                for p2 in _clip_convex(poly, band):
+                    if not clean or math.hypot(p2[0] - clean[-1][0], p2[1] - clean[-1][1]) > 1e-5:
+                        clean.append(p2)
+                if len(clean) > 2 and math.hypot(clean[0][0] - clean[-1][0], clean[0][1] - clean[-1][1]) <= 1e-5:
+                    clean.pop()
+                if len(clean) < 3 or abs(_area(clean)) < 1e-7:
+                    continue
+                vv = [vert(p2) for p2 in clean]
+                try:
+                    f = bm.faces.new([fv for fv, _bv in vv])
+                    gb = bm.faces.new([bv for _fv, bv in reversed(vv)])
+                except ValueError:
+                    continue
+                for face, sgn in ((f, 1.0), (gb, -1.0)):
+                    face.material_index, face.smooth = MESH, False
+                    face.normal_update()
+                    if face.normal.dot(n) * sgn < 0:
+                        face.normal_flip()
+                pieces += 1
+            strands += 1
     ob = _finish("acc_armour_mesh_" + tag, bm, lambda p: -n, shade_k=0.35)
-    report("  acc_armour_mesh_%s %4d tris: %d diamond cells %.0f x %.0f cm, strand %.0f mm, %d strand walls, frame %.1f cm "
-           "off the glass, %d tabs" % (tag, BA.tris(ob), cells, L * 100, S * 100, STRAND * 1000, walls, out * 100, tabs))
+    report("  acc_armour_mesh_%s %4d tris: %d strands (%.0f x %.0f cm diamonds, %.0f mm wide, families %.1f mm apart), "
+           "%d strand pieces, frame %.1f cm off the glass, %d tabs"
+           % (tag, BA.tris(ob), strands, L * 100, S * 100, STRAND * 1000, MESH_LAYER * 1000, pieces, out * 100, tabs))
     return ob
 
 
@@ -934,7 +988,7 @@ def build_arch(tag, report):
     for i in range(len(grid) - 1):
         for k in range(K - 1):
             faces.append(bm.faces.new((vf[i][k], vf[i + 1][k], vf[i + 1][k + 1], vf[i][k + 1])))
-            faces.append(bm.faces.new((vb_[i][k + 1], vb_[i + 1][k + 1], vb_[i + 1][k], vb_[i][k])))
+            # (no back sheet since 2026-10-19: it faces the fender 11 mm away, where no camera ever is)
         faces.append(bm.faces.new((vb_[i][0], vb_[i + 1][0], vf[i + 1][0], vf[i][0])))
         faces.append(bm.faces.new((vf[i][K - 1], vf[i + 1][K - 1], vb_[i + 1][K - 1], vb_[i][K - 1])))
     for i in (0, len(grid) - 1):

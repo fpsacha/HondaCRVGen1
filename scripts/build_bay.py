@@ -1,6 +1,8 @@
 r"""
 Engine bay v2 (spec/engine-bay-v2.md): every group module of scripts/bay built into one static mesh,
-"engine_block", at its final triangle count, plus the hood's insulator pad joined into the hood.
+"engine_block", at its final triangle count, plus the hood's insulator pad joined into the hood. After the
+join, bay.visibility drops the faces no camera can see (bottoms, buried walls, backs against the firewall)
+and every face is marked no_backfill (no_backs).
 Replaces build_engine.py (v1: a full-detail twin projected onto a coarse copy, whose speckle and
 smeared lettering the remodel removes). Run by run_rebuild.py once; no twin, so prep keeps it as
 built and the bake reads each part's own material colour and decals (self bake).
@@ -18,10 +20,24 @@ S = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else o
 if S not in sys.path:
     sys.path.append(S)                    # run_rebuild already put this checkout's scripts first
 import bay  # noqa: E402
-from bay import envelope, kit  # noqa: E402
+from bay import envelope, kit, visibility  # noqa: E402
 
 NAME = "engine_block"
 HOOD_PAD_DECAL = {"DecalHoodPad": ("hood_pad.png", ("x", -0.62, 0.62), ("y", 0.98, 1.86), "Grey")}
+
+
+def no_backs(ob):
+    """Every face of the bay is a face of a closed solid (or of one whose missing faces no camera sees,
+    bay.visibility): its back is inside the part and never shows. backfill.FORCE_BACKS' boxes round the
+    headlamps (meant for the body's open lamp housings and the fender edges) gave 251 faces of the coolant
+    bottle, the horn, the hood bumpers and the air box front a flipped copy nobody can see (255 of the 4,835
+    shipped triangles until 2026-10-19): backfill.NO_BACKFILL on every face."""
+    me = ob.data
+    a = me.attributes.get("no_backfill")
+    if a is not None:
+        me.attributes.remove(a)
+    a = me.attributes.new("no_backfill", 'INT', 'FACE')
+    a.data.foreach_set("value", [1] * len(me.polygons))
 
 
 def build():
@@ -50,6 +66,9 @@ def build():
         raise RuntimeError("engine_block: the bay groups built no parts")
     problems = envelope.audit(b.objs)
     ob = b.join(NAME)
+    print("engine_block: %d tris as modelled" % kit.tris_of(ob))
+    visibility.prune(ob)
+    no_backs(ob)
     tris = kit.tris_of(ob)
     print("engine_block: %d faces, %d tris, %d materials" % (len(ob.data.polygons), tris, len(ob.data.materials)))
     if over:

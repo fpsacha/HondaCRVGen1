@@ -20,7 +20,8 @@ Meshes (BUILD, Blender): two wheels in the wheel FBX, centred on their own hub l
                     or military tyre): 30 pitches of four staggered rows, two interlocking centre rows
                     of slanted ~4.5 x 4.5 cm blocks either side of a zig-zag centre groove, and two
                     shoulder rows whose blocks roll over the shoulder into moderate sidewall lugs (4-8 mm
-                    proud, long / short), every section convex with its faces looking out of it
+                    proud, long / short; on the outer side only since 2026-10-19), every section convex
+                    with its faces looking out of it
 Both bake on this feature's own sheet "lift" (Vehicles_HondaCRVGen1_Lift.png, vehiclewheel shader, so
 the Vehicle Texture Size option caps it). They are built far from the car (x 4 and 6 m) so the car
 casts no AO on them and they none on it. The white letters are a painted decal (BAKE_PAINT,
@@ -239,11 +240,23 @@ class _Scale:
 # shoulder into a sidewall lug ending lug_r out (4-8 mm proud of the carcass). Both convex; their open
 # edge (last vertex -> first) lies inside the carcass
 CARCASS = [(0.110, 0.240), (TYRE_HALF, 0.300), (0.117, 0.338), (0.110, 0.358), (0.100, 0.368)]
+# the inner side (towards the car or the gate) without the lower sidewall point (0.110, 0.240): the camera
+# never sees that face from close enough for its 1.4 cm of curve to show (performance pass 2026-10-19: 48
+# tris a tyre). Dropping the shoulder's (0.110, 0.358) as well lit the inner shoulder as a pale band (tried)
+CARCASS_IN = [p for p in CARCASS if p != (0.110, 0.240)]
 CENTRE_BLOCK = [(0.007, 0.364), (0.007, TYRE_R), (0.050, TYRE_R), (0.050, 0.364)]
 
 
 def _shoulder_block(lug_r):
     return [(0.060, 0.364), (0.060, TYRE_R), (0.103, TYRE_R), (0.1145, 0.371), (0.1175, lug_r), (0.108, lug_r - 0.003)]
+
+
+# the inner shoulder row's blocks (side -1) end at the shoulder: no sidewall lug on the side that faces the
+# car (or the gate, on the spare), whose lugs nobody saw. The last point is 2 mm inside the carcass, the section
+# stays convex, and the block top (slant reference SHOULDER_T1) is the outer row's mirror. 14 tris a block
+# instead of 18 (performance pass 2026-10-19: 120 tris a tyre)
+SHOULDER_PLAIN = [(0.060, 0.364), (0.060, TYRE_R), (0.103, TYRE_R), (0.1145, 0.371), (0.107, 0.359)]
+SHOULDER_T1 = 0.1175
 
 
 # rows: (side, section, angular length and phase in pitches, slant across the row in pitches): the two
@@ -261,10 +274,13 @@ def _tyre(F, hub, fr, P="Lift", R=TYRE_R, H=TYRE_HALF):
     m = _Scale(rb, R, H)
     tbo, tbi = fr["t_out"] - 0.003, fr["t_in"] + 0.003
     outer = [m(t, r) for t, r in CARCASS]
-    inner = [m(-t, r) for t, r in reversed(CARCASS)]
+    inner = [m(-t, r) for t, r in reversed(CARCASS_IN)]
     prof = [(tbo, rb)] + outer + inner + [(tbi, rb)]
     T, G, I, Hd = P + "Tyre", P + "Groove", P + "TyreIn", P + "Hidden"
-    mats = [T, T, T, G, G, G, G, I, I, I, I, Hd]   # sidewall out, shoulder + crown, sidewall in, the bead band
+    # sidewall out, shoulder + crown, sidewall in, the bead band
+    mats = [T, T, T, G, G, G, G] + [I] * (len(CARCASS_IN) - 1) + [Hd]
+    if len(mats) != len(prof):
+        raise RuntimeError("lift: carcass profile %d points, %d materials" % (len(prof), len(mats)))
     mid = m.rho(0.29)
 
     def away(i, c):                               # the section's middle on this face's angle
@@ -296,8 +312,12 @@ def _tyre(F, hub, fr, P="Lift", R=TYRE_R, H=TYRE_HALF):
     for p in range(PITCHES):
         lug_r = 0.350 if p % 2 == 0 else 0.358    # long and short shoulder lugs
         for side, kind, length, phase, slant in ROWS:
-            sec = CENTRE_BLOCK if kind == "centre" else _shoulder_block(lug_r)
-            t0, t1 = sec[0][0], max(t for t, _r in sec)
+            if kind == "centre":
+                sec = CENTRE_BLOCK
+                t0, t1 = sec[0][0], max(t for t, _r in sec)
+            else:
+                sec = _shoulder_block(lug_r) if side > 0 else SHOULDER_PLAIN
+                t0, t1 = sec[0][0], SHOULDER_T1
             ac = (p + phase) * pitch
             half = 0.5 * length * pitch
 
@@ -364,9 +384,10 @@ def _steel_rim(F, hub, fr, P):
     r_lip, t_out, t_in = fr["r_lip"], fr["t_out"], fr["t_in"]
     S, L, W, Ro, D, C = P + "Steel", P + "SteelLip", P + "SteelWell", P + "Rotor", P + "Dark", P + "Chrome"
     # outer side: the rolled lip (its face and its inner bevel lit), the dish wall down to the face ring
+    # (the dish was two rings until 2026-10-19: its middle point (0.060, 0.186) bent it by 3 degrees, 48 tris)
     outer = [(t_out + 0.003, r_lip + 0.002), (t_out - 0.002, r_lip - 0.005), (t_out - 0.009, r_lip - 0.011),
-             (0.060, 0.186), (0.036, 0.170)]
-    rings = _lathe(F, hub, outer, [L, L, S, S])
+             (0.036, 0.170)]
+    rings = _lathe(F, hub, outer, [L, L, S])
     face_out = rings[-1]
     # the raised hub: a step up to the flat hub face the nuts sit on, a small chrome cap (flat shaded:
     # smooth read as a dome)
@@ -402,9 +423,10 @@ def _steel_rim(F, hub, fr, P):
             to_axis = Vector((0.0, axis.y - mid.y, axis.z - mid.z))
             if f.normal.dot(to_axis) < 0:
                 f.normal_flip()
-    # the rotor: a ring (the part the windows show) and a dark centre behind the hub
-    rotor = [(t_back, 0.180), (t_back, 0.095), (t_back, 0.0)]
-    _lathe(F, hub, rotor, [Ro, D], outward=lambda i, c: hub - Vector((1.0, 0.0, 0.0)), smooth=False, seg=16)
+    # the rotor: the ring the windows show (r 0.117-0.165). Its dark centre went 2026-10-19 (16 tris): the
+    # raised hub closes r < 0.112 in front, the back disc behind, the window walls stop at r 0.117
+    rotor = [(t_back, 0.180), (t_back, 0.095)]
+    _lathe(F, hub, rotor, [Ro], outward=lambda i, c: hub - Vector((1.0, 0.0, 0.0)), smooth=False, seg=16)
     # lug nuts: hex prisms on the hub face
     for k in range(5):
         a = 2 * math.pi * k / 5 + math.pi / 2
