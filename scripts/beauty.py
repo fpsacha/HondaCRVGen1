@@ -205,6 +205,27 @@ def add_table(x, y, rot_deg):
     return new
 
 
+GROUNDS = {   # noise scale (per ground plane), two ramp colours (linear), roughness, bump
+    "asphalt": (0.9 * 100, (0.030, 0.030, 0.032), (0.075, 0.074, 0.072), 0.92, 0.15),
+    "grass": (0.9 * 900, (0.018, 0.034, 0.008), (0.060, 0.085, 0.022), 0.95, 0.45),
+}
+
+
+def set_ground(kind):
+    """The ground's look per shot: "asphalt" (default) or "grass" (a picnic spot)."""
+    m = bpy.data.materials.get("beauty_asphalt")
+    if m is None or kind not in GROUNDS:
+        return
+    scale, c0, c1, rough, bump = GROUNDS[kind]
+    nt = m.node_tree
+    next(n for n in nt.nodes if n.type == 'TEX_NOISE').inputs["Scale"].default_value = scale / U
+    ramp = next(n for n in nt.nodes if n.type == 'VALTORGB').color_ramp
+    ramp.elements[0].color = c0 + (1.0,)
+    ramp.elements[1].color = c1 + (1.0,)
+    next(n for n in nt.nodes if n.type == 'BSDF_PRINCIPLED').inputs["Roughness"].default_value = rough
+    next(n for n in nt.nodes if n.type == 'BUMP').inputs["Strength"].default_value = bump
+
+
 def aim_sun(so, sky, elev, az):
     e, a = math.radians(elev), math.radians(az)
     d = Vector((math.cos(e) * math.cos(a), math.cos(e) * math.sin(a), math.sin(e)))
@@ -243,6 +264,7 @@ def main():
         for o in table_objs:
             bpy.data.objects.remove(o, do_unlink=True)
         table_objs = add_table(*opt["table"]) if "table" in opt else []
+        set_ground(opt.get("ground", "asphalt"))
         elev, az = opt.get("sun", (32.0, 215.0))
         aim_sun(so, sky, elev, az)
         interior = bool(opt.get("interior"))
