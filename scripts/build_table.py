@@ -54,10 +54,12 @@ from build_accessories import (PLATE, STEEL, _box, _new_object, _round, _sweep, 
 
 TOP_W, TOP_L, TOP_T = 0.778, 0.681, 0.029       # x (across the car), y, thickness: measured on a real table (r/crv,
                                                  # 30-5/8 x 26-13/16 x 1-1/8 in; it was a 0.78 m square, 2 cm thick)
-HEIGHT = 0.42                                    # standing: ground to top surface. Measured 2026-10-18 on two eBay listings of
+HEIGHT = 0.66                                    # standing: ground to top surface. Measured 2026-10-18 on two eBay listings of
                                                  # the 1997-2001 table standing (top 30.5 x 26.5-27.5 in): about 40-43 cm, a
                                                  # low camp table (the "26 in" quoted online is the top's depth). 0.76 then
-                                                 # 0.66 read too high (feedback: "its too high ... real proportion")
+                                                 # 0.66 read too high (feedback: "its too high ... real proportion");
+                                                 # then 0.42 was "way too small ... too low, looks weird" next to a
+                                                 # character: 0.66, a low table (picked 2026-10-18), real top kept
 KNEE = (0.12, 0.12)                              # the folding lock strut on each frame: from the top's underside this far inboard
                                                  # of the hinge, to the near leg this far below the top (the photos; no X brace)
 ARCH = 0.03                                      # the ground bars hump up this much over their middle 24 cm

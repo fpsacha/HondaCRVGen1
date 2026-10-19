@@ -58,7 +58,7 @@ SHADOW_ALPHA = 51                      # vanilla: exactly 20 %
 # tilesheet -> [(tile name, png file, properties)]; properties as the game's own table tiles carry
 # them (furniture_tables_high_01). Surface is in 1x pixels, about 42.5 per metre of table height
 # (vanilla high_01_0: 0.78 m -> 33, high_01_4: 0.69 m -> 30, round _6: 0.64 m -> 27, heights read
-# off each sprite's top-centre row at 78.4 px/m); ours is build_table.HEIGHT 0.42 m -> 18.
+# off each sprite's top-centre row at 78.4 px/m); ours is build_table.HEIGHT 0.66 m -> 28.
 _TABLE_PROPS = [
     ("CustomItem", "Base.CRVGen1_PicnicTable"),
     ("CustomName", "Picnic Table"),
@@ -70,7 +70,7 @@ _TABLE_PROPS = [
     ("Material", "SmallSheetMetal"),
     ("Material2", "Plastic"),
     ("PickUpWeight", "60"),
-    ("Surface", "18"),
+    ("Surface", "28"),
     ("solidtrans", ""),
 ]
 SHEETS = {
