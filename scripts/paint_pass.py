@@ -197,12 +197,13 @@ OVERRIDES = [
 # seam: dark band SEAM_W a side (a gap reads ~1.6 cm + the gap: KI5's 1 texel of 1.3-1.6 cm; the
 # design review found ~2 cm total stops beading at the 512 cap), x(1 - SEAM_DARK), darkest at the
 # edge (KI5 door/door pooled median x0.77)
-SEAM_W = 0.008
-SEAM_DARK = 0.25
+SEAM_W = 0.005                   # was 0.008 / 0.25 with a x1.08 highlight: every moulding, lamp and the belt line read
+SEAM_DARK = 0.20                 # as a dark outline in a light halo, wavy along the decimated edges (feedback 2026-10-18,
+                                 # "all kind of weird outline"): a thinner, softer line and no highlight
 SEAM_GRAD = 0.30                 # the band lightens by this share from the edge to its outer side
 SEAM_FLOOR_TX = 1.5              # the whole band (both sides) never under 1.5 texels of the local density
 HI_W = 0.013                     # highlight beyond the dark band, both sides
-HI_K = 1.08                      # KI5 door/door highlights x1.08 both sides (Touran 99 % / 88 % present)
+HI_K = 1.00                      # KI5 door/door highlights x1.08 both sides (Touran 99 % / 88 % present); off since 2026-10-18
 # the flush gate (see PaintPass._gate). Joints between objects (doors, hood, gate, body) are always
 # drawn: their open edges run 0-10 mm apart (door / body p10-p90 0.5-9 mm), and a 1-2 mm ramp left
 # 18-42 % of them highlight-only. Within one object only coincident pieces are flush: their exact
