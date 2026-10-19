@@ -5,14 +5,21 @@ I really like the first-gen CRV and I really wanted one in Zomboid, so I made it
 
 [b]Requires:[/b] Build 42. No other mods needed.
 
+[h2]New in 0.4.0[/h2]
+[list]
+[*] [b]Side awning[/b] you can bolt on and roll out to stay dry in the rain
+[*] [b]A real bed[/b] when you fold the back seats, and a pillow helps you sleep
+[*] [b]Your trunk load shows[/b] in the back of the car
+[*] [b]New interior[/b] done from photos of a real RD1
+[*] [b]Nicer picnic table[/b] and better performance all round
+[/list]
+
 [h2]The car[/h2]
 [list]
 [*] All eight factory colours, from Electron Blue Pearl to Naples Gold
-[*] Fold the back seats flat for a long load floor, or make it a bed. Bring a pillow and you'll sleep better. Nobody can ride in the back while they're folded
-[*] Whatever you put in the trunk shows up back there, and it fills up as you load it
+[*] An interior done from photos of a real RD1: striped seats with proper bolsters, the walk-through tray with cup holders, round heater knobs, the big airbag wheel and the four-gauge cluster
+[*] Whatever you put in the trunk shows up back there: a duffel and a box at first, then a cooler, a gas can, a toolbox and bags as it fills up
 [*] There's a storage well under the cargo floor. Lift the floor to get to it
-[*] Take the picnic table out and set it up anywhere. It's full size, like the real one
-[*] An interior redone from photos of a real RD1: the dash, the seats, the tray between the front seats
 [*] Roof rack with cargo you can actually see, bull bar, window bars, spare cover
 [*] An owner's manual in every glove box, with the last owner's notes in the margins
 [/list]
@@ -25,10 +32,13 @@ I really like the first-gen CRV and I really wanted one in Zomboid, so I made it
 [*] Jerry cans on the tailgate and in the roof rack, and they hold real fuel
 [/list]
 
-[h2]Awning[/h2]
+[h2]Camping[/h2]
 [list]
-[*] A side awning you can bolt to the roof. Roll it out when you park and stand under it to stay out of the rain
-[*] Forget to roll it up and it rolls itself up when you drive off, but drive away fast and it tears
+[*] [b]Bed:[/b] fold the back seats flat and it's made up with a foam pad, a sleeping bag and a pillow. Sleeping in it counts as a good bed. Leave a real pillow on it or in your seat and you sleep even better. Nobody can ride in the back while it's folded
+[*] [b]Side awning:[/b] a roll-out canopy on the roof rail. Stand under it and the rain doesn't soak you, and you dry off like you would under a roof. It works in multiplayer for everyone standing under it
+[*] Find the awning in camping stores and garages, or sew one yourself from 2 tarps, 2 metal pipes, rope and screws (Tailoring 3, Mechanics 1). Fit it like any car part with a wrench
+[*] Roll it out from the car's menu when you're parked. Forget it and it rolls itself up when you drive off, but pull away fast and it tears
+[*] [b]Picnic table:[/b] it lives under the cargo floor. Take it out and set it up anywhere: full size like the real one, grey moulded top and black legs, and you can put things on it
 [/list]
 
 [h2]Armour[/h2]
