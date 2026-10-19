@@ -214,6 +214,19 @@ module Base
 		OnCreate = ItemCodeOnCreate.onCreateRecipeMagazine,
 	}
 
+	item CRVGen1_Awning
+	{
+		DisplayCategory = VehicleMaintenance,
+		Weight = 9.0,
+		ItemType = base:normal,
+		DisplayName = CRV Side Awning,
+		Icon = CRVGen1_Awning,
+		ConditionMax = 100,
+		ChanceToSpawnDamaged = 15,
+		MechanicsItem = true,
+		Tooltip = Tooltip_CRV_Awning_Item,
+	}
+
 	item CRVGen1_OwnersManual
 	{
 		DisplayCategory = RecipeResource,

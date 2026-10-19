@@ -69,11 +69,12 @@ ENGINE_BUDGET = 16000         # (v5; superseded by BUDGET in v6)
 # colour, AO, cavity, lamp light, lettering and lamp internals become texture.
 # v7 cabin (2026-10-12): the interior keeps only kotris's shell, floor and firewall (520); the seats,
 # wheel, dash and the rest are build_cabin's `cabin` (1,292 coarse since the v8 seats, prebuilt like
-# the engine: it is decimated only if the coarse build comes out above its budget)
+# the engine: it is decimated only if the coarse build comes out above its budget). 1,750 since the feature round
+# of 2026-10-19 (rounded seats and headrests, the walk-through tray with cup holders, round HVAC knobs)
 # The engine bay is not budgeted here since v2 (2026-10-17, spec/engine-bay-v2.md): build_bay.py builds it at
 # its final triangle count with no twin, so it is neither decimated nor projected (the bake self-bakes it)
 BUDGET = {"body": 3000, "hood": 380, "door_fl": 400, "door_fr": 400, "door_rl": 340, "door_rr": 340,
-          "trunk": 720, "trunk_top": 330, "interior": 520, "cabin": 1300,
+          "trunk": 720, "trunk_top": 330, "interior": 520, "cabin": 1750,
           "wheel_FR": 450, "wheel_FL": 450, "wheel_RR": 450, "wheel_RL": 450}
 SMALL_PIECES = {}                       # part -> closed pieces under this size are dropped before decimating
 # islands decimated on their own budget inside a part's: one budget for the gate and the spare let
@@ -381,6 +382,107 @@ def _bm_slab(bm, mi, x0, x1, y0, y1, z0, z1, holes, gen=3):
     return n
 
 
+# The cargo side trims (round 5, 2026-10-19: "flat black boxes" beside the cargo floor from the open gate, standing or
+# crouching). On the RD1 (photo DSC_7952) the trim beside the deck is one moulded charcoal piece: a sloped inner face
+# rising from the carpet, a rolled lip along its top edge, a flat top running out under the side trim, and a moulded
+# recess in the top over each arch. The shelf over the arch (y -1.835..-1.30) and the wheel housing behind it (to the
+# opening) now share that cross-section above the deck, lofted along y; the colour split is by material: the carpet
+# (Interieur_sol) on the bottom strip of the inner face up to TRIM_FOOT_Z and on the recess floor, the moulding
+# (Interieur, which bake_atlas paints with the side map's darker kick-panel band) everywhere else. Profile points are
+# (|x|, z) going up the inner face, over the top and down the outer wall (clockwise in the |x|-z plane):
+#   A foot (inner, at the bottom)  B top of the carpet strip  C top of the slope  D lip crest  E lip's outer foot
+#   [T1 T2: the recess's rim, shelf only]  F outer top  G outer bottom
+# Everything stays outboard of the old boxes' inner face (SHELF_X 0.552, which hides the arch liner's inner wall, top
+# z 0.796): the bed pad (|x| <= 0.50) and the clutter's clear box (|x| <= 0.525 below z 0.95) keep their room.
+TRIM_FOOT_Z = 0.800           # carpet strip on the inner face: just over the arch liner's top (0.796)
+TRIM_SLOPE = (0.584, 0.874)   # the slope's top: 3.2 cm outboard over 7.4 cm of rise (~23 degrees off vertical)
+TRIM_LIP = (0.593, 0.890)     # the rolled lip's crest
+TRIM_LIP_FOOT = (0.604, 0.882)
+TRIM_TOP = 0.882              # the flat top (the old shelf's 0.88; the housing's was 0.87)
+TRIM_RECESS_X = (0.614, 0.664)     # the recess's rim on the top (the side trim above stands at |x| 0.69-0.70)
+TRIM_RECESS_FLOOR = (0.620, 0.658, 0.846)   # its floor: drafted walls, 3.6 cm deep
+TRIM_RECESS_Y = (-1.600, -1.470)   # over the arch's middle, clear of the liner's top (z 0.796)
+
+
+def _trim_profile(x_foot, z_bot, x_out, recess=None):
+    """The cargo side trim's cross-section (see TRIM_*): [(|x|, z)] and the material key of each segment (point i to
+    i + 1, the last closing to the first): 'carpet' or 'trim'. recess: None (no rim points), False (rim points on the
+    flat top) or True (the rim points dropped to the recess floor)."""
+    pts = [(x_foot, z_bot), (SHELF_X, TRIM_FOOT_Z), TRIM_SLOPE, TRIM_LIP, TRIM_LIP_FOOT]
+    seg = ["carpet", "trim", "trim", "trim"]
+    if recess is not None:
+        if recess:
+            pts += [(TRIM_RECESS_FLOOR[0], TRIM_RECESS_FLOOR[2]), (TRIM_RECESS_FLOOR[1], TRIM_RECESS_FLOOR[2])]
+        else:
+            pts += [(TRIM_RECESS_X[0], TRIM_TOP), (TRIM_RECESS_X[1], TRIM_TOP)]
+        seg += ["trim", "carpet" if recess else "trim", "trim"]
+    else:
+        seg += ["trim"]
+    pts += [(x_out, TRIM_TOP), (x_out, z_bot)]
+    seg += ["carpet", "carpet"]                    # the hidden outer wall and bottom
+    return pts, seg
+
+
+def _bm_profile_loft(bm, sx, rings, mats, cap_mi, gen=3):
+    """A closed solid on one side of the car (sx -1 / +1) lofted along y through rings [(y, pts, seg)] from
+    _trim_profile (front to rear, y never rising; two rings may share a y: the faces between them are the walls of
+    a step such as the recess's ends). Every ring has the same number of points. mats: {'carpet': i, 'trim': i};
+    cap_mi: the end caps' material and the step walls'. Faces outward; returns the triangle count."""
+    gl = _gen_layer(bm)
+    made, rows = [], []
+    for k, (y, pts, seg) in enumerate(rings):
+        row = []
+        prev = rows[-1] if rows and abs(rings[k - 1][0] - y) < 1e-6 else None
+        for i, (x, z) in enumerate(pts):
+            co = Vector((sx * x, y, z))
+            if prev is not None and (prev[i].co - co).length < 1e-6:
+                row.append(prev[i])                    # a step: points that do not move are shared
+            else:
+                row.append(bm.verts.new(co))
+        rows.append(row)
+    n = len(rings[0][1])
+    side = []
+    for k in range(len(rows) - 1):
+        a, b = rows[k], rows[k + 1]
+        wall = abs(rings[k][0] - rings[k + 1][0]) < 1e-6
+        for i in range(n):
+            j = (i + 1) % n
+            vs = []
+            for v in (a[i], a[j], b[j], b[i]):
+                if v not in vs:
+                    vs.append(v)
+            if len(vs) < 3 or bm.faces.get(vs) is not None:
+                continue
+            f = bm.faces.new(vs)
+            f.material_index = cap_mi if wall else mats[rings[k][2][i]]
+            side.append(f)
+    # one consistent winding: the flat top's first span faces up when it is right
+    bm.normal_update()
+    top = next((f for f in side if all(abs(v.co.z - TRIM_TOP) < 1e-6 for v in f.verts) and len(f.verts) == 4), None)
+    if top is not None and top.normal.z < 0:
+        for f in side:
+            f.normal_flip()
+    made.extend(side)
+    # end caps: the profile less the lip crest is convex; a fan from the outer bottom (G) plus the lip triangle
+    for row, want in ((rows[0], 1.0), (rows[-1], -1.0)):
+        g = row[-1]
+        loop = row[:3] + row[4:-1]                    # A B C | E [T1 T2] F
+        tris = [(g, loop[i], loop[i + 1]) for i in range(len(loop) - 1)] + [(row[2], row[3], row[4])]
+        for t in tris:
+            if bm.faces.get(t) is not None:
+                continue
+            f = bm.faces.new(t)
+            f.material_index = cap_mi
+            f.normal_update()
+            if f.normal.y * want < 0:
+                f.normal_flip()
+            made.append(f)
+    for f in made:
+        f.smooth = False
+        f[gl] = gen
+    return sum(len(f.verts) - 2 for f in made)
+
+
 # ----------------------------------------------------------------------------------------------
 # badges (unchanged from v4)
 
@@ -487,6 +589,15 @@ def _erode(mask, cells):
     for _ in range(cells):
         e = m.copy()
         e[1:, :] &= m[:-1, :]; e[:-1, :] &= m[1:, :]; e[:, 1:] &= m[:, :-1]; e[:, :-1] &= m[:, 1:]
+        m = e
+    return m
+
+
+def _dilate(mask, cells):
+    m = mask.copy()
+    for _ in range(cells):
+        e = m.copy()
+        e[1:, :] |= m[:-1, :]; e[:-1, :] |= m[1:, :]; e[:, 1:] |= m[:, :-1]; e[:, :-1] |= m[:, 1:]
         m = e
     return m
 
@@ -914,6 +1025,7 @@ def _interior_closures(ob):
                 y_min = max(y_min, loc.y + 0.03)
         return min(y_min, -1.92)
     n = 0
+    trim_tris = [0]                       # the moulded cargo side trims (shelf + housing, both sides)
     # cargo riser, deck edge to the gate: clipped at its OUTER edges too (the tail rounds off at the
     # corners, where a riser clipped near the centre showed its ends through the gate/bumper gap)
     ya = max(-2.135, *(rear_face(sx, x, (0.55, 0.70, 0.76)) for sx in (-1, 1) for x in (0.30, 0.57)))
@@ -981,27 +1093,57 @@ def _interior_closures(ob):
             if len(lst) < 2:
                 print("    cargo corner %s: no %s (skin too close)" % ("lr"[sx > 0], tag))
                 continue
-            _bm_loft(bm, mi_, sx, xin, lst, z0, z1)
+            if tag == "housing":
+                # the moulded trim's cross-section (TRIM_*) above the deck; below it the inner wall still runs down
+                # from HOUSE_X (over the riser) to z 0.50
+                tr = _bm_profile_loft(bm, sx, [(y, *_trim_profile(HOUSE_X, z0, x)) for y, x in lst],
+                                      {"carpet": si, "trim": ti}, ti)
+                trim_tris[0] += tr
+            else:
+                _bm_loft(bm, mi_, sx, xin, lst, z0, z1)
             n += 1
             print("    cargo corner %s: %s y %.3f..%.3f, |x| %.3f..%.3f, %d stations"
                   % ("lr"[sx > 0], tag, lst[-1][0], lst[0][0], min(s[1] for s in lst), max(s[1] for s in lst), len(lst)))
+    # The shelf over the arch, from the seat backs' end (y -1.30) to the housing (-1.835): the trim's cross-section
+    # (TRIM_*) lofted through stations every ~13 cm with the recess in its top. Inner face from SHELF_X (over the arch
+    # liner's inner wall, |x| 0.56: at 0.60 the liner's top showed beside the floor) down to under the deck (from the
+    # open gate the eye looked under a 2 cm plate onto the liner's light top, z 0.79). It was six 10 cm boxes per side
+    # (v6), flat black blocks at eye level. The outer wall runs 3 cm inside the skin under the side trim (hidden).
+    for sx in (-1, 1):
+        def x_shelf(y):
+            return min(skin_in(sx, yy, (0.80, 0.87, 0.89), 0.82) for yy in (y - 0.03, y, y + 0.03))
+        ry0, ry1 = TRIM_RECESS_Y
+        rings = []
+        for y in (-1.30, -1.385, ry1, ry1, ry0, ry0, -1.715, -1.835):
+            x = x_shelf(y)
+            if x <= 0.62:
+                continue                                               # the skin closes in: no shelf there
+            k = len([r for r in rings if abs(r[0] - y) < 1e-6])        # a recess end: 2nd ring at the same y
+            inside = ry0 - 1e-6 <= y <= ry1 + 1e-6
+            recess = (k == 1) == (abs(y - ry1) < 1e-6) if inside else False
+            if x < TRIM_RECESS_X[1] + 0.03:
+                recess = False                                         # no room for it under the side trim
+            rings.append((y, *_trim_profile(SHELF_X, 0.76, x, recess)))
+        if len(rings) >= 2:
+            tr = _bm_profile_loft(bm, sx, rings, {"carpet": si, "trim": ti}, ti)
+            trim_tris[0] += tr
+            n += 1
+            print("    cargo corner %s: moulded shelf y %.3f..%.3f, |x| out %.3f..%.3f, %d rings, %d tris"
+                  % ("lr"[sx > 0], rings[-1][0], rings[0][0], min(r[1][-1][0] for r in rings),
+                     max(r[1][-1][0] for r in rings), len(rings), tr))
+        else:
+            print("    cargo corner %s: no shelf (skin too close)" % "lr"[sx > 0])
     for k in range(9):                    # 10 cm slices (v6; 5 cm doubled the boxes for little gain)
         y0 = -2.135 + k * 0.10; y1 = min(y0 + 0.10, -1.30)
         ym = (y0 + y1) / 2
         for sx in (-1, 1):
-            if ym >= -1.86:                                            # over the arch: a shelf above the drum
-                x1 = skin_in(sx, ym, (0.87,), 0.82)
-                if x1 > 0.62:
-                    # inner edge over the arch liner's inner wall (|x| 0.56): at 0.60 the liner's top showed beside the
-                    # floor; and down to the floor (was a 2 cm plate at z 0.86): from the open gate the eye looked under
-                    # the plate's inner edge onto the liner's light top (z 0.79) at both front corners of the cargo floor
-                    _bm_box(bm, si, min(sx * SHELF_X, sx * x1), max(sx * SHELF_X, sx * x1), y0, y1, 0.76, 0.88)
-                    n += 1
+            if ym >= -1.86:                                            # over the arch (the shelf is lofted above)
                 # and a trim plate just inside the quarter skin above it: from the open gate you looked
                 # down the slot between the cargo side trim and the skin, through the skin's back
                 xq = min(skin_in(sx, y, (0.90, 1.00, 1.08), 0.82) for y in (y0, ym, y1)) + 0.01
                 if xq > 0.66:
                     _bm_box(bm, ti, min(sx * (xq - 0.012), sx * xq), max(sx * (xq - 0.012), sx * xq), y0, y1, 0.88, 1.08)
+    print("    cargo corner trims: moulded side trims %d tris before pruning (both sides, shelf + housing)" % trim_tris[0])
     _drop_shared_caps(bm)
     bm.to_mesh(me)
     bm.free()
@@ -1998,6 +2140,7 @@ PLATE_INSET = 0.040           # the door card sits this far inside the door skin
                               # at kotris's card depth, ~9 cm, the open door read as a thick box)
 PLATE_MARGIN = 1              # cells (1 cm) inside the door's outline: the strip outside it shows painted door edge
 PLATE_SIMPLIFY = 0.8          # cells: Douglas-Peucker tolerance of the traced outline
+PLATE_CLOSE = 2               # cells: the door's raster is closed (dilate, erode) by this before the margin
 # Jogs in the traced outline (2026-10-17 review OPEN-8, "two light-grey blocks low on each front door's rear
 # edge"): where the door's rear edge steps 1-2 cm along y over a rise of a cell or two (the lower cladding stands
 # 2 cm proud of the skin's edge at z 0.43, 1 cm more at 0.57), the painted edge band ran out along y for the
@@ -2032,6 +2175,10 @@ def _door_plate(name, report):
     win_name, side = DOORS[name]
     win = bpy.data.objects.get(win_name)
     mask, lo = _outline(ob, (1, 2), mats=("Body", "Body_plastique"))
+    # close cell-thin slits first (round 5): on door_rr a row of skin cells at z ~0.72 (the moulding's seam behind the
+    # front edge) came out empty, open to the door's front end, and the traced outline ran a 13 cm notch into the card
+    # there: a slit showing the road beside the armrest, and the card's triangulation stretched a light sliver below it
+    mask = _erode(_dilate(mask, PLATE_CLOSE), PLATE_CLOSE)
     sill = min((win.matrix_world @ v.co).z for v in win.data.vertices) if win else 1.10
     zs = lo[1] + (np.arange(mask.shape[1]) + 0.5) * CELL
     mask[:, zs > sill - 0.015] = False
@@ -2602,6 +2749,8 @@ HINGE_SKIN = 0.002            # (8 mm left a slot at the fender's rear edge, see
 HINGE_Z = (0.39, 1.10)        # (from 0.46 the driver saw the road under the passenger-side wall, past the kick panel's foot)
 HINGE_DZ = 0.04
 HINGE_DX = 0.02
+HINGE_RET_Y = 0.810           # the return strip along the fender skin runs from here to HINGE_Y (round 5)
+HINGE_RET_GROW = 0.008        # the wall's outer edge and the return follow the skin up to this past the wall's x_out
 
 
 def _hinge_walls(bm, gl, mi_paint, mi_dark, tree, eyes, body_tree):
@@ -2613,6 +2762,12 @@ def _hinge_walls(bm, gl, mi_paint, mi_dark, tree, eyes, body_tree):
         p = Vector((x, HINGE_Y, z))
         return (body_tree.ray_cast(p, Vector((0.0, 0.0, 1.0)), 0.6)[0] is not None
                 and body_tree.ray_cast(p, Vector((1.0 if x > 0 else -1.0, 0.0, 0.0)), 0.4)[0] is not None)
+    def skin(side, y, z, fallback):
+        """|x| HINGE_SKIN inside the fender skin at (y, z), or fallback where the ray finds no skin out there."""
+        loc = body_tree.ray_cast(Vector((side * 1.6, y, z)), Vector((-side, 0.0, 0.0)), 1.0)[0]
+        if loc is None or abs(loc.x) < HINGE_X_IN + 0.10:
+            return fallback
+        return abs(loc.x) - HINGE_SKIN
     for side in (-1, 1):
         z = HINGE_Z[0]
         while z < HINGE_Z[1] - 1e-6:
@@ -2642,8 +2797,12 @@ def _hinge_walls(bm, gl, mi_paint, mi_dark, tree, eyes, body_tree):
                     j += 1
                 if cells[i] is not None:
                     xa, xb = xs[i], xs[j + 1]
-                    vs = [bm.verts.new((side * xa, HINGE_Y, z)), bm.verts.new((side * xb, HINGE_Y, z)),
-                          bm.verts.new((side * xb, HINGE_Y, z1)), bm.verts.new((side * xa, HINGE_Y, z1))]
+                    xb0 = xb1 = xb
+                    if j + 1 == len(cells):                     # the outer edge follows the skin at both heights
+                        xb0 = min(skin(side, HINGE_Y, z, xb), xb + HINGE_RET_GROW)
+                        xb1 = min(skin(side, HINGE_Y, z1, xb), xb + HINGE_RET_GROW)
+                    vs = [bm.verts.new((side * xa, HINGE_Y, z)), bm.verts.new((side * xb0, HINGE_Y, z)),
+                          bm.verts.new((side * xb1, HINGE_Y, z1)), bm.verts.new((side * xa, HINGE_Y, z1))]
                     f = bm.faces.new(vs)
                     f.material_index = mi_dark if cells[i] else mi_paint
                     f.smooth = False
@@ -2653,6 +2812,23 @@ def _hinge_walls(bm, gl, mi_paint, mi_dark, tree, eyes, body_tree):
                         f.normal_flip()                         # it faces the door opening (rearward)
                     made[1 if cells[i] else 0] += 2
                 i = j + 1
+            if cells and cells[-1] is not None:
+                # the return along the fender skin from the wall back toward the door's front end (round 5): between
+                # the door's front end (y ~0.806 at z 0.5-0.7) and the wall the fender skin's back showed from the
+                # seats, a vertical sliver of paint (its backfill copy) and road beside the passenger's kick panel.
+                # Dark, facing the cabin (culled from outside); each corner HINGE_SKIN inside the skin.
+                q = []
+                for yy, zz in ((HINGE_RET_Y, z), (HINGE_Y, z), (HINGE_Y, z1), (HINGE_RET_Y, z1)):
+                    xx = min(skin(side, yy, zz, x_out), x_out + HINGE_RET_GROW)
+                    q.append(bm.verts.new((side * xx, yy, zz)))
+                f = bm.faces.new(q)
+                f.material_index = mi_dark
+                f.smooth = False
+                f[gl] = 5
+                f.normal_update()
+                if f.normal.x * side > 0:
+                    f.normal_flip()                             # it faces the cabin
+                made[1] += 2
             z = z1
     return made
 
@@ -3378,6 +3554,7 @@ GUTTER_BACKED = 0.003         # a strip's inner corner counts as behind its pane
 PANE_MATS = ("Vitre", "Vitre_noir")
 PANE_JOIN = 0.015             # glass shells of one pane whose borders run this close (kotris: 1-12 mm) are closed onto each other
 PANE_DOT = 0.85               # ... when they face the same way
+PANE_SNAP = 0.002             # border vertices of the glass this close (and sharing no face) are made one point (round 5)
 
 
 def _seamback_material():
@@ -3519,6 +3696,34 @@ def _close_pane_cracks(name, report):
                     nvert.co = p
                     inserted += 1
                     worst = max(worst, d)
+    # 3. (round 5) border vertices left a hair apart: on the right side of the windscreen a small shell's corner stood
+    # 1 mm off the big clear shell's (body (0.447, 0.461, 1.464) / 1.465), and the edges either side of it (to
+    # (0.482, 0.759, 1.239) and (0.329, 0.426, 1.509)) opened a 1 mm crack, a dotted line of road seen through the
+    # windscreen from the passenger seat. Any two border vertices within PANE_SNAP that share no face meet at the
+    # higher-ranked shell's one.
+    from mathutils.kdtree import KDTree
+    owner = {}
+    for k in order:
+        for e, f in border(shells[k]):
+            for v in e.verts:
+                owner.setdefault(v, k)
+    bverts = list(owner)
+    kd = KDTree(len(bverts))
+    for i, v in enumerate(bverts):
+        kd.insert(v.co, i)
+    kd.balance()
+    snapped = 0
+    for v in sorted(bverts, key=lambda v: rank[owner[v]]):
+        for co, i, d in kd.find_range(v.co, PANE_SNAP):
+            w = bverts[i]
+            if w is v or d < 1e-6 or rank[owner[w]] < rank[owner[v]]:
+                continue
+            if set(v.link_faces) & set(w.link_faces):
+                continue                                 # a short edge of its own, not a crack
+            w.co = v.co.copy()
+            snapped += 1
+            worst = max(worst, d)
+    moved += snapped
     bm.normal_update()
     bm.to_mesh(me)
     bm.free()
@@ -3531,8 +3736,8 @@ def _close_pane_cracks(name, report):
         normals.extend(g if g is not None else mean for g in got)
     if len(normals) == len(me.loops):
         me.normals_split_custom_set(normals)
-    report("  %-10s pane cracks: %d glass shells, %d border vertices moved onto the next shell, %d inserted, max %.1f mm"
-           % (name, len(shells), moved, inserted, worst * 1000))
+    report("  %-10s pane cracks: %d glass shells, %d border vertices moved onto the next shell, %d inserted, %d snapped "
+           "(< %.0f mm), max %.1f mm" % (name, len(shells), moved - snapped, inserted, snapped, PANE_SNAP * 1000, worst * 1000))
     return moved
 
 

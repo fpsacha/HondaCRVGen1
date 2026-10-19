@@ -500,7 +500,10 @@ def build_door_plate(tag, report):
     # grid lines on the notch's edges too: every cell the outline cuts is then convex
     us = _grid_lines(y0, y1, GRID, extra=[e for e in ((notch[0], notch[2]) if notch else ()) if y0 < e < y1])
     vs = _grid_lines(z0, z1, GRID, extra=[notch[1]] if notch else ())
-    _sheet(bm, pts, us, vs, place, back=False)               # (its back faces the door skin 8 mm away: 2026-10-19)
+    # with its back sheet: the perf pass (2026-10-19) left it out as "facing the door skin 8 mm away", but the
+    # plate's lower edge stands off the skin where the door tucks under, and an open door shows the plate's
+    # back edge-on: ground through the culled back at its bottom (round 5: close_door_open_left 20 -> 345 px)
+    _sheet(bm, pts, us, vs, place)
     # border: flat bar along the outline inset by half its width, on the plate
     inner = BA._inset(pts, BORDER_W / 2)
     ring = [place(y, z) for y, z in BA._densify(inner, True, 0.15)]
@@ -988,7 +991,11 @@ def build_arch(tag, report):
     for i in range(len(grid) - 1):
         for k in range(K - 1):
             faces.append(bm.faces.new((vf[i][k], vf[i + 1][k], vf[i + 1][k + 1], vf[i][k + 1])))
-            # (no back sheet since 2026-10-19: it faces the fender 11 mm away, where no camera ever is)
+            # the back sheet (~4 tris a station): the perf pass dropped it as "facing the fender 11 mm away", but the
+            # band's outer edge stands past the fender's silhouette where the fender curves in (the bumper corner,
+            # the flare lip), and the game camera looking across the car saw the ground through it (round 5,
+            # 2026-10-19: shut_045 / shut_135 +65 / +46 px clusters, close_bay_open +291)
+            faces.append(bm.faces.new((vb_[i][k + 1], vb_[i + 1][k + 1], vb_[i + 1][k], vb_[i][k])))
         faces.append(bm.faces.new((vb_[i][0], vb_[i + 1][0], vf[i + 1][0], vf[i][0])))
         faces.append(bm.faces.new((vf[i][K - 1], vf[i + 1][K - 1], vb_[i + 1][K - 1], vb_[i][K - 1])))
     for i in (0, len(grid) - 1):

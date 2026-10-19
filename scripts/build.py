@@ -181,8 +181,9 @@ def check_compose():
         s = np.asarray(Image.open(os.path.join(tex, f)).convert("RGB"))
         for x0, y0, x1, y1 in rects:
             dirty += int((s[y0:y1, x0:x1] != dark).any(-1).sum())
-    for x0, y0, x1, y1 in rects:
-        dirty += int((lit[y0:y1, x0:x1] != 0).sum())
+    lr = _const("compose_textures.py", "LIGHTS_REDUCE")       # the cells are shell texels; Lights ships at shell / lr
+    for x0, y0, x1, y1 in rects:                              # (round 5: read at shell coordinates it tested other charts)
+        dirty += int((lit[y0 // lr:-(-y1 // lr), x0 // lr:-(-x1 // lr)] != 0).sum())
     if dirty:
         raise SystemExit("compose: %d texels of the dark cells are not %s (or lit) after the reduction" % (dirty, dark))
     print("   compose: sheets ok (bake %dx, shell %d, interior %d, wheel %d, engine %d); Mask %d zone colours, all legal; "

@@ -727,6 +727,65 @@ def client_menus():
           "reason, manual window with every page, the manual's three spreads with page buttons")
 
 
+BED = r'''
+ItemTag = { PILLOW = "base:pillow" }
+function Item:hasTag(t) return self.tags ~= nil and self.tags[t] == true end
+function newPillow() local i = newItem("Base.Pillow"); i.tags = { ["base:pillow"] = true }; return i end
+function Cont:containsTag(t)
+    for _, i in ipairs(self.list or {}) do if i:hasTag(t) then return true end end
+    return false
+end
+function putIn(cont, item) cont.list = cont.list or {}; table.insert(cont.list, item); cont.items = cont.items + 1 end
+function Player:getPrimaryHandItem() return self.primary end
+function Player:getSecondaryHandItem() return self.secondary end
+SEAT_OF = {}
+function Veh:getSeat(chr) return SEAT_OF[chr] or -1 end
+-- BaseVehicle.getPartForSeatContainer: the seat part that holds that seat's container (nil for none)
+function Veh:getPartForSeatContainer(seat)
+    local ids = { [0] = "SeatFrontLeft", [1] = "SeatFrontRight", [2] = "SeatRearLeft", [3] = "SeatRearRight" }
+    return ids[seat] and self.parts[ids[seat]] or nil
+end
+'''
+
+
+def bed_quality():
+    """Sleeping in a folded CR-V: a good bed; a pillow counts in hand, in the sleeper's seat container (as vanilla's
+    vehicle branch does), on the folded bed floor (CRVFunctionCargo) or the cargo deck (TruckBed); upright seats and
+    other cars keep the game's answer. The client file runs the same on a multiplayer client (it reads only synced
+    state: the fold flag and the containers the game syncs)."""
+    for role in ("sp", "client"):
+        c = side(role, Net() if role == "client" else None, player="sleeper")
+        c.run(UI)
+        c.run(BED)
+        c.load("client/HondaCRVGen1_Menu.lua")
+        c.run("v = newCRV(1); v:addPart('SeatFrontLeft').cont = newContainer(50, 0); "
+              "v:addPart('SeatFrontRight').cont = newContainer(50, 0); PLAYER.vehicle = v; SEAT_OF[PLAYER] = 0")
+        q = "ISWorldObjectContextMenu.getBedQuality(PLAYER, nil)"
+        check(c.eval(q) == "badBed", "%s: seats up, the game's bad bed (%s)" % (role, c.eval(q)))
+        c.run("HondaCRVGen1.Shared.setBed(v, true)" if role == "sp" else
+              "v.parts.SeatRearLeft.md.crv_function_folded = true")
+        check(c.eval("HondaCRVGen1.Shared.isBed(v)") is True, "%s: folded" % role)
+        check(c.eval(q) == "goodBed", "%s: folded, no pillow: goodBed (%s)" % (role, c.eval(q)))
+        c.run("PLAYER.secondary = newPillow()")
+        check(c.eval(q) == "goodBedPillow", "%s: pillow in hand" % role)
+        c.run("PLAYER.secondary = nil; PLAYER.primary = newItem('Base.Axe')")
+        check(c.eval(q) == "goodBed", "%s: an axe is no pillow" % role)
+        c.run("putIn(v.parts.SeatFrontLeft.cont, newPillow())")
+        check(c.eval(q) == "goodBedPillow", "%s: pillow in the sleeper's seat container" % role)
+        c.run("SEAT_OF[PLAYER] = 1")
+        check(c.eval(q) == "goodBed", "%s: a pillow in another seat's container does not count" % role)
+        c.run("putIn(v.parts.CRVFunctionCargo.cont, newPillow())")
+        check(c.eval(q) == "goodBedPillow", "%s: pillow on the folded bed floor" % role)
+        c.run("v.parts.CRVFunctionCargo.cont.list = {}; putIn(v.parts.TruckBed.cont, newPillow())")
+        check(c.eval(q) == "goodBedPillow", "%s: pillow on the cargo deck" % role)
+        c.run("v.parts.TruckBed.cont.list = {}; v.parts.CRVFunctionCargo = nil; v.parts.TruckBed = nil; SEAT_OF[PLAYER] = nil")
+        check(c.eval(q) == "goodBed", "%s: no seat (-1), no bed containers: goodBed, nothing raises" % role)
+        c.run("PLAYER.vehicle = newVehicle(9, {}, 'Base.SUV')")
+        check(c.eval(q) == "badBed", "%s: another car: the game's answer" % role)
+    print("BED QUALITY: folded = goodBed, pillow in hand / own seat container / bed floor / cargo deck = goodBedPillow, "
+          "upright seats and other cars unchanged (single player and a multiplayer client)")
+
+
 def main():
     net_action_fields()
     single_player()
@@ -734,6 +793,7 @@ def main():
     multiplayer()
     seats_look()
     client_menus()
+    bed_quality()
     print("FUNCTION LUA TESTS OK")
 
 

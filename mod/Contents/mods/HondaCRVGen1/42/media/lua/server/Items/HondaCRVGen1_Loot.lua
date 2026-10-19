@@ -53,6 +53,10 @@ local LOOT = {
     { list = "CrateMagazines", item = "Base.CRVGen1_ArmourMagazine", weight = 0.3 },   -- armour
     { list = "ArmySurplusMisc", item = "Base.CRVGen1_ArmourMagazine", weight = 0.5 },   -- armour
     { list = "ArmyHangarMechanics", item = "Base.CRVGen1_ArmourMagazine", weight = 0.4 },   -- armour
+    { list = "CampingStoreTents", item = "Base.CRVGen1_Awning", weight = 1.0 },   -- awning
+    { list = "CampingStoreGear", item = "Base.CRVGen1_Awning", weight = 0.5 },   -- awning
+    { list = "CampingLockers", item = "Base.CRVGen1_Awning", weight = 0.2 },   -- awning
+    { list = "GarageMechanics", item = "Base.CRVGen1_Awning", weight = 0.2 },   -- awning
     { list = "CarDealerDesk", item = "Base.CRVGen1_OwnersManual", weight = 2 },   -- function
     { list = "CarSupplyLiterature", item = "Base.CRVGen1_OwnersManual", weight = 2 },   -- function
     { list = "CarSupplyMagazines", item = "Base.CRVGen1_OwnersManual", weight = 1 },   -- function

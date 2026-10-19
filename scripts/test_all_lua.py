@@ -47,7 +47,7 @@ from lua_harness import Net, Side  # noqa: E402
 LUA_DIR = lua_harness.LUA_DIR
 SCRIPTS_DIR = os.path.join(lua_harness.ROOT, "mod", "Contents", "mods", "HondaCRVGen1", "42", "media", "scripts", "vehicles")
 BUDGET = 5000000              # Lua instructions per call from the game (the whole start-up of a file is ~1e4)
-MOD_GLOBALS = {"HondaCRVGen1", "ISCRVLiftConvert", "ISCRVFoldSeats", "ISCRVFunctionLiftFloor"}
+MOD_GLOBALS = {"HondaCRVGen1", "ISCRVLiftConvert", "ISCRVFoldSeats", "ISCRVFunctionLiftFloor", "ISCRVAwning"}
 
 FAILS = []
 
@@ -153,6 +153,17 @@ function getPlayerData() return nil end
 function getPlayerMechanicsUI() return nil end
 function getSpecificPlayer(n) return PLAYER end
 function getPlayer() return PLAYER end
+-- awning feature: the local players, the climate (dry: the rain loop never asks for the online players here),
+-- joml's Vector3f (the car's frame: BaseVehicle.getLocalPos, below)
+function getNumActivePlayers() return PLAYER and 1 or 0 end
+ClimateManager = { getInstance = function() return { isRaining = function() return false end,
+                                                     getTemperature = function() return 15 end } end }
+V3 = {}
+V3.__index = V3
+Vector3f = { new = function() return setmetatable({ X = 0, Y = 0, Z = 0 }, V3) end }
+function V3:x() return self.X end
+function V3:y() return self.Y end
+function V3:z() return self.Z end
 -- vanilla's player:getNearVehicle(): the nearest vehicle of the cell within a few tiles (the polish scan)
 function Player:getNearVehicle() return PLAYER_NEAR_VEHICLE(self) end
 function PLAYER_NEAR_VEHICLE(p)
@@ -323,6 +334,7 @@ end
 function Player:getX() return self.x end
 function Player:getY() return self.y end
 function Player:getZ() return self.z end
+function Player:isDead() return false end
 function Player:getVehicle() return self.vehicle end
 function Player:getInventory() return self.inv end
 function Player:getPerkLevel(p) return self.perks[p] or 0 end
@@ -473,7 +485,11 @@ function addVehicleDebug(script, dir, skin, sq)
 end
 function Veh:getId() return self.id end
 function Veh:getScriptName() return self.script end
-function Veh:getScript() local s = self.script return { getName = function() return (s:gsub("^Base%.", "")) end } end
+function Veh:getScript() local s = self.script return { getName = function() return (s:gsub("^Base%.", "")) end,
+                                                          getModelScale = function() return 0.9 end } end
+-- the car faces north (-y), its left is west (-x) (awning feature: the footprint)
+function Veh:getLocalPos(x, y, z, out) out.X = -(x - self.x); out.Y = z - self.z; out.Z = -(y - self.y); return out end
+function Veh:getDriver() return self.seats[0] end
 function Veh:getPartById(id) return self.parts[id] end
 function Veh:getPartCount() return #self.order end
 function Veh:getPartByIndex(i) return self.parts[self.order[i + 1]] end
@@ -880,7 +896,8 @@ VANILLA_PARTS = [
     ("EngineDoor", {"item": "Base.EngineDoor1", "door": True, "area": "Engine"}),
     ("Battery", {"item": "Base.Battery"}),
     ("GasTank", {"item": "Base.NormalGasTank1", "content": True}),
-    ("GloveBox", {"container": {"capacity": 5}}),
+    # template_glovebox: itemType = Base.GloveBox (a removable part: taking it out once hid the whole cabin)
+    ("GloveBox", {"item": "Base.GloveBox1", "container": {"capacity": 5}}),
     ("TruckBed", {"item": "Base.NormalTrunk1", "container": {"capacity": 55}, "area": "TruckBed"}),
     ("TrunkDoor", {"item": "Base.TrunkDoor1", "door": True, "area": "TruckBed"}),
     ("Windshield", {"item": "Base.Windshield1", "window": True}),
@@ -1261,7 +1278,8 @@ function kit(p)
     local inv = p:getInventory()
     for _, t in ipairs({ "Base.Wrench", "Base.LugWrench", "Base.Jack", "Base.Screwdriver", "Base.PaintBlue",
                          "Base.CRVGen1_ArmourDoorFront", "Base.CRVGen1_ArmourMeshFront", "Base.CRVGen1_RoofRack",
-                         "Base.JerryCan", "Base.CRVGen1_LiftKit", "Base.CRVGen1_OffroadSnorkel" }) do inv:AddItem(t) end
+                         "Base.JerryCan", "Base.CRVGen1_LiftKit", "Base.CRVGen1_OffroadSnorkel",
+                         "Base.CRVGen1_Awning" }) do inv:AddItem(t) end
     p.perks.Mechanics = 6
 end
 function install(p, v, pid, ft)
@@ -1314,7 +1332,7 @@ ACTION_ARGS = {"character": "PLAYER", "vehicle": "v", "slot": "'side'", "variant
                "on": "true"}
 # globals the flows themselves set (everything else a mod file creates while playing is a stray global)
 TEST_GLOBALS = {"PLAYER", "suv", "v", "tmp", "ctx", "d", "f", "lf", "oldId", "old", "lc", "n", "ACT", "cv", "vid",
-                "bare", "kit", "install", "vis", "allTests"}
+                "bare", "kit", "install", "vis", "allTests", "C", "L", "CABIN_SUV"}
 
 
 def action_params(g):
@@ -1426,6 +1444,64 @@ def engine_bay_sp(g):
     g.run("suv.parts.EngineDoor.door.open = false; ACT = nil")
 
 
+CABIN_SHOWN = "Interior,InteriorCabin"
+
+
+def _cabin_owner(g, var):
+    """Every part of the car whose models include the cabin's two (the script must put them on CRVCabin alone)."""
+    return g.eval("(function() local t = {} for _, pid in ipairs(%s.order) do for _, m in ipairs(%s.parts[pid].models) do "
+                  "if m == 'Interior' or m == 'InteriorCabin' then t[#t + 1] = pid .. '.' .. m end end end "
+                  "return table.concat(t, ',') end)()" % (var, var))
+
+
+def cabin_sp(g):
+    """The cabin (HondaCRVGen1_Cabin.lua; round 5 bug: taking the glove box out hid the interior). The interior and
+    the cabin furniture are drawn on every CR-V from its init, whatever is installed or removed: the glove box
+    taken out by the vanilla uninstall action (and put back), every removable part off at once (bare)."""
+    check(_cabin_owner(g, "v") == "CRVCabin.Interior,CRVCabin.InteriorCabin",
+          "cabin: the interior models sit on part CRVCabin alone (%s)" % _cabin_owner(g, "v"))
+    check(g.eval("v.parts.CRVCabin.spec.itemType") is None and g.eval("v.parts.CRVCabin.spec.allVisible") is False,
+          "cabin: CRVCabin has no item and setAllModelsVisible = false")
+    check(g.eval("vis(v, 'CRVCabin')") == CABIN_SHOWN, "cabin: a new CR-V draws the interior and the cabin (%s)"
+          % g.eval("vis(v, 'CRVCabin')"))
+    ok, r = g.try_eval("(function() local a = ISUninstallVehiclePart:new(PLAYER, v.parts.GloveBox, 100) "
+                       "return a:complete() end)()")
+    check(ok and g.eval("v.parts.GloveBox:getInventoryItem()") is None,
+          "cabin: the glove box comes out by the uninstall action (%s)" % r)
+    check(g.eval("vis(v, 'CRVCabin')") == CABIN_SHOWN, "cabin: still drawn with the glove box out (%s)"
+          % g.eval("vis(v, 'CRVCabin')"))
+    g.run("createPhysics(v)")
+    check(g.eval("vis(v, 'CRVCabin')") == CABIN_SHOWN, "cabin: drawn when the car is reloaded without its glove box")
+    ok, r = g.try_eval("{install(PLAYER, v, 'GloveBox', 'Base.GloveBox1')}")
+    check(ok and g.eval("v.parts.GloveBox:getInventoryItem()") is not None and g.eval("vis(v, 'CRVCabin')") == CABIN_SHOWN,
+          "cabin: the glove box goes back in, the cabin unchanged (%s)" % (dict(r) if ok else r))
+    g.run("C = createVehicle('Base.HondaCRVGen1', 30.5, 30.5, true); for _, pid in ipairs(C.order) do "
+          "if C.parts[pid]:getInventoryItem() then C.parts[pid]:setInventoryItem(nil) end end; createPhysics(C)")
+    check(g.eval("vis(C, 'CRVCabin')") == CABIN_SHOWN, "cabin: drawn on a car with every removable part gone (%s)"
+          % g.eval("vis(C, 'CRVCabin')"))
+    for name in SCRIPTS[1]:
+        ok, r = g.try_run("L = createVehicle('%s', 32.5, 32.5, true)" % name)
+        check(ok and g.eval("vis(L, 'CRVCabin')") == CABIN_SHOWN, "cabin: %s draws it (%s)" % (name, r))
+    ok, r = g.try_run("CABIN_SUV = createVehicle('Base.SUV', 34.5, 34.5, true); HondaCRVGen1.Cabin.Init(CABIN_SUV, nil)")
+    check(ok, "cabin: Init on a car without the part does nothing (%s)" % r)
+    g.run("C = nil; L = nil; CABIN_SUV = nil")
+
+
+def cabin_mp(net, S, A, B):
+    """The cabin in multiplayer: the dedicated server draws nothing; every client draws it on the streamed-in car
+    and keeps it when the server completes a glove box removal and syncs the item."""
+    check(S.eval("v.parts.CRVCabin.calls") == 0, "server: cabin: the dedicated server draws nothing")
+    for c in (A, B):
+        check(c.eval("vis(v, 'CRVCabin')") == CABIN_SHOWN, "%s: cabin: a streamed-in CR-V draws it (%s)"
+              % (c.name, c.eval("vis(v, 'CRVCabin')")))
+    S.run("v.parts.GloveBox:setInventoryItem(nil); v:transmitPartItem(v.parts.GloveBox)")
+    net.pump()
+    for c in (A, B):
+        c.try_run("TICK(2)")
+        check(c.eval("v.parts.GloveBox:getInventoryItem()") is None and c.eval("vis(v, 'CRVCabin')") == CABIN_SHOWN,
+              "%s: cabin: still drawn after the server took the glove box out" % c.name)
+
+
 def engine_bay_mp(net, S, A, B):
     """The engine bay in multiplayer: nothing drawn on the dedicated server; each client follows the synced door
     and item, and the client whose player opens the hood shows the bay at the action's start."""
@@ -1508,6 +1584,7 @@ def single_player():
     radial_menus(g)
     action_params(g)
     engine_bay_sp(g)
+    cabin_sp(g)
 
     # armour plate + window mesh
     ok, r = g.try_eval("{install(PLAYER, v, 'CRVArmourDoorFrontLeft', 'Base.CRVGen1_ArmourDoorFront')}")
@@ -1544,6 +1621,20 @@ def single_player():
     if check(ok and r is True, "the snorkel uninstall action runs end to end (%s)" % r):
         ok, r = g.try_eval("{install(PLAYER, v, 'CRVOffroadSnorkel', 'Base.CRVGen1_OffroadSnorkel')}")
         check(ok and r[2] is True, "and goes back on (%s)" % (dict(r) if ok else r))
+    # the side awning: fitted rolled up (the bag alone), rolled out by its action (canopy and poles), on the menus
+    ok, r = g.try_eval("{install(PLAYER, v, 'CRVAwning', 'Base.CRVGen1_Awning')}")
+    check(ok and r[1] is True and r[2] is True, "awning installs (%s)" % (dict(r) if ok else r))
+    check(g.eval("vis(v, 'CRVAwning')") == "CRVAwning", "the awning fitted: the bag alone (%s)" % g.eval("vis(v, 'CRVAwning')"))
+    g.run("ctx = newCtx(); ISVehicleMenu.FillMenuOutsideVehicle(0, ctx, v)")
+    check(any(o == "ContextMenu_CRV_Awning_Deploy" for o in g.eval("(function() local t = {} for i, o in ipairs(ctx.options) do "
+                                                                   "t[i] = o.name end return t end)()").values()),
+          "the outside menu offers rolling it out")
+    g.run("ACT = ISCRVAwning:new(PLAYER, v, true)")
+    ok, r = g.try_eval("ACT:isValid() and ACT:complete() and HondaCRVGen1.Awning.isDeployed(v)")
+    check(ok and r is True, "awning rolled out (%s)" % r)
+    check(g.eval("vis(v, 'CRVAwning')") == "CRVAwning,AwningCanopy,AwningPoles", "rolled out: bag, canopy, poles (%s)"
+          % g.eval("vis(v, 'CRVAwning')"))
+    g.run("ACT = nil")
     # fold seats, cargo, floor
     g.run("f = ISCRVFoldSeats:new(PLAYER, v, true)")
     ok, r = g.try_eval("f:isValid() and f:complete() and HondaCRVGen1.Shared.isBed(v)")
@@ -1566,8 +1657,10 @@ def single_player():
         return g
     for pid, ft in (("CRVArmourDoorFrontLeft", "Base.CRVGen1_ArmourDoorFront"), ("CRVGuardFrontLeft", "Base.CRVGen1_ArmourMeshFront"),
                     ("CRVRoofRack", "Base.CRVGen1_RoofRack"), ("CRVOffroadCanRoof", "Base.JerryCan"),
-                    ("CRVOffroadSnorkel", "Base.CRVGen1_OffroadSnorkel")):
+                    ("CRVOffroadSnorkel", "Base.CRVGen1_OffroadSnorkel"), ("CRVAwning", "Base.CRVGen1_Awning")):
         check(g.eval("n.parts.%s.item and n.parts.%s.item.ft" % (pid, pid)) == ft, "lifted car: %s carried" % pid)
+    check(g.eval("vis(n, 'CRVAwning')") == "CRVAwning,AwningCanopy,AwningPoles", "lifted car: the awning still out (%s)"
+          % g.eval("vis(n, 'CRVAwning')"))
     check(g.eval("n.parts.CRVOffroadCanRoof.item:getFluidContainer():getAmount()") == 9, "lifted car: the roof can keeps its petrol")
     check(g.eval("vis(n, 'CRVGuardFrontLeft')") == "ArmourMesh", "lifted car: mesh only (%s)" % g.eval("vis(n, 'CRVGuardFrontLeft')"))
     check(g.eval("vis(n, 'CRVRoofRack')") == "CRVRoofRack,RackLoad2", "lifted car: rack load 2 (%s)" % g.eval("vis(n, 'CRVRoofRack')"))
@@ -1618,6 +1711,7 @@ def multiplayer():
         tests_return(side, "suv", "PLAYER", "%s: vanilla SUV" % side.name)
         tests_return(side, "v", "PLAYER", "%s: CR-V as spawned" % side.name)
     engine_bay_mp(net, S, A, B)
+    cabin_mp(net, S, A, B)
     S.run("bare(v)")
     net.pump()
     for pid in list(S.eval("v.order").values()):
@@ -1634,7 +1728,9 @@ def multiplayer():
                  "v.parts.CRVRoofRack.cont:AddItem(newItem('Base.Duffel', 20)); TICK(15)",
                  "f = ISCRVFoldSeats:new(PLAYER, v, true); f:complete()",
                  "v.parts.TrunkDoor.door.open = true; lf = ISCRVFunctionLiftFloor:new(PLAYER, v); lf:complete(); "
-                 "v.parts.TrunkDoor.door.open = false"):
+                 "v.parts.TrunkDoor.door.open = false",
+                 "install(PLAYER, v, 'CRVAwning', 'Base.CRVGen1_Awning')",
+                 "ACT = ISCRVAwning:new(PLAYER, v, true); ACT:complete(); ACT = nil"):
         ok, r = S.try_run(code)
         check(ok, "server: %s (%s)" % (code.split("(")[0] + "(...)", r))
     net.pump()
@@ -1645,6 +1741,8 @@ def multiplayer():
         check(c.eval("vis(v, 'CRVRoofRack')") == "CRVRoofRack,RackLoad2", "%s: rack load 2 (%s)" % (c.name, c.eval("vis(v, 'CRVRoofRack')")))
         check(c.eval("HondaCRVGen1.Shared.isBed(v)") is True and c.eval("HondaCRVGen1.Function.isFloorFound(v)") is True,
               "%s: folded, floor found" % c.name)
+        check(c.eval("vis(v, 'CRVAwning')") == "CRVAwning,AwningCanopy,AwningPoles", "%s: the awning drawn rolled out (%s)"
+              % (c.name, c.eval("vis(v, 'CRVAwning')")))
         ok, r = c.try_eval("viewpointRadial(PLAYER, v):texts()")
         check(ok and "ContextMenu_CRV_UnfoldBed" in r and "ContextMenu_CRV_FoldBed" not in r and "LiftFloor" not in r,
               "%s: the radial follows the synced state: put the seats back, no floor to lift (%s)" % (c.name, r))
@@ -1673,6 +1771,8 @@ def multiplayer():
             check(c.eval("vis(n, 'CRVGuardFrontLeft')") == "ArmourMesh", "%s: lifted car, mesh only (%s)" % (c.name, c.eval("vis(n, 'CRVGuardFrontLeft')")))
             check(c.eval("vis(n, 'CRVRoofRack')") == "CRVRoofRack,RackLoad2", "%s: lifted car, rack load (%s)" % (c.name, c.eval("vis(n, 'CRVRoofRack')")))
             check(c.eval("vis(n, 'CRVEngineBay')") == "EngineBayLow", "%s: lifted car, the engine bay's stand-in" % c.name)
+            check(c.eval("vis(n, 'CRVAwning')") == "CRVAwning,AwningCanopy,AwningPoles", "%s: lifted car, the awning out (%s)"
+                  % (c.name, c.eval("vis(n, 'CRVAwning')")))
             check(c.eval("HondaCRVGen1.Shared.isBed(n)") is True and c.eval("HondaCRVGen1.Function.isFloorFound(n)") is True,
                   "%s: lifted car, folded + floor found" % c.name)
             ok, r = c.try_eval("ISOpenCloseVehicleWindow:new(PLAYER, n.parts.WindowFrontLeft, true):isValid()")

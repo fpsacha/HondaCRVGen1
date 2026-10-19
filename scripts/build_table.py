@@ -62,7 +62,9 @@ HEIGHT = 0.66                                    # standing: ground to top surfa
                                                  # character: 0.66, a low table (picked 2026-10-18), real top kept
 KNEE = (0.12, 0.12)                              # the folding lock strut on each frame: from the top's underside this far inboard
                                                  # of the hinge, to the near leg this far below the top (the photos; no X brace)
-ARCH = 0.03                                      # the ground bars hump up this much over their middle 24 cm
+FOOT_R = 0.022                                   # the curled feet: a quarter circle of this radius
+TOP_R = 0.035                                    # the standing top's rounded corners (a moulded panel), and
+TOP_BEV = 0.006                                  # its softened edge: the top and bottom faces inset this much
 TUBE_R = 0.006                                   # 12 mm chrome tube
 HINGE_X = TOP_W / 2 - 0.045                      # frames hinge this far either side of the centre line (4.5 cm in from the edge)
 LEG_Y = (0.29, 0.26)                             # legs this far either side of the middle: near frame, far frame (nests inside)
@@ -73,6 +75,7 @@ WELL_DEPTH = 0.14                                # (the old box well's depth)
 TUB_DEPTH = 0.24                                 # the rounded tub's bottom under the deck (z 0.526; underbody 0.40-0.46)
 LEDGE_DROP = 0.031                               # the ledge under the opening's rim: the table (TOP_T) rests on it flush
 LEDGE_W = 0.030                                  # ledge width inside the opening
+WELL_MAT = "WellTub"                             # bake_atlas.PALETTE: the tub's black plastic
 TUB_SEG = 6                                      # points per rounded corner
 WELL_GAP = 0.012                                 # well walls past the top's edge
 TABLE = "acc_table"
@@ -85,9 +88,9 @@ TOP_MAT, CHROME_MAT = "AccTable", "AccChrome"    # added to build_accessories.MA
 # centre; the 25 mm slab gives the near edges a ~2 px dark band (20 mm alternated 1 and 2 px).
 # The slot and plug are drawn bolder than the car part's (11 x 2.8 cm, 3.6 cm): ~8 x 2 px and a
 # 3 x 2 px dot at 1x instead of 7 x 1.6 and 2 x 1.5.
-STAND_TUBE_R = 0.008
+STAND_TUBE_R = 0.014                             # 2026-10-19: 16 mm vanished at game zoom ("looks shitty": a slab on the ground)
 STAND_TOP_T = 0.029
-STAND_BRACE_R = 0.0065
+STAND_BRACE_R = 0.010
 STAND_SLOT = (0.065, 0.018)                      # grab slot half length (x), half width (y), metres
 STAND_PLUG_R = 0.023                             # umbrella plug radius
 SLOT_Y, PLUG_Y = -0.28, 0.0                      # their centres along y (as _top places them): the real top has its grab
@@ -107,17 +110,17 @@ CELL_EDGE = (0, 192, 64, 256)                    # the slab's outer sides
 CELL_INSET = 2.0                                 # px kept clear inside every cell (linear sampling)
 # sRGB levels, chosen so the PLACED table (flat x0.937) shows what the ghost showed in 21.png:
 # top 48.5, slab edge 30, slot ~17, legs ~105 (measured). The ghost itself now draws ~0.6x of that.
-STAND_TOP = 52.0                                 # 48.7 placed (ghost before: 48.5; the old 87 drew 81.5)
+STAND_TOP = 100.0                                # mid-grey moulded top like the real one (was 52: a black slab);                                 # 48.7 placed (ghost before: 48.5; the old 87 drew 81.5)
 STAND_RIM = 1.05                                 # the moulded 1 cm lip, a shade lighter than the top
-STAND_EDGE = 32.0                                # slab sides: 30 placed (ghost before: 30)
+STAND_EDGE = 70.0                                # was 32;                                # slab sides: 30 placed (ghost before: 30)
 STAND_HOLE = 17.0                                # painted slot and plug: 16 placed (ghost before: 17)
 STAND_STEEL = 22.0                               # the slot / plug geometry, where it wins the depth test
 STAND_PLATE = 74.0
 # aluminium tube: one mid grey whatever normal a 1x pixel lands on (the old chrome disc ran
 # 30..240 and drew white sticks and dotted bars), lighter on the sun's side, darker on top
-STAND_TUBE = 116.0                               # horizontal normal (a leg): ~109 placed
-STAND_TUBE_SUN = 9.0                             # +- toward / away from the sun
-STAND_TUBE_UP = 14.0                             # minus this x n.z (a bar's top: ~96 placed)
+STAND_TUBE = 40.0                                # black legs, as on the real table (was a 116 aluminium that vanished on asphalt);                               # horizontal normal (a leg): ~109 placed
+STAND_TUBE_SUN = 8.0                             # +- toward / away from the sun
+STAND_TUBE_UP = 6.0                              # minus this x n.z (a bar's top: ~96 placed)
 SUN_AZ = (-0.67, -0.74)                          # render_tile.SUN_DIR on the ground: the tube's light side
 
 
@@ -146,6 +149,33 @@ def _top(bm, cx, cy, z_top, mat, top_t=None, slot=(0.055, 0.014), plug_r=0.018):
     return faces
 
 
+def _ground_bar(ly):
+    """The standing frame's ground bar as (y, z) points from the ground line: straight, each end curling up into a
+    foot along a quarter circle (FOOT_R). Round 5 (2026-10-19): the old bar humped 3 cm over its middle through four
+    sharp kinks and read as a broken, stepped bar at eye level and as a wobble in the placed tile; a smooth hump
+    still read as a sagging wire."""
+    e = ly + FOOT
+    foot = [(-e + FOOT_R + FOOT_R * math.cos(math.radians(a)), FOOT_R + FOOT_R * math.sin(math.radians(a)))
+            for a in (180.0, 210.0, 240.0, 270.0)]                      # from the foot's tip down to the ground
+    return foot + [(-y, z) for y, z in reversed(foot)]
+
+
+def _top_moulded(bm, z_top, mat, top_t, slot, plug_r):
+    """The standing table's top (round 5, 2026-10-19: the square box with a 3 mm lip read as a cut sheet at eye
+    level): a moulded panel with rounded corners (TOP_R) and a softened edge, its top and underside inset TOP_BEV
+    from the full outline, the grab slot and the umbrella plug as _top makes them. Centred on x = y = 0."""
+    from build_accessories import _loft, _rr
+    a, b = TOP_W / 2, TOP_L / 2
+
+    def ring(d, z):
+        return [(x, y, z) for x, y in _rr(a - d, b - d, TOP_R - d, 3)]
+    _loft(bm, [ring(TOP_BEV, z_top - top_t), ring(0.0, z_top - top_t + TOP_BEV), ring(0.0, z_top - TOP_BEV),
+               ring(TOP_BEV, z_top)], [mat] * 3, cap_mats=(mat, mat))
+    sx, sy = slot
+    _box(bm, (-sx, SLOT_Y - sy, z_top - 0.009), (sx, SLOT_Y + sy, z_top + 0.0006), mat=STEEL)    # grab slot
+    _sweep(bm, [(0.0, PLUG_Y, z_top - 0.004), (0.0, PLUG_Y, z_top + 0.0008)], _round(plug_r, 8), mat=STEEL)   # round plug
+
+
 def _leg_frame(bm, cx, cy, z_under, side, folded, chrome, tube_r=None, top_t=None):
     """One chrome frame along the long side `side` (+1 / -1 along x): two legs at y = +-LEG_Y under
     the hinge line x = side * HINGE_X, a ground bar between them that runs FOOT past each leg and
@@ -167,9 +197,7 @@ def _leg_frame(bm, cx, cy, z_under, side, folded, chrome, tube_r=None, top_t=Non
         z0 = tube_r + (z_under - (HEIGHT - top_t))                      # ground
         for sy in (-1, 1):                                              # vertical legs
             _sweep(bm, [(xh, cy + sy * ly, z_under), (xh, cy + sy * ly, z0)], _round(tube_r, 6), mat=chrome)
-        _sweep(bm, [(xh, cy - ly - FOOT, z0 + 0.025), (xh, cy - ly - FOOT, z0), (xh, cy - 0.12, z0), (xh, cy - 0.07, z0 + ARCH),
-                    (xh, cy + 0.07, z0 + ARCH), (xh, cy + 0.12, z0), (xh, cy + ly + FOOT, z0), (xh, cy + ly + FOOT, z0 + 0.025)],
-               _round(tube_r, 6), mat=chrome)                           # ground bar: curled feet, humped middle
+        _sweep(bm, [(xh, cy + y, z0 + z) for y, z in _ground_bar(ly)], _round(tube_r, 6), mat=chrome)
     for sy in (-1, 1):                                                  # hinge brackets under the top
         _box(bm, (xh - 0.014, cy + sy * ly - 0.018, z_under - 0.014), (xh + 0.014, cy + sy * ly + 0.018, z_under + 0.001), mat=PLATE)
 
@@ -181,7 +209,7 @@ def standing_table(bm, tube_r=STAND_TUBE_R, top_t=STAND_TOP_T, brace_r=STAND_BRA
     so the legs stay continuous after the tile's hard alpha and the slab shows an edge. Both draw
     the bold slot and plug (STAND_SLOT / STAND_PLUG_R)."""
     top, chrome = _mats()
-    _top(bm, 0.0, 0.0, HEIGHT, top, top_t, STAND_SLOT, STAND_PLUG_R)
+    _top_moulded(bm, HEIGHT, top, top_t, STAND_SLOT, STAND_PLUG_R)
     z_under = HEIGHT - top_t
     for side in (-1, 1):
         _leg_frame(bm, 0.0, 0.0, z_under, side, False, chrome, tube_r, top_t)
@@ -213,8 +241,8 @@ def standing_uv(me):
         if mat == CHROME_MAT:
             poly.use_smooth = True
         c = poly.center
-        edge = (mat == TOP_MAT and abs(poly.normal.z) < 0.5
-                and (abs(c.x) > TOP_W / 2 - 1e-4 or abs(c.y) > TOP_L / 2 - 1e-4))
+        edge = (mat == TOP_MAT and abs(poly.normal.z) < 0.5                # the slab's sides, rounded corners too
+                and max(abs(c.x) - (TOP_W / 2 - 0.02), abs(c.y) - (TOP_L / 2 - 0.02)) > 0)
         for li in poly.loop_indices:
             v = me.vertices[me.loops[li].vertex_index]
             if edge:
@@ -250,7 +278,8 @@ def paint_standing(path):
     tx, ty = (xx - x0 - CELL_INSET) / span, (yy - y0 - CELL_INSET) / span
     mx, my = (tx - 0.5) * TOP_W, (0.5 - ty) * TOP_L                                     # metres, x east, y north
     texel = TOP_W / span
-    edge = np.minimum(TOP_W / 2 - np.abs(mx), TOP_L / 2 - np.abs(my))                   # metres from the top's edge
+    qx, qy = np.abs(mx) - (TOP_W / 2 - TOP_R), np.abs(my) - (TOP_L / 2 - TOP_R)          # metres from the top's edge,
+    edge = TOP_R - np.hypot(np.maximum(qx, 0), np.maximum(qy, 0)) - np.minimum(np.maximum(qx, qy), 0)   # its rounded corners too
     mottle = 1.0 + 0.015 * np.sin(tx * 11.0 + 1.3) * np.sin(ty * 9.0 + 0.4) + 0.01 * np.sin((tx + ty) * 23.0)
     rim = np.clip((0.010 - edge) / texel + 0.5, 0, 1)
     top = STAND_TOP * mottle * (1 + (STAND_RIM - 1) * rim)
@@ -258,6 +287,29 @@ def paint_standing(path):
     d_slot = np.maximum(np.abs(mx) - sx, np.abs(my - SLOT_Y) - sy)
     d_plug = np.hypot(mx, my - PLUG_Y) - STAND_PLUG_R
     hole = np.clip(0.5 - np.minimum(d_slot, d_plug) / texel, 0, 1)
+    # moulded detail (2026-10-19, first-person feedback): a groove 4 cm in from the edge, and the raised CR-V
+    # plate beside the grab slot with its letters (as the stowed table carries, cargo_bay_paint.render_table)
+    groove = np.clip(1.0 - np.abs(edge - 0.040) / (0.6 * texel + 0.002), 0, 1)
+    top = top * (1 - 0.18 * groove)
+    px0, px1, py = 0.085, 0.285, SLOT_Y
+    d_plate = np.maximum(np.maximum(px0 - mx, mx - px1), np.abs(my - py) - 0.024)
+    plate = np.clip(0.5 - d_plate / texel, 0, 1)
+    ring = np.clip(1.0 - np.abs(d_plate) / (0.7 * texel + 0.001), 0, 1)
+    top = top * (1 + 0.07 * plate) * (1 - 0.30 * ring)
+
+    def seg(ax, ay, bx, by):
+        vx, vy = bx - ax, by - ay
+        t = np.clip(((mx - ax) * vx + (my - ay) * vy) / (vx * vx + vy * vy), 0, 1)
+        return np.hypot(mx - ax - t * vx, my - ay - t * vy)
+    x0l = px0 + 0.025
+    strokes = [((0.030, 0.012), (0.008, 0.012)), ((0.008, 0.012), (0.0, 0.0)), ((0.0, 0.0), (0.008, -0.012)),
+               ((0.008, -0.012), (0.030, -0.012)),                                           # C
+               ((0.045, -0.013), (0.050, 0.013)), ((0.050, 0.013), (0.070, 0.010)), ((0.070, 0.010), (0.066, 0.0)),
+               ((0.066, 0.0), (0.050, -0.001)), ((0.050, -0.001), (0.074, -0.013)),           # R
+               ((0.088, 0.0), (0.104, 0.0)),                                                  # -
+               ((0.116, 0.013), (0.132, -0.013)), ((0.132, -0.013), (0.150, 0.013))]          # V
+    d_txt = np.min([seg(x0l + a[0], py + a[1], x0l + b[0], py + b[1]) for a, b in strokes], axis=0)
+    top = top * (1 - 0.32 * np.clip(1.0 - (d_txt - 0.003) / texel, 0, 1) * plate)
     top = top * (1 - hole) + STAND_HOLE * hole
     in_top = (xx < x1) & (yy < y1)
     for c in range(3):
@@ -331,7 +383,12 @@ def carve_well(report):
         bmesh.ops.bisect_plane(bm, geom=list(verts) + list(edges) + geom, plane_co=co, plane_no=no, dist=1e-5)
     inside = [f for f in floor_faces() if x0 + 1e-4 < f.calc_center_median().x < x1 - 1e-4 and y0 + 1e-4 < f.calc_center_median().y < y1 - 1e-4]
     bmesh.ops.delete(bm, geom=inside, context='FACES')
-    mi_wall = names.index("Plastique_noir") if "Plastique_noir" in names else 0
+    # its own black plastic (2026-10-19): on the interior's Plastique_noir (a light leather-grain trim on this sheet)
+    # the empty tub read as a flat light-grey panel in the game's flat light (feedback: "there's no hole")
+    if WELL_MAT not in names:
+        me.materials.append(bpy.data.materials.get(WELL_MAT) or bpy.data.materials.new(WELL_MAT))
+        names.append(WELL_MAT)
+    mi_wall = names.index(WELL_MAT)
     cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
     hx, hy = (x1 - x0) / 2, (y1 - y0) / 2
     # the rounded tub (2026-10-18, feedback with the samarins photo: "the hole is wrong ... it should be more

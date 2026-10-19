@@ -127,12 +127,36 @@ end
 
 -- a folded bed is a good bed; the game treats every vehicle as a bad one
 local getBedQuality = ISWorldObjectContextMenu.getBedQuality
+-- the containers where a pillow counts on the folded bed: the bed itself (the folded load floor, function feature) and
+-- the cargo deck it runs onto (the trunk); vanilla's own spot, the sleeper's seat container, is checked first
+Menu.BED_PILLOW_PARTS = { "CRVFunctionCargo", "TruckBed" }
+
+local function hasPillow(cont)
+    return cont ~= nil and cont:containsTag(ItemTag.PILLOW) == true
+end
+
+local function handPillow(playerObj)
+    local a, b = playerObj:getPrimaryHandItem(), playerObj:getSecondaryHandItem()
+    return (a ~= nil and a:hasTag(ItemTag.PILLOW)) or (b ~= nil and b:hasTag(ItemTag.PILLOW))
+end
+
+-- does playerObj, in the folded vehicle, have a pillow: in hand, in their seat's container (as vanilla's vehicle
+-- branch of getBedQuality), or anywhere on the bed (Menu.BED_PILLOW_PARTS)
+function Menu.bedPillow(playerObj, vehicle)
+    if handPillow(playerObj) then return true end
+    local seatPart = vehicle:getPartForSeatContainer(vehicle:getSeat(playerObj))
+    if seatPart and hasPillow(seatPart:getItemContainer()) then return true end
+    for _, id in ipairs(Menu.BED_PILLOW_PARTS) do
+        local part = vehicle:getPartById(id)
+        if part and hasPillow(part:getItemContainer()) then return true end
+    end
+    return false
+end
+
 ISWorldObjectContextMenu.getBedQuality = function(playerObj, bed)
     local vehicle = playerObj:getVehicle()
     if vehicle and S.isBed(vehicle) then
-        local pillow = (playerObj:getPrimaryHandItem() and playerObj:getPrimaryHandItem():hasTag(ItemTag.PILLOW)) or
-                       (playerObj:getSecondaryHandItem() and playerObj:getSecondaryHandItem():hasTag(ItemTag.PILLOW))
-        return pillow and "goodBedPillow" or "goodBed"
+        return Menu.bedPillow(playerObj, vehicle) and "goodBedPillow" or "goodBed"
     end
     return getBedQuality(playerObj, bed)
 end

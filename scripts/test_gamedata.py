@@ -12,7 +12,9 @@ Game-data checks on the generated mod files (system Python), each one a defect t
   3. literature: every mod literature item that teaches recipes carries vanilla's
      OnCreate = ItemCodeOnCreate.onCreateRecipeMagazine (modData.literatureTitle, which ISReadABook needs to
      put re-reads on the LiteratureCooldown), like all 84 vanilla recipe magazines;
-  4. the owner's manual's oil figure (3.8 L / 4 US qt with the filter, not the 3.7 US qt without it).
+  4. the owner's manual's oil figure (3.8 L / 4 US qt with the filter, not the 3.7 US qt without it);
+  5. the cabin (2026-10-19): the interior models sit on part CRVCabin (no item, shown by its Lua init), never on
+     an item part such as GloveBox, whose removal hid the whole interior.
 
     python scripts\test_gamedata.py [--mod42 <path to the mod's 42 folder>]
 """
@@ -115,10 +117,57 @@ def check_manual(mod42):
     print("GAMEDATA manual: in-universe pages cover the mod's features, three print media spreads, the cut topics gone")
 
 
+# the vanilla template parts the CR-V inherits that carry an item (template_glovebox: itemType = Base.GloveBox, and
+# the rest): the engine shows or hides EVERY model of such a part with its item (VehiclePart.setInventoryItem ->
+# setAllModelsVisible), so a model that must always draw can never sit on one
+VANILLA_ITEM_PARTS = {"GloveBox", "EngineDoor", "Battery", "GasTank", "TruckBed", "TrunkDoor", "Windshield",
+                      "WindshieldRear", "Muffler", "HeadlightLeft", "HeadlightRight", "HeadlightRearLeft",
+                      "HeadlightRearRight"} | {"%s%s" % (k, s) for k in ("Door", "Window", "Tire", "Brake", "Suspension", "Seat")
+                                               for s in ("FrontLeft", "FrontRight", "RearLeft", "RearRight")}
+
+
+def check_cabin(mod42):
+    """5. the cabin (round 5, 2026-10-19: taking the glove box out hid the whole interior): the interior shell and the
+    cabin furniture are models of part CRVCabin alone, which has no item (own or inherited), never lets the engine
+    show or reset its models (setAllModelsVisible = false), and shows them from its init, a Lua function the mod
+    defines in a shared file (it runs on every side)."""
+    files = {"%s%s" % (gen.VEHICLE, f): mid for mid, f in gen.CABIN_MODELS}
+    vdir = os.path.join(mod42, "media", "scripts", "vehicles")
+    shared = os.path.join(mod42, "media", "lua", "shared")
+    lua = "".join(open(os.path.join(shared, f), encoding="utf-8").read() for f in os.listdir(shared) if f.endswith(".lua"))
+    names = sorted(f for f in os.listdir(vdir) if f.startswith(gen.VEHICLE) and f.endswith(".txt"))
+    for fn in names:
+        root = audit_mod.parse(open(os.path.join(vdir, fn), encoding="utf-8").read())
+        for v in root.children[0].all("vehicle"):
+            owners = {}
+            for part in v.all("part"):
+                for pm in part.all("model"):
+                    if pm.get("file") in files:
+                        owners.setdefault(part.name, []).append(pm.name)
+            if sorted(owners) != [gen.CABIN_PART] or sorted(owners[gen.CABIN_PART]) != sorted(files.values()):
+                fail("%s: vehicle %s draws the cabin models from %s, want part %s alone (%s)"
+                     % (fn, v.name, owners, gen.CABIN_PART, ", ".join(sorted(files.values()))))
+            part = [p for p in v.all("part") if p.name == gen.CABIN_PART][0]
+            if part.name in VANILLA_ITEM_PARTS or part.get("itemType"):
+                fail("%s: part %s carries an item: removing it would hide the cabin" % (fn, part.name))
+            if (part.get("setAllModelsVisible") or "").lower() != "false":
+                fail("%s: part %s lacks setAllModelsVisible = false" % (fn, part.name))
+            init = ([l.get("init") for l in part.all("lua")] + [None])[0]
+            if init != gen.CABIN_LUA + ".Init" or not re.search(r"function\s+Cabin\.Init\s*\(", lua) \
+                    or 'HondaCRVGen1.Cabin = Cabin' not in lua:
+                fail("%s: part %s's init %s is not the shared HondaCRVGen1.Cabin.Init" % (fn, part.name, init))
+            for p in v.all("part"):
+                if p.name in VANILLA_ITEM_PARTS and p.name.startswith("GloveBox") and p.all("model"):
+                    fail("%s: part GloveBox draws models again (%s)" % (fn, ", ".join(m.name for m in p.all("model"))))
+    print("GAMEDATA cabin: %d vehicle scripts draw the interior from part %s (no item, init %s.Init)"
+          % (len(names), gen.CABIN_PART, gen.CABIN_LUA))
+
+
 def main():
     a = sys.argv[1:]
     mod42 = a[a.index("--mod42") + 1] if "--mod42" in a else gen.CHECKOUT_MOD42
     check_tuning(mod42)
+    check_cabin(mod42)
     check_routes(mod42)
     check_literature(mod42)
     check_manual(mod42)

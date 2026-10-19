@@ -3,6 +3,8 @@
     "ContextMenu_CRV_PutTable": "Put the picnic table back",
     "ContextMenu_CRV_FoldBed": "Fold the rear seats into a bed",
     "ContextMenu_CRV_UnfoldBed": "Put the rear seats back",
+    "ContextMenu_CRV_Awning_Deploy": "Roll out the awning",
+    "ContextMenu_CRV_Awning_Stow": "Roll up the awning",
     "ContextMenu_CRV_Function_LiftFloor": "Lift the cargo floor",
     "ContextMenu_CRV_Function_BrowseManual": "Browse the owner's manual",
     "ContextMenu_CRV_Lift_Menu": "Lift kit",

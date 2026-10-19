@@ -49,7 +49,7 @@ PX_PER_M = 90.5
 UP = Vector((-0.5 / math.sqrt(2), 0.5 / math.sqrt(2), math.sqrt(3) / 2))      # screen up, world space
 D = Vector((-math.sqrt(3) / 2 / math.sqrt(2), math.sqrt(3) / 2 / math.sqrt(2), -0.5))   # view direction
 
-SPRITE_TUBE_R = 0.011                      # 2.0 px at 90.5 px/m: legs survive tilepack's alpha >= 96 unbroken (0.009 does not)
+SPRITE_TUBE_R = 0.016                      # 2.0 px at 90.5 px/m: legs survive tilepack's alpha >= 96 unbroken (0.009 does not)
 SPRITE_TOP_T = 0.030                       # 2.4 px slab edge under the top's near edges
 SPRITE_BRACE_R = 0.008
 FACINGS = [("S", 0.0, "_raw_table_S.png"),                  # frames under the east and west edges (as built)
@@ -61,10 +61,10 @@ WORLD = (0.55, 0.30, 0.10)                                  # sky gradient zenit
 
 # Principled albedos, linear. The top is the shipped shell texel (Vehicles_HondaCRVGen1_Shell.png,
 # the AccTable island: mean (87.6, 86.7, 86.2) sRGB, std 3.8, a flat grey at tile scale), so the
-# placed table matches the one in the car; chrome is a dull metal (a mirror chrome reads as noise
-# at 2 px); steel is the slot and plug, plate the hinge brackets.
+# placed table matches the one in the car; the legs are black steel like the placed model's (round 5: the sprite
+# still drew the old light aluminium legs under the model's black ones); steel is the slot and plug, plate the hinge brackets.
 MATERIALS = {"AccTable": ((0.098, 0.095, 0.093), 0.0, 0.55),
-             "AccChrome": ((0.62, 0.62, 0.65), 1.0, 0.22),
+             "AccChrome": ((0.026, 0.026, 0.028), 0.0, 0.45),   # black legs, as the placed model's (build_table.STAND_TUBE)
              "AccSteel": ((0.03, 0.03, 0.032), 0.0, 0.50),
              "AccPlate": ((0.19, 0.19, 0.20), 0.0, 0.55)}
 

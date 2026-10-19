@@ -18,21 +18,27 @@ vents, knobs, radio bezel, glovebox lid, the H on the hub, seat seams, cup wells
 becomes `cabin_full`, which prep_parts keeps as `cabin_hi`, the bake's projection source; the
 coarse pass (CABIN_LOW in the exec globals, env CRV_CABIN_LOW=1 or --low) is the shipped `cabin`,
 1,253 triangles since 2026-10-17 (the rear bench left to the function feature; the oval binnacle, the
-rounded mirror, a 24-segment rim and a rounded hub pad added back 132) (+20 with the floor shifter). Both passes place the same pieces on the same centre lines, so the projection
-maps 1:1. The full pass also paints the two decals the bake maps by object position
-(bake_atlas.TEXTURED): blender/bake/cabin_dash.png (vents, radio, HVAC, glovebox, switch bank on
-the dash face) and blender/bake/cabin_cluster.png (the three-pod cluster). The file name is not
-cluster.png: paint_engine_decals.cluster() writes that one.
+rounded mirror, a 24-segment rim and a rounded hub pad added back 132) (+20 with the floor shifter), 1,721
+since the feature round of 2026-10-19 (front seats 208 -> 348 each: rounded bolster shoulders, a rounded
+front roll, chamfered backrest top with rounded shoulders, rounded headrests; the walk-through tray with two
+cup holders 36 -> 134 with the handbrake; three round HVAC knobs +66; the large airbag pad +24). Both
+passes place the same pieces on the same centre lines, so the projection maps 1:1. The full pass also
+paints the three decals the bake maps by object position (bake_atlas.TEXTURED): blender/bake/cabin_dash.png
+(vents, head unit, HVAC, glovebox, switch bank on the dash face), blender/bake/cabin_cluster.png (the four
+gauges) and blender/bake/cabin_dash_top.png (the passenger airbag door's seam on the dash top). The file
+name is not cluster.png: paint_engine_decals.cluster() writes that one.
 
 RD1 facts used (scratchpad references: Car and Driver 1999 EX press photo, a 1999 EX automatic
 dealer photo; 2026-10-17 the Japanese Classics RD1 set, blender/references/engine_bay/web_jpc_other: DSC_7939
 the dash and wheel, DSC_7904 the seats): the dash is ONE charcoal colour top and bottom; an oval binnacle as wide as the wheel
-with three pods (tach left 0-8, larger speedo centre 0-120, temperature and fuel side by side
-right), black faces, white marks, orange arcs; a 4-spoke wheel, spokes at 9 and 3 o'clock and two
-close together at the bottom, a large hub pad with the H; twin centre vents over a DIN radio and
-three rotary HVAC knobs, a tray below; rectangular vents at both dash ends; a LOW cup-holder tray
-between the seats (no tall console) with the thin handbrake beside it; the automatic's shifter on
-the column (SHIFTER); seats with plain charcoal bolsters round a striped insert.
+with four gauges (tach left 0-8, larger speedo centre 0-120, temperature over fuel right), black
+faces, white marks (the owner's photos, 2026-10-19: no coloured arcs); a 4-spoke wheel, spokes at 9 and
+3 o'clock and two close together at the bottom, a large padded airbag hub with the H and a switch pod on
+each flank; twin centre vents over a DIN head unit and three round rotary HVAC knobs, a tray below;
+rectangular vents at both dash ends; the passenger airbag door in the dash top; the walk-through: a
+fold-down tray with two round cup holders between the seats (no tall console) with the thin handbrake
+beside it; the automatic's shifter on the column (SHIFTER); dark grey cloth seats, plain bolsters round a
+darker insert in broad diagonal stripes, a separate rounded headrest.
 
 Seated passengers (2026-10-12, feedback: feet through the floor and out under the car, buttocks sunk in
 the cushion). The cushions and the footwells are placed from the passenger hip points in
@@ -89,16 +95,18 @@ SHIFTER = "column"
 SMOOTH_ANGLE = math.radians(32)  # boxes and the dash: sharp corners, rounded only in the full twin
 ROUND = math.radians(75)          # tubes and the rim: 6-8 sides meet at 45-60 deg and must shade round
 SOFT = math.radians(60)           # seats: bolster slopes shade soft, the cushion's square edges stay crisp
-BUDGET = 1300                    # coarse triangles; prep_parts.BUDGET["cabin"] decimates above it
+BUDGET = 1750                    # coarse triangles; prep_parts.BUDGET["cabin"] decimates above it
 
 # Principled base colours = bake_atlas.PALETTE (linear), so Workbench previews and direct bakes agree.
 # The tints in bake_atlas.TEXTURED land them at sRGB 52 / 64 / 85 / 57 (KI5's Bronco sheet: mean 29).
 MATERIALS = {
-    "CabDark":     ((0.032, 0.032, 0.034), 0.70),   # dash top, binnacle, wheel, column, tray: charcoal
-    "CabDash":     ((0.050, 0.050, 0.052), 0.75),   # dash face and centre stack (carries cabin_dash.png)
-    "SeatCloth":   ((0.090, 0.092, 0.097), 0.95),   # striped seat insert
-    "SeatBolster": ((0.040, 0.040, 0.042), 0.95),   # plain charcoal bolsters, sides, backs
-    "SeatSeam":    ((0.013, 0.013, 0.014), 0.95),   # seam grooves, full twin only: dark lines the bake paints
+    # feature round 2026-10-19 (the owner's photos: dark grey cloth, grey on grey, darker charcoal plastics)
+    "CabDark":     ((0.026, 0.026, 0.028), 0.70),   # dash top, binnacle, wheel, column, tray: charcoal
+    "CabDash":     ((0.040, 0.040, 0.042), 0.75),   # dash face and centre stack (carries cabin_dash.png)
+    "SeatCloth":   ((0.057, 0.058, 0.062), 0.95),   # striped seat insert, darker than the bolsters
+    "SeatBolster": ((0.073, 0.074, 0.078), 0.95),   # plain dark grey bolsters, sides, backs
+    "SeatSeam":    ((0.034, 0.034, 0.036), 0.95),   # seam grooves, full twin only: a soft line the bake paints
+                                                    # (0.013 drew the insert as a black-framed square)
     "Metal":       ((0.230, 0.230, 0.240), 0.40),   # headrest posts, handbrake button
     # the rear-view mirror's glass: dark and cool over the housing's charcoal (sRGB ~81-92 before the
     # bake's shading; 0.055-0.070 shipped at 54-60, barely off the housing's 52). Not in
@@ -111,6 +119,9 @@ X, Y, Z = Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1))
 C_WHEEL = Vector((-0.39, 0.43, 1.03))                    # kotris PCA centre (-0.387, 0.430, 1.033)
 N_WHEEL = Vector((0.02, -0.96, 0.29)).normalized()        # wheel normal toward the driver: 16.8 deg from vertical
 R_RIM, T_RIM = 0.190, 0.017                               # rim centre-line radius, tube radius (kotris diameter 0.394)
+HUB_HALF = (0.112, 0.084)          # airbag pad half width / height (22.4 x 16.8 cm: DSC_7939, ~0.6 of the rim's width)
+HUB_UP = 0.012                     # the pad's centre over the wheel's
+HUB_RINGS = ((-0.012, 1.0), (0.034, 1.0), (0.050, 0.84))   # (toward the driver, outline scale): a domed pad
 FIREWALL = [(0.00, 0.958), (0.10, 0.955), (0.22, 0.948), (0.30, 0.937), (0.38, 0.924), (0.46, 0.907),
             (0.54, 0.883), (0.62, 0.852), (0.66, 0.830), (0.725, 0.800)]   # kotris firewall y by |x| (body side past 0.66)
 DASH_X = (-0.725, -0.62, -0.50, -0.38, -0.26, -0.14, 0.14, 0.26, 0.38, 0.50, 0.62, 0.725)
@@ -507,6 +518,7 @@ def dash(b):
     # dash; the tongue's top is in the dash, its back faces the firewall, its bottom is under the floor)
     b.add("dash", "dash_stack", _box_without(STACK, (0, 4), b.fine), ["CabDash"], bevel=0.006, segments=2)
     b.add("dash", "dash_tongue", _box_without(TONGUE, (0, 1, 4), b.fine), ["CabDash"], bevel=0.008, segments=2)
+    hvac_knobs(b)
     if b.fine:
         _dash_details(b)
 
@@ -535,26 +547,59 @@ def _frame_boxes(b, piece, x0, x1, z0, z1, w, face, proud, name):
         _proud_box(b, piece, a0, a1, c0, c1, face, proud, name="%s%d" % (name, i))
 
 
+# The centre stack's controls (feature round 2026-10-19), shared by the full twin's relief and cabin_dash.png
+VENTS_C = ((-0.125, -0.025), (0.025, 0.125))               # twin centre vents (x0, x1), z 1.100..1.155
+VENT_LOUVRES = 4                                           # their louvres (decal and twin)
+HVAC_X, HVAC_Z, HVAC_R = (-0.075, 0.0, 0.075), 0.915, 0.020   # three rotary knobs: fan, temperature, mode
+HVAC_PROUD = 0.013
+RADIO_KNOB_Z, RADIO_KNOB_R = 1.020, 0.010                  # the head unit's volume and tuning knobs at x -/+0.072
+
+
+def _vent_relief(b, x0, x1, z0, z1, n, face, name, frame=0.006):
+    """A vent as the full twin models it for the bake: a 1 cm proud bezel round a pocket (the opening's AO) and n
+    louvres 8 mm deep across it, each where _louvres paints it (lip at its top edge)."""
+    _frame_boxes(b, "dash", x0, x1, z0, z1, frame, face, 0.010, name)
+    f = 0.004
+    pitch = (z1 - z0 - 2 * f - 0.004) / n
+    for k in range(n):
+        zt = z1 - f - 0.002 - pitch * k
+        _proud_box(b, "dash", x0 + frame, x1 - frame, zt - 0.005, zt, face, 0.008, name="%sl%d" % (name, k))
+
+
+def hvac_knobs(b):
+    """The three HVAC knobs as round knobs standing HVAC_PROUD off the stack, in both builds (feature round
+    2026-10-19, the owner: "the HVAC knobs as round knobs"): 8-sided coarse, front cap only (the back is inside
+    the stack); the full twin rounds them and adds the radio's two knobs and a pointer ridge on each."""
+    y = STACK[2]
+    for i, x in enumerate(HVAC_X):
+        b.add("dash", "knob%d" % i, tube((x, y + 0.002, HVAC_Z), (x, y - HVAC_PROUD, HVAC_Z), HVAC_R, 20 if b.fine else 8,
+                                          False, True, phase=math.pi / 8), ["CabDash"], smooth=ROUND,
+              bevel=0.003 if b.fine else 0.0)
+    if b.fine:
+        for x in (-0.072, 0.072):
+            b.add("dash", "radio_knob", tube((x, y + 0.002, RADIO_KNOB_Z), (x, y - 0.012, RADIO_KNOB_Z), RADIO_KNOB_R, 16),
+                  ["CabDash"], smooth=ROUND, bevel=0.002)
+
+
 def _dash_details(b):
     """Full twin only: relief the bake turns into AO / cavity under the painted decal."""
     stack = lambda z: STACK[2]                              # noqa: E731  the slab face is vertical
-    for i, (x0, x1) in enumerate(((-0.125, -0.025), (0.025, 0.125))):          # centre vents: frame + 3 slats
-        _frame_boxes(b, "dash", x0, x1, 1.100, 1.155, 0.006, stack, 0.005, "cvent%d_" % i)
-        for k in range(3):
-            z = 1.111 + 0.0135 * k
-            _proud_box(b, "dash", x0 + 0.006, x1 - 0.006, z, z + 0.004, stack, 0.004, name="cslat%d_%d" % (i, k))
-    _frame_boxes(b, "dash", -0.092, 0.092, 0.972, 1.068, 0.006, stack, 0.005, "radio")   # radio bezel
-    for i, x in enumerate((-0.075, 0.0, 0.075)):           # HVAC knobs, 1.2 cm proud
-        b.add("dash", "knob%d" % i, tube((x, STACK[2] + 0.002, 0.915), (x, STACK[2] - 0.012, 0.915), 0.020, 16), ["CabDash"], smooth=ROUND)
+    for i, (x0, x1) in enumerate(VENTS_C):                 # centre vents: bezel, pocket, louvres
+        _vent_relief(b, x0, x1, 1.100, 1.155, VENT_LOUVRES, stack, "cvent%d_" % i)
+    _proud_box(b, "dash", 0.008, 0.021, 1.113, 1.142, stack, 0.006, name="hazard")
+    _frame_boxes(b, "dash", -0.092, 0.092, 0.972, 1.068, 0.005, stack, 0.006, "radio")   # head unit: bezel,
+    _proud_box(b, "dash", -0.050, 0.050, 1.008, 1.022, stack, 0.003, name="cassette")    # cassette door, presets
+    for k in range(6):
+        x = -0.0625 + 0.025 * k
+        _proud_box(b, "dash", x - 0.0105, x + 0.0105, 0.982, 0.997, stack, 0.004, name="preset%d" % k)
+    for k, x in enumerate((-0.090, -0.030, 0.030, 0.090)):  # A/C, recirculation and the rest
+        _proud_box(b, "dash", x - 0.008, x + 0.008, 0.865, 0.879, stack, 0.004, name="hvac_btn%d" % k)
     _frame_boxes(b, "dash", -0.110, 0.110, 0.758, 0.822, 0.006, stack, 0.006, "tray")    # tray lip
     _proud_box(b, "dash", 0.23, 0.65, 0.900, 1.060, _face_y, 0.004, name="glovebox")     # glovebox lid
     _proud_box(b, "dash", 0.415, 0.465, 1.032, 1.050, _face_y, 0.008, name="glove_latch")
-    for sx in (-1, 1):                                     # side vents: frame + 2 slats
+    for sx in (-1, 1):                                     # side vents: bezel, pocket, three louvres
         x0, x1 = sorted((sx * 0.600, sx * 0.700))
-        _frame_boxes(b, "dash", x0, x1, 1.060, 1.130, 0.006, _face_y, 0.005, "svent%+d_" % sx)
-        for k in range(2):
-            z = 1.078 + 0.020 * k
-            _proud_box(b, "dash", x0 + 0.006, x1 - 0.006, z, z + 0.005, _face_y, 0.004, name="sslat%+d_%d" % (sx, k))
+        _vent_relief(b, x0, x1, 1.060, 1.130, 3, _face_y, "svent%+d_" % sx)
     for i, (x, z) in enumerate(((-0.685, 0.965), (-0.645, 0.965), (-0.685, 1.010), (-0.645, 1.010))):   # switch bank
         _proud_box(b, "dash", x - 0.012, x + 0.012, z - 0.012, z + 0.012, _face_y, 0.005, name="switch%d" % i)
 
@@ -633,14 +678,16 @@ def wheel(b):
     # rim: 24 segments coarse (2026-10-17: the 18-gon read as a polygon from the driver's seat, 0.45 m away)
     seg, ring = (36, 12) if b.fine else (24, 6)
     b.add("wheel", "rim", torus(c, h, up, R_RIM, T_RIM, seg, ring), ["CabDark"], smooth=ROUND)
-    # hub pad: a rounded block over the airbag, 17 x 13 cm, 5.5 cm deep, standing 4.5 cm toward the driver;
-    # a superellipse (the RD1's rounded-square pad, DSC_7939), 16 points in the full twin, 12 coarse (the
-    # coarse octagon read as a stop sign from the seat)
-    a, bb = 0.085, 0.065
+    # hub pad: the RD1's large padded airbag cover (DSC_7939: it fills most of the wheel, two thirds of the rim's
+    # width, the side spokes' switch pods at its flanks; feature round 2026-10-19, the owner: "ours has a small
+    # hub"; v8's was 17 x 13 cm). HUB_HALF across and up, a rounded-square superellipse 2 cm above the centre (the
+    # lower spokes leave more room under it), domed: the face HUB_DOME back from the pad's full outline
+    a, bb = HUB_HALF
     pts = [(a * math.copysign(abs(math.cos(t)) ** 0.6, math.cos(t)), bb * math.copysign(abs(math.sin(t)) ** 0.6, math.sin(t)))
-           for t in np.linspace(0, 2 * math.pi, 16 if b.fine else 12, endpoint=False)]
-    rings = [[c + h * px + up * py + n * off for px, py in pts] for off in (-0.012, 0.045)]
-    b.add("wheel", "hub", loft(rings), ["CabDark"], bevel=0.012, segments=3, smooth=SOFT)
+           for t in np.linspace(0, 2 * math.pi, 20 if b.fine else 12, endpoint=False)]
+    hcen = c + up * HUB_UP
+    rings = [[hcen + h * px * k + up * py * k + n * off for px, py in pts] for off, k in HUB_RINGS]
+    b.add("wheel", "hub", loft(rings), ["CabDark"], bevel=0.010, segments=3, smooth=SOFT)
     # four spokes: 9 and 3 o'clock 8 deg low, two at the bottom 28 deg either side of straight down
     for i, deg in enumerate((-8.0, 188.0, 242.0, 298.0)):
         t = math.radians(deg)
@@ -651,16 +698,17 @@ def wheel(b):
             p = c + d * rad
             rings.append([p + s * sx * 0.0175 + n * sz * 0.011 for sx, sz in ((-1, -1), (1, -1), (1, 1), (-1, 1))])
         b.add("wheel", "spoke%d" % i, loft(rings, False, False), ["CabDark"], bevel=0.004, segments=2)
-    if b.fine:                                             # the H on the hub pad, 4 x 4 cm with 1 cm strokes, 2 cm above
-        hc = c + n * 0.046 + up * 0.020                    # centre (5 mm strokes vanished at the sheet's ~3.6 texels/cm)
+    if b.fine:                                             # the H on the hub pad, 4.8 x 4.4 cm, 1.2 cm strokes, over the
+        hc = hcen + n * (HUB_RINGS[-1][0] + 0.0005) + up * 0.026        # pad's centre (DSC_7939)
         # moulded into the pad, a shade lighter than it (DSC_7939): in "Metal" it was a light-grey block, the
         # brightest thing in the driver's view
-        for (px, py, hx, hy) in ((-0.015, 0.0, 0.005, 0.020), (0.015, 0.0, 0.005, 0.020), (0.0, 0.0, 0.015, 0.005)):
+        for (px, py, hx, hy) in ((-0.018, 0.0, 0.006, 0.022), (0.018, 0.0, 0.006, 0.022), (0.0, 0.0, 0.018, 0.0055)):
             b.add("wheel", "h_logo", obox(hc + h * px + up * py, h, up, n, hx, hy, 0.0015), ["CabDash"], smooth=False)
-        # the two horn buttons where the side spokes meet the pad (DSC_7939), 2.4 x 2.8 cm, 4 mm proud
+        # the two switch pods on the pad's flanks over the side spokes (DSC_7939), 2.6 x 3.0 cm, 5 mm proud, a shade
+        # lighter than the pad so the bake draws them
         for side in (-1, 1):
-            p = c + n * 0.045 + h * side * 0.064 - up * 0.004
-            b.add("wheel", "horn", obox(p, h, up, n, 0.012, 0.014, 0.004), ["CabDark"], bevel=0.002)
+            p = hcen + n * (HUB_RINGS[1][0] + 0.006) + h * side * (a - 0.022) + up * 0.004
+            b.add("wheel", "horn", obox(p, h, up, n, 0.013, 0.015, 0.006), ["CabDash"], bevel=0.003)
 
 
 def column(b):
@@ -731,13 +779,19 @@ F_BACK = ((-0.135, -0.135, 0.0, "front"),        # bight: meets the cushion top
           (-0.160, 0.100, 0.0, "front"),         # lumbar
           (-0.185, 0.260, 0.0, "front"),
           (-0.205, 0.360, 0.0, "upper"),         # plain band over the insert
-          (-0.222, 0.465, (0.0, 0.040), "top"),
-          (-0.325, 0.470, (0.0, 0.040), "back"),
+          (-0.222, 0.465, (0.040, 0.040), "top"),   # coarse: chamfered on the full twin's arc (was square)
+          (-0.325, 0.470, (0.040, 0.040), "back"),
           (-0.330, 0.320, 0.0, "back"),
           (-0.285, 0.100, 0.0, "back"),          # scooped: the rear passenger's knees and shins
           (-0.225, -0.040, 0.0, "back"),
           (-0.180, -0.140, 0.0, "bottom"))
 F_BACK_COARSE = (0, 2, 5, 6, 7, 8, 10)
+# rounded shoulders (feature round 2026-10-19, the owner's photos: "contoured backrest with a scooped top and rounded
+# shoulders"; v8's coarse back was a square-topped slab): the backrest's top corners come down F_SHOULDER at the
+# side, over the outer F_SHOULDER_W of each half, fading in above F_SHOULDER_H (h over the hip); the posts (|u| 0.075)
+# and the insert stay where they were
+F_SHOULDER, F_SHOULDER_W, F_SHOULDER_H = 0.055, 0.110, 0.300
+F_HEAD_RS = 0.035                 # front headrest: rounding of its side edges (front and top views: a rounded pad)
 F_BW, F_BW_TOP, F_BI, F_WING, F_SEAM_H = 0.255, 0.235, 0.140, 0.050, 0.350
 B_BACK = ((-0.135, -0.130, 0.0, "front"),
           (-0.148, -0.030, 0.0, "front"),
@@ -760,10 +814,11 @@ def _smooth01(t):
     return t * t * (3.0 - 2.0 * t)
 
 
-def _rounded(pts, fine, n=3):
+def _rounded(pts, fine, n=3, coarse_n=0):
     """[(s, h, r, label)] closed -> [(s, h, label)]. r (or (r_coarse, r_full)) > 0: the corner becomes a
     chamfer (coarse) or a quadratic arc with n inner points (full), so the coarse ring is the full
-    ring's chord. The arc points carry the corner's label."""
+    ring's chord. The arc points carry the corner's label. coarse_n = 1 gives the coarse ring the arc's
+    midpoint too (the full arc's n = 3 has it), so a coarse front roll reads round, still on the arc."""
     out = []
     N = len(pts)
     for i, (s, h, r, lab) in enumerate(pts):
@@ -775,7 +830,7 @@ def _rounded(pts, fine, n=3):
         a, c = Vector(pts[i - 1][:2]) - P, Vector(pts[(i + 1) % N][:2]) - P
         A = P + a.normalized() * min(r, 0.98 * a.length)
         C = P + c.normalized() * min(r, 0.98 * c.length)
-        k = n if fine else 0
+        k = n if fine else coarse_n
         out.append((A.x, A.y, lab))
         for j in range(1, k + 1):
             t = j / (k + 1)
@@ -806,12 +861,14 @@ def _inset(ring, d):
     return out
 
 
-def _cushion_ring(fine, bottom, rear, rise=0.0, groove=False, crease=True, tuck=0.09):
+def _cushion_ring(fine, bottom, rear, rise=0.0, groove=False, crease=True, tuck=0.09, coarse_top=(-0.06,), coarse_n=0):
     """Cushion side section at one station, closed: the rear end rising into the backrest, the top (full
     twin, insert stations: the crease ahead of the pocket and the seam to the front roll), the front
     roll, back along the underside. rise lifts the top (bolsters), fading to 40 % at the roll; crease
     False keeps the crease flat (the bench: its seams already cut the insert into panels); tuck = how far
-    the underside rises to the rear end."""
+    the underside rises to the rear end. coarse_top: the coarse ring's points along the top; coarse_n:
+    inner arc points of the coarse front roll (_rounded); the front seats pass two and one (feature
+    round 2026-10-19), the bench keeps the defaults."""
     def up(s):
         fade = 1.0 if s <= 0.10 else 1.0 - 0.6 * min(1.0, (s - 0.10) / (SEAT_NOSE - 0.10))
         return _lerp_table(SEAT_TOP, s) + rise * fade
@@ -826,14 +883,14 @@ def _cushion_ring(fine, bottom, rear, rise=0.0, groove=False, crease=True, tuck=
             if after == "top":
                 pts.append((0.20, up(0.20), 0.0, "top"))
     else:
-        pts.append((-0.06, up(-0.06), 0.0, "top"))
+        pts += [(s, up(s), 0.0, "top") for s in coarse_top]
     pts.append((SEAT_NOSE, up(SEAT_NOSE), 0.055, "nose"))                # the front roll
     pts.append((SEAT_NOSE - 0.005, bottom, (0.0, 0.025), "bottom"))
     if fine:
         pts.append((0.20, bottom, 0.0, "bottom"))
     # the underside rises behind s 0.10: the rear passengers' toes reach y -0.02 at z 0.55-0.58
     pts += [(0.10, bottom, 0.0, "bottom"), (rear, bottom + tuck, 0.0, "rear")]
-    return _rounded(pts, fine)
+    return _rounded(pts, fine, coarse_n=coarse_n)
 
 
 def _back_ring(fine, sect, coarse, seam_h, wing=0.0, groove=False):
@@ -859,19 +916,21 @@ def _back_ring(fine, sect, coarse, seam_h, wing=0.0, groove=False):
     return _rounded(pts + rest, fine)
 
 
-def _headrest_ring(fine, t, hh):
+def _headrest_ring(fine, t, hh, round_low=False):
     """Headrest section about its centre (s forward, h up): t thick, 2 hh tall, rounded. The two top
     corners' roundings share the top edge: on the rear headrest (t 0.09) their 0.045 + 0.040 overran the
     7.8 cm edge, the ring crossed itself over the top, and recalc_face_normals oriented the whole solid by
     that folded sliver: every rear headrest shipped 98 % inside-out (CAB-3, 2026-10-17). Where they
     overrun it they are scaled to 96 % of the edge; the front headrest (t 0.10, 8.5 of 8.8 cm) keeps its
-    corners exactly (a 0.5 % trim of them uncovered a body back face at the A-pillar from the rear seat)."""
+    corners exactly (a 0.5 % trim of them uncovered a body back face at the A-pillar from the rear seat).
+    round_low: the coarse ring chamfers the two lower corners as well (the front headrests, 2026-10-19)."""
     p1, p2 = Vector((t / 2 - 0.012, hh)), Vector((-t / 2, hh - 0.005))
     r1, r2 = 0.045, 0.040
     edge = (p1 - p2).length
     k = 1.0 if r1 + r2 <= edge else 0.96 * edge / (r1 + r2)
-    return _rounded([(t / 2, -hh, (0.0, 0.025), "front"), (p1.x, p1.y, r1 * k, "top"),
-                     (p2.x, p2.y, r2 * k, "back"), (-t / 2 + 0.005, -hh, (0.0, 0.020), "under")], fine)
+    lo1, lo2 = ((0.025, 0.025), (0.020, 0.020)) if round_low else ((0.0, 0.025), (0.0, 0.020))
+    return _rounded([(t / 2, -hh, lo1, "front"), (p1.x, p1.y, r1 * k, "top"),
+                     (p2.x, p2.y, r2 * k, "back"), (-t / 2 + 0.005, -hh, lo2, "under")], fine)
 
 
 def _side_stations(u_edge, inward, rs, kind):
@@ -939,10 +998,12 @@ def _seat_loft(b, piece, name, stations, ring_of, place, mat_of, drop=COARSE_DRO
                  smooth=SOFT, keep=keep)
 
 
-def _headrest(b, piece, hip, base, w, hh, t, posts, gap, recline=8.0, tilt=8.0, caps=False):
+def _headrest(b, piece, hip, base, w, hh, t, posts, gap, recline=8.0, tilt=8.0, caps=False, rs=0.02, rounded=False):
     """Headrest on two posts: base (s, h) where the posts enter the backrest top, the posts leaning
     back `recline` deg, the headrest turned `tilt` deg forward of them, gap = post showing. caps: close
-    the posts' ends (a headrest out of its seat shows them)."""
+    the posts' ends (a headrest out of its seat shows them). rounded (the front seats, 2026-10-19): side
+    edges rounded rs in the coarse build too (two stations a side on the full twin's quarter circle) and
+    the lower corners chamfered, so the pad reads round from the front instead of a 27 x 19 cm box."""
     q = math.radians(recline)
     a = Vector((0.0, -math.sin(q), math.cos(q)))
     q = math.radians(recline - tilt)
@@ -950,10 +1011,14 @@ def _headrest(b, piece, hip, base, w, hh, t, posts, gap, recline=8.0, tilt=8.0, 
     p0 = hip + Vector((0.0, base[0], base[1]))
     c = p0 + a * (gap + hh)
     if b.fine:
-        stations = _side_stations(-w, 1.0, 0.02, "side") + _mirror(_side_stations(-w, 1.0, 0.02, "side"))
+        stations = _side_stations(-w, 1.0, rs, "side") + _mirror(_side_stations(-w, 1.0, rs, "side"))
+    elif rounded:
+        left = [(-w, rs * (1.0 - math.cos(math.radians(60))), "side"), (-w + rs, 0.0, "side")]
+        left[0] = (-w + rs * (1.0 - math.sin(math.radians(60))), left[0][1], "side")
+        stations = left + _mirror(left)
     else:
         stations = [(-w, 0.0, "side"), (w, 0.0, "side")]
-    _seat_loft(b, piece, "headrest", stations, lambda u, kind: _headrest_ring(b.fine, t, hh),
+    _seat_loft(b, piece, "headrest", stations, lambda u, kind: _headrest_ring(b.fine, t, hh, rounded),
                lambda u, s, h: c + Vector((u, 0.0, 0.0)) + fw * s + up * h, lambda kind, lab: "SeatBolster")
     for sx in (-1, 1):
         p = p0 + Vector((sx * posts, 0.0, 0.0))
@@ -970,9 +1035,9 @@ def front_seat(b, hip):
         left = (_side_stations(-F_W, 1.0, SEAT_RS, "side") + [(u, 0.0, "bolster") for u in (-0.215, -F_CREST, -0.175, -0.155)]
                 + _seam_stations(-F_I, 1.0) + [(-0.07, 0.0, "insert")])
         stations = left + [(0.0, 0.0, "insert")] + _mirror(left)
-    else:
-        stations = [(-F_W, SEAT_RS / 2, "side"), (-F_CREST, 0.0, "bolster"), (-F_I, 0.0, "edge_i"),
-                    (F_I, 0.0, "edge_i"), (F_CREST, 0.0, "bolster"), (F_W, SEAT_RS / 2, "side")]
+    else:                                                  # the bolster's outer shoulder rounded (2026-10-19): a station
+        left = [(-F_W, SEAT_RS / 2, "side"), (-0.2375, 0.0034, "bolster"), (-F_CREST, 0.0, "bolster"), (-F_I, 0.0, "edge_i")]
+        stations = left + _mirror(left)                    # on the full twin's quarter circle (_side_stations, 30 deg)
 
     def rise(u):
         a = abs(u)
@@ -982,7 +1047,8 @@ def front_seat(b, hip):
             return F_RISE * _smooth01((a - F_I) / (F_CREST - F_I))
         return F_RISE - (F_RISE - 0.012) * ((a - F_CREST) / (F_W - F_CREST)) ** 2
     _seat_loft(b, piece, "cushion", stations,
-               lambda u, kind: _cushion_ring(b.fine, F_BOTTOM, F_REAR, rise(u), kind in ("insert", "edge_i")),
+               lambda u, kind: _cushion_ring(b.fine, F_BOTTOM, F_REAR, rise(u), kind in ("insert", "edge_i"),
+                                             coarse_n=1),                               # a rounded front roll
                lambda u, s, h: hip + Vector((u, s, h)), _cushion_mat,
                drop=())                       # closed: the overhanging underside and the rear end show from low eyes
     # backrest: 51 cm at the bottom tapering to 47 at the top, wings 5 cm proud
@@ -991,16 +1057,20 @@ def front_seat(b, hip):
                 + _seam_stations(-F_BI, 1.0) + [(-0.07, 0.0, "insert")])
         stations = left + [(0.0, 0.0, "insert")] + _mirror(left)
     else:
-        stations = [(-F_BW, SEAT_RS / 2, "side"), (-0.205, 0.0, "bolster"), (-F_BI, 0.0, "edge_i"),
-                    (F_BI, 0.0, "edge_i"), (0.205, 0.0, "bolster"), (F_BW, SEAT_RS / 2, "side")]
+        left = [(-F_BW, SEAT_RS / 2, "side"), (-0.2375, 0.0034, "bolster"), (-0.205, 0.0, "bolster"), (-F_BI, 0.0, "edge_i")]
+        stations = left + _mirror(left)
 
     def taper(h):
         return 1.0 + (F_BW_TOP / F_BW - 1.0) * max(0.0, min(1.0, (h - 0.10) / 0.37))
+
+    def shoulder(u, h):
+        q = max(0.0, min(1.0, (abs(u) - (F_BW - F_SHOULDER_W)) / F_SHOULDER_W)) ** 2
+        return F_SHOULDER * q * _smooth01((h - F_SHOULDER_H) / (0.470 - F_SHOULDER_H))
     _seat_loft(b, piece, "backrest", stations,
                lambda u, kind: _back_ring(b.fine, F_BACK, F_BACK_COARSE, F_SEAM_H,
                                           F_WING * _smooth01((abs(u) - F_BI) / (F_BW - F_BI)), kind in ("insert", "edge_i")),
-               lambda u, s, h: hip + Vector((u * taper(h), s, h)), _back_mat)
-    _headrest(b, piece, hip, (-0.245, 0.467), 0.135, 0.095, 0.10, 0.075, 0.06)
+               lambda u, s, h: hip + Vector((u * taper(h), s, h - shoulder(u, h))), _back_mat)
+    _headrest(b, piece, hip, (-0.245, 0.467), 0.135, 0.095, 0.10, 0.075, 0.06, rs=F_HEAD_RS, rounded=True)
     # outboard recliner cover: inner face 4 mm inside the cushion side, 1 cm proud of the backrest's
     x0, x1 = hip.x + out * (F_W - 0.004), hip.x + out * (F_BW + 0.010)
     V, F, tags = loft([[(x, hip.y + s, hip.z + h) for s, h in COVER] for x in (x0, x1)])
@@ -1167,6 +1237,235 @@ def _store_headrest(objs, hip, base, hh, t, gap, recline=8.0, tilt=8.0):
         ob.data.update()
 
 
+# ------------------------------------------------------------------------------------------- the made-up bed
+# 2026-10-19 (feature round, "make the folded bed LOOK like a bed"): what people camping in a first-generation CR-V
+# lay over the folded seats and the cargo floor: a thin foam pad, an open rectangular sleeping bag with its top
+# turned back, a pillow at the front end (the head behind the front seats, the feet to the gate). Part of the
+# folded model (rear_seats "fold": acc_function_seats_fold and its _hi twin), so the one Lua switch that shows the
+# folded seats shows the bed too, and the bed costs nothing while the seats are up.
+# Heights measured on the built car (scratch feat_bed/probe_heights.py, ray grid on crv_kotris.blend): the folded
+# backs' carpeted tops z 0.788 (y -0.50) to 0.799 (y -0.60 .. -0.65), 0.792 at y -0.90, then down into the gap at
+# the riser (0.686 at y -0.95, 0.696 at y -1.00); the cargo deck z 0.766 from y -1.05 to -2.00 for |x| <= 0.55,
+# the picnic table flush in it (top 0.768, 0.771 at most), the wheel-housing trims from |x| 0.60 (z 0.78-0.88).
+# With the table out its tub lies open under the deck (x +-0.39, y -1.24 .. -1.92): the pad bridges it, as a pad
+# laid over the folded floor does, and it is 1.0 m wide (x +-0.50), so the open tub stays out of sight under it
+# from every side (the alternative, a pad stopping short at y -1.24, is 0.8 m long: no bed).
+BED_MADE = True                   # build the bed into the folded model
+BED_PAD_X = 0.50                  # the pad's half width: clear of the housing trims (|x| 0.60) and the folded backs'
+                                  # rounded outer edges (top under 0.79 past |x| 0.55)
+BED_PAD_T = 0.025                 # pad thickness (a self-inflating foam pad)
+# the pad's underside along y (model y ascending, z): 3+ mm over every surface under it, a 4.5 % ramp over the
+# riser gap from the folded backs down to the deck
+BED_PAD_FLOOR = ((-1.95, 0.775), (-1.07, 0.772), (-0.93, 0.802), (-0.60, 0.803), (-0.53, 0.796), (-0.47, 0.790))
+BED_PAD_FRONT, BED_PAD_REAR = -0.47, -1.95
+BED_BAG_X, BED_BAG_W = -0.03, 0.385      # sleeping bag centre and half width (a rectangular bag, ~0.77 m)
+BED_BAG_H = 0.055                 # its loft (closed, lying on the pad)
+BED_OPEN = (-0.84, -1.02)         # the open head end, top layer turned back: only the bottom layer, lining up
+BED_FLAP = (-1.005, -1.21)        # the turned-back top layer (as long as the open end) lying on the bag, lining up, its rounded fold at the front
+BED_BAG_FOOT = -1.90
+BED_PILLOW = (-0.035, -0.655, 0.26, 0.150, 0.050, 4.0)   # centre x, y, half width, half depth, half height, yaw deg
+MATERIALS.update({
+    # linear base colours, the colour bake takes them as they are (not in bake_atlas.PALETTE); a little lighter
+    # than they should ship: the interior sheet's AO takes ~20 % off (SeatCloth: 140 before, ~115 shipped)
+    "BedPad":    ((0.150, 0.155, 0.160), 0.85),   # grey closed-cell foam: sRGB ~108
+    "BedBag":    ((0.026, 0.062, 0.040), 0.65),   # dark forest-green nylon shell: sRGB ~(45, 70, 56)
+    "BedLining": ((0.290, 0.070, 0.050), 0.95),   # red flannel lining (the bake adds a weave): sRGB ~(147, 75, 63)
+    "BedPillow": ((0.600, 0.585, 0.530), 0.90),   # off-white cotton case: sRGB ~(203, 200, 192)
+})
+BED_MATS = ["BedPad", "BedBag", "BedLining", "BedPillow"]
+
+
+def _bed_floor(y):
+    return _lerp_table(BED_PAD_FLOOR, y)
+
+
+def _bed_top(y):
+    """The pad's top surface height at y."""
+    return _bed_floor(y) + BED_PAD_T
+
+
+def _wobble(x, y, a):
+    """Deterministic rumple in [-a, a] (both twins sample the same field, so the coarse model is the twin's chord)."""
+    return a * (0.55 * math.sin(11.0 * y + 3.1 * x + 0.4) + 0.30 * math.sin(23.0 * y - 7.3 * x + 1.3)
+                + 0.15 * math.sin(41.0 * y + 13.0 * x + 2.1))
+
+
+def _bag_h(x, y):
+    """The closed bag's loft at (x, y): fuller toward the foot, rumpled."""
+    return BED_BAG_H * (0.92 + 0.10 * _smooth01((-1.10 - y) / 0.6)) + _wobble(x, y, 0.008)
+
+
+def _super(w, h, t, p=3.0):
+    """Superellipse point at angle t (0 = right, pi = left, over the top): (dx, dz), dz >= 0."""
+    c, s = math.cos(t), math.sin(t)
+    return (w * math.copysign(abs(c) ** (2.0 / p), c), h * abs(s) ** (2.0 / p))
+
+
+def _bag_surface(x, y):
+    """Height of the closed bag's top at (x, y) (the superellipse section the bag is lofted through)."""
+    dx = min(abs(x - BED_BAG_X - _wobble(0.0, y, 0.006)) / BED_BAG_W, 1.0)
+    return _bed_top(y) + 0.002 + _bag_h(x, y) * (1.0 - dx ** 3.0) ** (1.0 / 3.0)
+
+
+def _bag_ts(fine):
+    """Section angles, right bottom corner over the top to the left one (the bottom closes the ring)."""
+    if fine:
+        return [math.pi * i / 13 for i in range(14)]
+    return [0.0, 0.17 * math.pi, 0.40 * math.pi, 0.60 * math.pi, 0.83 * math.pi, math.pi]
+
+
+def _bag_loft(b, name, ys, h_of, w_of, lining_top, foot_shrink=None):
+    """A bag section (superellipse, flat bottom on the pad) lofted along -y through the stations ys.
+    lining_top: the top bands (between 25 % and 75 % of the section) in BedLining."""
+    ts = _bag_ts(b.fine)
+    n = len(ts)
+    rings = []
+    # every kink of the pad's top under the piece is a station too: a chord across one would cut into the pad
+    ys = sorted(set(ys) | {y for y, _z in BED_PAD_FLOOR if min(ys) < y < max(ys)}, reverse=True)
+    for y in ys:
+        w = w_of(y)
+        z0 = _bed_top(y) + 0.002
+        xc = BED_BAG_X + _wobble(0.0, y, 0.006)
+        ring = []
+        for t in ts:
+            dx, dz = _super(w, 1.0, t)
+            x = xc + dx
+            ring.append(Vector((x, y, z0 + dz * h_of(x, y))))
+        rings.append(ring)
+    V, F, tags = loft(rings)
+    top = set(k for k in range(n - 1) if 0.25 * math.pi <= (ts[k] + ts[k + 1]) / 2 <= 0.75 * math.pi)
+    mats = ["BedBag", "BedLining"] if lining_top else ["BedBag"]
+    pick = (lambda t: 1 if t in top else 0) if lining_top else None
+    keep = None if b.fine else (lambda t: t != n - 1)          # the bottom against the pad
+    return b.add("bed", name, (V, F, tags), mats, pick, smooth=SOFT, keep=keep)
+
+
+def _bed_pad(b):
+    """The foam pad: a slab over the folded backs and the deck, its underside following BED_PAD_FLOOR."""
+    ys = [y for y, _z in BED_PAD_FLOOR][::-1]                  # front to rear
+    if b.fine:                                                 # the twin: every ~10 cm, rounded top edges
+        extra = [BED_PAD_FRONT - 0.04 * i for i in range(1, 3)] + [-0.70, -0.80, -0.98, -1.02] + \
+                [-1.10 - 0.1 * i for i in range(9)]
+        ys = sorted(set(round(y, 4) for y in ys + extra), reverse=True)
+    r = 0.008
+    if b.fine:
+        sect = [(BED_PAD_X, 0.0), (BED_PAD_X, BED_PAD_T - r), (BED_PAD_X - 0.3 * r, BED_PAD_T - 0.3 * r),
+                (BED_PAD_X - r, BED_PAD_T), (-BED_PAD_X + r, BED_PAD_T), (-BED_PAD_X + 0.3 * r, BED_PAD_T - 0.3 * r),
+                (-BED_PAD_X, BED_PAD_T - r), (-BED_PAD_X, 0.0)]
+    else:
+        sect = [(BED_PAD_X, 0.0), (BED_PAD_X - 0.003, BED_PAD_T), (-BED_PAD_X + 0.003, BED_PAD_T), (-BED_PAD_X, 0.0)]
+    rings = [[Vector((x, y, _bed_floor(y) + dz)) for x, dz in sect] for y in ys]
+    data = loft(rings)
+    n = len(sect)
+    keep = None if b.fine else (lambda t: t != n - 1)          # the underside
+    return b.add("bed", "pad", data, ["BedPad"], smooth=SMOOTH_ANGLE, keep=keep)
+
+
+def _bed_bag(b):
+    """The sleeping bag: the open head end (bottom layer, lining up), the closed body to the foot, the turned-back
+    top layer lying on it with its rounded fold at the front."""
+    y0, y1 = BED_OPEN
+    step = 0.06 if b.fine else 0.0
+    ys = [y0, -0.93, y1 + 0.002] if not b.fine else [y0 - step * i for i in range(int((y0 - y1) / step) + 1)] + [y1 + 0.002]
+    ys = [y for y in ys if y >= y1 + 0.002]            # ends 2 mm before the body (the slit lies under the fold)
+    _bag_loft(b, "bag_open", ys, lambda x, y: 0.018 + _wobble(x, y, 0.003), lambda y: BED_BAG_W, True)
+    # the closed body: rounded foot (the last stations narrow and drop)
+    if b.fine:
+        ys = [y1] + [round(y1 - 0.06 * i, 4) for i in range(1, 15)] + [BED_BAG_FOOT + 0.035, BED_BAG_FOOT + 0.012,
+                                                                               BED_BAG_FOOT]
+    else:
+        ys = [y1, -1.07, -1.22, -1.40, -1.58, -1.74, BED_BAG_FOOT + 0.02, BED_BAG_FOOT]
+    ys = sorted(set(ys), reverse=True)
+
+    def foot(y):
+        return _smooth01((y - BED_BAG_FOOT) / 0.05) if y < BED_BAG_FOOT + 0.05 else 1.0
+    body = _bag_loft(b, "bag", ys, lambda x, y: max(0.012, _bag_h(x, y) * (0.35 + 0.65 * foot(y))),
+              lambda y: BED_BAG_W * (0.93 + 0.07 * foot(y)), False)
+    # the turned-back top layer: across x its underside lies on the bag's top, its top 2.4 cm higher; the front
+    # (the fold) rounds down to the open end's lining
+    fy0, fy1 = BED_FLAP
+    w = BED_BAG_W - 0.02
+    xs = [BED_BAG_X + w * (2.0 * i / 8 - 1.0) for i in range(9)] if b.fine else \
+         [BED_BAG_X - w, BED_BAG_X - 0.45 * w, BED_BAG_X + 0.45 * w, BED_BAG_X + w]
+    if b.fine:
+        ys = [fy0, fy0 - 0.004, fy0 - 0.012, fy0 - 0.025] + [fy0 - 0.025 - 0.04 * i for i in range(1, 5)] + [fy1 + 0.02, fy1]
+    else:
+        ys = [fy0, fy0 - 0.015, -1.15, fy1]
+    ys = sorted(set(round(y, 4) for y in ys), reverse=True)
+    # the flap lies on the body as built (its stations and chords, not the smooth field): rays down onto it
+    tree = BVHTree.FromPolygons([v.co.copy() for v in body.data.vertices], [tuple(p.vertices) for p in body.data.polygons])
+
+    def on_body(x, y):
+        hit = tree.ray_cast(Vector((x, y, 1.2)), Vector((0.0, 0.0, -1.0)), 1.0)[0]
+        return hit.z if hit is not None else _bag_surface(x, y)
+    rings = []
+    for j, y in enumerate(ys):
+        # the fold: full 2.4 cm a few cm behind the front, a rounded lip at it; thin at the rear edge, laid on the bag
+        lip = math.sqrt(max(0.0, min(1.0, (fy0 - y) / 0.025)))
+        th = 0.024 * (0.25 + 0.75 * lip) * (1.0 - 0.6 * _smooth01((y - (fy1 + 0.06)) / -0.06)) + _wobble(0.3, y, 0.002)
+        zu = [on_body(x, y) + 0.003 for x in xs]
+        for _it in range(3):                                   # the chords between the points clear the body too
+            for i in range(len(xs) - 1):
+                need = max(on_body(xs[i] + (xs[i + 1] - xs[i]) * f, y) + 0.002 - (zu[i] + (zu[i + 1] - zu[i]) * f)
+                           for f in (0.2, 0.4, 0.5, 0.6, 0.8))
+                if need > 0.0:
+                    zu[i] += need
+                    zu[i + 1] += need
+        und = [Vector((x, y, z)) for x, z in zip(xs, zu)]
+        top = [Vector((x, y, z + th + _wobble(x, y, 0.003))) for x, z in reversed(list(zip(xs, zu)))]
+        if j == 0:                                             # the fold's leading edge hangs over the open end
+            und = [Vector((x, y, max(_bag_surface(x, y) - 0.006, _bed_top(y) + 0.022))) for x in xs]
+        rings.append(top + und)
+    V, F, tags = loft(rings)
+    m = len(xs)
+    # ring order: top right->left (bands 0..m-2), the left edge (m-1), underside left->right, the right edge (2m-1)
+    top = set(range(m - 1))
+    keep = None if b.fine else (lambda t: not (isinstance(t, int) and m <= t < 2 * m - 1))   # the underside
+    b.add("bed", "flap", (V, F, tags), ["BedBag", "BedLining"], lambda t: 1 if t in top else 0, smooth=SOFT, keep=keep)
+
+
+def _bed_pillow(b):
+    """The pillow at the front end, lying flat on the pad, slightly askew: a soft lens lofted across x, pinched at
+    its ends, its flat underside 3 mm over the pad's top."""
+    from mathutils import Matrix
+    cx, cy, hw, hd, hh, yaw = BED_PILLOW
+    us = ([-1.0, -0.96, -0.86, -0.70, -0.50, -0.25, 0.0, 0.25, 0.50, 0.70, 0.86, 0.96, 1.0] if b.fine
+          else [-1.0, -0.88, -0.45, 0.45, 0.88, 1.0])
+    n = 16 if b.fine else 8
+    rot = Matrix.Rotation(math.radians(yaw), 3, 'Z')
+    rings = []
+    base = max(_bed_top(cy + s * hd) for s in (-1.0, 0.0, 1.0)) + 0.003       # the flat underside's height
+    for u in us:
+        e = abs(u)
+        k = math.sqrt(max(0.0, 1.0 - e ** 4))                  # the pinched ends
+        d = hd * (0.80 + 0.20 * k)
+        h = hh * (0.30 + 0.70 * k)
+        ring = []
+        for i in range(n):
+            t = 2.0 * math.pi * i / n
+            c, s = math.cos(t), math.sin(t)
+            sy = d * math.copysign(abs(c) ** (2.0 / 2.6), c)
+            if s >= 0.0:
+                sz = h * abs(s) ** (2.0 / 2.6) * (1.0 + _wobble(u, sy, 0.06))
+            else:
+                sz = -0.25 * h * abs(s) ** (2.0 / 5.0)      # the underside: nearly flat, 1/4 of the top's height
+            ring.append((u * hw, sy, sz))
+        rings.append(ring)
+    low = min(z for r in rings for _x, _y, z in r)
+    pts = [[Vector((cx, cy, base - low)) + rot @ Vector(p) for p in r] for r in rings]
+    V, F, tags = loft(pts)
+    under = set(k for k in range(n) if math.sin(2.0 * math.pi * (k + 0.5) / n) < -0.5)
+    keep = None if b.fine else (lambda t: t not in under)
+    b.add("bed", "pillow", (V, F, tags), ["BedPillow"], smooth=SOFT, keep=keep)
+
+
+def bed_set(b):
+    """The made-up bed on the folded seats and the deck (BED_MADE): pad, sleeping bag, pillow."""
+    _bed_pad(b)
+    _bed_bag(b)
+    _bed_pillow(b)
+
+
 def _function_active():
     """The function feature ships the bench as its own models (rear_seats): the cabin leaves it out."""
     try:
@@ -1208,7 +1507,9 @@ def rear_seats(pose, fine, name, collection=None):
     for hname, hip in hips().items():
         if hname.startswith("Rear"):
             _rear_side(b, hip, pose)
-    if pose == "up" and not fine:                          # the clearance audit the bench had in the cabin
+    if pose == "fold" and BED_MADE:                        # the made-up bed rides the folded model
+        bed_set(b)
+    if pose == "up" and not fine:                         # the clearance audit the bench had in the cabin
         _audit(b.objs, Env())
     pieces = dict(b.pieces)
     ob = b.join(name)
@@ -1219,22 +1520,86 @@ def rear_seats(pose, fine, name, collection=None):
 
 
 # ----------------------------------------------------------------------------------------------- small pieces
+# The walk-through tray (feature round 2026-10-19, the owner's photos; v8 was a solid 18 x 36 x 12 cm block from
+# the floor up): the RD1's fold-down tray between the front seats, a 5 cm slab with two round cup holders one
+# behind the other, on a narrow stand, the floor open beside it. The handbrake (x -0.11) runs behind and beside it.
+TRAY = (-0.085, 0.085, 0.000, 0.300, 0.550, 0.600)        # slab x0, x1, y0, y1, bottom, top
+TRAY_CUPS = (0.075, 0.225)                                # cup centres (y), one per half of the slab
+TRAY_CUP_R, TRAY_CUP_D = 0.036, 0.045                     # cup radius, depth (floor 5 mm over the slab's bottom)
+TRAY_STAND = (-0.065, 0.065, 0.030, 0.270)                # the stand under it (x0, x1, y0, y1), floor to the slab
+
+
+def _cup_angles(hx, hy, fine):
+    """Angles round a cup that hit its cell's corners and edge midpoints (8), halved again in the full twin."""
+    ac = math.atan2(hy, hx)
+    base = [0.0, ac, math.pi / 2, math.pi - ac, math.pi, math.pi + ac, 1.5 * math.pi, 2 * math.pi - ac]
+    if not fine:
+        return base
+    out = []
+    for a, c in zip(base, base[1:] + [base[0] + 2 * math.pi]):
+        out += [a, (a + c) / 2]
+    return out
+
+
+def _tray_slab(fine):
+    """The slab as one closed solid: the top round both cups (each half of the slab is a cell whose outline is
+    sampled on the cup's angles), the cup walls and floors, four sides and the bottom. Tags: 'top', 'cup',
+    'side', 'bottom'."""
+    x0, x1, y0, y1, zb, zt = TRAY
+    zc = zt - TRAY_CUP_D
+    V, F, tags = [], [], []
+
+    def vid(p):
+        V.append(tuple(p))
+        return len(V) - 1
+    hx = (x1 - x0) / 2
+    cx = (x0 + x1) / 2
+    cells = [(y0, (y0 + y1) / 2), ((y0 + y1) / 2, y1)]
+    rim = {}                                               # outline vertex by position: the cells share their edge
+    for (ya, yb), cy in zip(cells, TRAY_CUPS):
+        hy = (yb - ya) / 2
+        ccy = (ya + yb) / 2
+        angs = _cup_angles(hx, hy, fine)
+        outer, inner, floor = [], [], []
+        for a in angs:
+            c, s = math.cos(a), math.sin(a)
+            t = min(hx / abs(c) if abs(c) > 1e-9 else 1e9, hy / abs(s) if abs(s) > 1e-9 else 1e9)
+            key = (round(cx + c * t, 5), round(ccy + s * t, 5))
+            if key not in rim:
+                rim[key] = vid((key[0], key[1], zt))
+            outer.append(rim[key])
+            inner.append(vid((cx + c * TRAY_CUP_R, cy + s * TRAY_CUP_R, zt)))
+            floor.append(vid((cx + c * TRAY_CUP_R, cy + s * TRAY_CUP_R, zc)))
+        n = len(angs)
+        for k in range(n):
+            k2 = (k + 1) % n
+            F.append((outer[k], outer[k2], inner[k2], inner[k]))
+            tags.append("top")
+            F.append((inner[k], inner[k2], floor[k2], floor[k]))
+            tags.append("cup")
+        F.append(tuple(reversed(floor)))
+        tags.append("cup")
+    # the outline ring at the top (counter-clockwise from above) and its copy at the bottom
+    edge = [kv for kv in rim.items() if min(abs(kv[0][0] - x0), abs(kv[0][0] - x1), abs(kv[0][1] - y0), abs(kv[0][1] - y1)) < 1e-4]
+    ring = sorted(edge, key=lambda kv: math.atan2(kv[0][1] - (y0 + y1) / 2, kv[0][0] - cx))
+    top = [i for _k, i in ring]
+    low = [vid((k[0], k[1], zb)) for k, _i in ring]
+    for k in range(len(top)):
+        k2 = (k + 1) % len(top)
+        F.append((top[k], low[k], low[k2], top[k2]))
+        tags.append("side")
+    F.append(tuple(reversed(low)))
+    tags.append("bottom")
+    return V, F, tags
+
+
 def tray(b):
-    """The low cup-holder tray between the front seats (the photos: no tall console)."""
-    x0, x1, y0, y1, z0, z1 = -0.09, 0.09, -0.06, 0.30, FLOOR - 0.005, 0.600
-    if not b.fine:
-        v, f, _t = box(x0, x1, y0, y1, z0, z1)
-        b.add("tray", "tray", (v, f[1:], [0] * 5), ["CabDark"], smooth=False)       # no bottom
-        return
-    # full twin: two 5 cm deep cup wells (the bake darkens them through AO), walls round them
-    zf = z1 - 0.05
-    b.add("tray", "tray_base", box(x0, x1, y0, y1, z0, zf), ["CabDark"], bevel=0.008)
-    cups = ((0.02, 0.10), (0.14, 0.22))
-    walls = [(x0, x1, y0, cups[0][0]), (x0, x1, cups[0][1], cups[1][0]), (x0, x1, cups[1][1], y1)]
-    for ya, yb in cups:
-        walls += [(x0, -0.035, ya, yb), (0.035, x1, ya, yb)]
-    for i, (a0, a1, c0, c1) in enumerate(walls):
-        b.add("tray", "tray_wall%d" % i, box(a0, a1, c0, c1, zf - 0.002, z1), ["CabDark"], bevel=0.004)
+    """The fold-down walk-through tray between the front seats with its two cup holders, on a narrow stand."""
+    b.add("tray", "tray", _tray_slab(b.fine), ["CabDark"], smooth=False,
+          keep=None if b.fine else (lambda t: t != "bottom"))           # coarse: the slab's underside unseen
+    sx0, sx1, sy0, sy1 = TRAY_STAND
+    b.add("tray", "tray_stand", _box_without((sx0, sx1, sy0, sy1, FLOOR - 0.005, TRAY[4] + 0.003), (0, 1), b.fine),
+          ["CabDark"], bevel=0.006, segments=2)
 
 
 def handbrake(b):
@@ -1427,111 +1792,193 @@ GLYPHS = {
     "F": [[(1, 1), (0, 1), (0, 0)], [(0, 0.5), (0.8, 0.5)]],
 }
 WHITE, ORANGE = (235, 235, 235), (220, 70, 20)
+NEEDLE = (235, 95, 35)                                     # Honda's orange-red needles
+DIAL_FACE = (10, 10, 11)
 
 
-def _dial(cv, cx, cz, r, ticks, labels, needle_frac, red_from=None, sweep=(225.0, -45.0)):
-    """Black face, white tick ring, orange arc inside it, white needle (angles clockwise from a0)."""
+def _dial(cv, cx, cz, r, ticks, labels, needle_frac, red_from=None, sweep=(225.0, -45.0), minor=True):
+    """Black face, white tick ring and white numerals (the owner's photos, 2026-10-19: white markings on black, no
+    coloured arcs), an orange-red needle; angles clockwise from sweep[0]. A thin white rim round the face."""
     a0, a1 = sweep
-    cv.fill(cv.disc(cx, cz, r), (14, 14, 15))
+    cv.fill(cv.disc(cx, cz, r), DIAL_FACE)
+    cv.fill(cv.ring(cx, cz, r * 0.985, r * 1.05), (120, 120, 122))
     span = a0 - a1
-    cv.fill(cv.arc(cx, cz, r * 0.70, r * 0.78, a1, a0), ORANGE)          # orange arc (both photos)
+    step = ticks // (len(labels) - 1) if labels else 0
     for k in range(ticks + 1):
         a = math.radians(a0 - span * k / ticks)
-        major = labels and k % (ticks // (len(labels) - 1)) == 0
-        r0 = r * (0.80 if major else 0.86)
+        major = bool(labels) and k % step == 0
+        if not major and not minor:
+            continue
+        r0 = r * (0.76 if major else 0.84)
         col = (225, 50, 40) if red_from is not None and k >= red_from else WHITE
-        cv.fill(cv.seg((cx + r0 * math.cos(a), cz + r0 * math.sin(a)), (cx + r * 0.95 * math.cos(a), cz + r * 0.95 * math.sin(a)),
-                       0.0030 if major else 0.0018), col)
-    if labels:
-        for i, s in enumerate(labels):
-            a = math.radians(a0 - span * i / (len(labels) - 1))
-            cv.text(s, cx + r * 0.52 * math.cos(a), cz + r * 0.52 * math.sin(a), r * 0.24, 0.0024, WHITE)
+        cv.fill(cv.seg((cx + r0 * math.cos(a), cz + r0 * math.sin(a)), (cx + r * 0.94 * math.cos(a), cz + r * 0.94 * math.sin(a)),
+                       0.0034 if major else 0.0018), col)
+    if red_from is not None:                               # the red zone as a band outside the ticks
+        a_red = a0 - span * red_from / ticks
+        cv.fill(cv.arc(cx, cz, r * 0.90, r * 0.95, a1, a_red), (200, 40, 34))
+    for i, s in enumerate(labels):
+        a = math.radians(a0 - span * i / (len(labels) - 1))
+        cv.text(s, cx + r * 0.56 * math.cos(a), cz + r * 0.56 * math.sin(a), r * 0.19, 0.0024, WHITE)
     a = math.radians(a0 - span * needle_frac)
-    cv.fill(cv.seg((cx, cz), (cx + r * 0.82 * math.cos(a), cz + r * 0.82 * math.sin(a)), 0.0022), (245, 245, 245))
-    cv.fill(cv.disc(cx, cz, r * 0.10), (40, 40, 42))
+    cv.fill(cv.seg((cx - r * 0.12 * math.cos(a), cz - r * 0.12 * math.sin(a)), (cx + r * 0.84 * math.cos(a), cz + r * 0.84 * math.sin(a)),
+                   0.0030), NEEDLE)
+    cv.fill(cv.disc(cx, cz, r * 0.11), (36, 36, 38))
+
+
+def _gauge(cv, cx, cz, r, lo, hi, frac, warn_hi=False):
+    """A small quarter-sweep gauge (temperature, fuel): five ticks, lo / hi letters, the needle; warn_hi paints the
+    last tick red (temperature's H)."""
+    a0, a1 = 135.0, 45.0
+    cv.fill(cv.disc(cx, cz, r), DIAL_FACE)
+    cv.fill(cv.ring(cx, cz, r * 0.98, r * 1.07), (120, 120, 122))
+    for k in range(5):
+        a = math.radians(a0 + (a1 - a0) * k / 4)
+        col = (225, 50, 40) if warn_hi and k == 4 else WHITE
+        cv.fill(cv.seg((cx + r * 0.62 * math.cos(a), cz + r * 0.62 * math.sin(a)), (cx + r * 0.90 * math.cos(a), cz + r * 0.90 * math.sin(a)),
+                       0.0032 if k in (0, 2, 4) else 0.0020), col)
+    cv.text(lo, cx - r * 0.62, cz - r * 0.05, r * 0.36, 0.0026, WHITE)
+    cv.text(hi, cx + r * 0.62, cz - r * 0.05, r * 0.36, 0.0026, (225, 50, 40) if warn_hi else WHITE)
+    a = math.radians(a0 + (a1 - a0) * frac)
+    pc = (cx, cz - r * 0.45)                               # the needle pivots low in the face
+    cv.fill(cv.seg(pc, (cx + r * 0.88 * math.cos(a), cz + r * 0.88 * math.sin(a)), 0.0030), NEEDLE)
+    cv.fill(cv.disc(pc[0], pc[1], r * 0.16), (36, 36, 38))
 
 
 def paint_cluster(path):
-    """Three-pod cluster, 35 x 13 cm (CLUSTER), 544 x 208: tach 10 cm at u 0.16, speedo 11.5 cm at
-    u 0.50, the right pod 7.5 cm at u 0.84 split temperature (C..H) | fuel (E..F). Numerals only at
-    0 / 4 / 8 and 0 / 60 / 120: at the game's zoom the cluster is ~51 px wide, rings are the test."""
+    """Four gauges under the hood (feature round 2026-10-19, the owner: tach, speedo, temperature, fuel, white
+    markings on black), 35 x 13 cm (CLUSTER), 544 x 208: tach 10 cm at u 0.17 (0-8, red from 6.5), the larger
+    speedo 11.6 cm at u 0.50 (0-120, numerals every 40), temperature over fuel at u 0.84, 5.2 cm each. The cluster face
+    bakes at weight 3 (bake_atlas._face_weights): ~4 texels/cm, numerals ~5 texels tall."""
     x0, x1, z0, z1 = CLUSTER
-    cv = Canvas(544, 208, x0, x1, z0, z1, 22)
-    cv.fill(~cv.rect(x0 + 0.003, x1 - 0.003, z0 + 0.003, z1 - 0.003, 0.02), (48, 48, 50))   # bezel
+    cv = Canvas(544, 208, x0, x1, z0, z1, 16)
+    cv.fill(~cv.rect(x0 + 0.003, x1 - 0.003, z0 + 0.003, z1 - 0.003, 0.02), (34, 34, 36))   # bezel
     zc = (z0 + z1) / 2
     W = x1 - x0
-    _dial(cv, x0 + 0.16 * W, zc, 0.050, 8, ["0", "4", "8"], 0.10, red_from=7)
-    _dial(cv, x0 + 0.50 * W, zc, 0.0575, 12, ["0", "60", "120"], 0.0)
-    cx, r = x0 + 0.84 * W, 0.0375
-    cv.fill(cv.disc(cx, zc, r), (14, 14, 15))
-    for side, (lo, hi), frac in ((-1, ("C", "H"), 0.45), (1, ("E", "F"), 0.70)):   # two half-dials side by side
-        px = cx + side * r * 0.42
-        a_lo, a_hi = (250.0, 110.0) if side < 0 else (290.0, 430.0)        # left half round 180, right half round 0
-        cv.fill(cv.arc(px, zc, r * 0.40, r * 0.47, min(a_lo, a_hi), max(a_lo, a_hi)), ORANGE)
-        for k in range(5):
-            a = math.radians(a_lo + (a_hi - a_lo) * k / 4)
-            cv.fill(cv.seg((px + r * 0.48 * math.cos(a), zc + r * 0.48 * math.sin(a)),
-                           (px + r * 0.58 * math.cos(a), zc + r * 0.58 * math.sin(a)), 0.0018), WHITE)
-        cv.text(lo, px + r * 0.10 * side, zc - r * 0.62, r * 0.26, 0.0022, WHITE)
-        cv.text(hi, px + r * 0.10 * side, zc + r * 0.62, r * 0.26, 0.0022, WHITE)
-        a = math.radians(a_lo + (a_hi - a_lo) * frac)
-        cv.fill(cv.seg((px, zc), (px + r * 0.44 * math.cos(a), zc + r * 0.44 * math.sin(a)), 0.0020), (245, 245, 245))
-    cv.fill(cv.ring(cx, zc, r * 0.97, r * 1.02), WHITE)
+    _dial(cv, x0 + 0.17 * W, zc, 0.050, 16, ["0", "2", "4", "6", "8"], 0.09, red_from=13)
+    _dial(cv, x0 + 0.50 * W, zc, 0.058, 24, ["0", "40", "80", "120"], 0.0)
+    gx = x0 + 0.845 * W
+    _gauge(cv, gx, zc + 0.031, 0.026, "C", "H", 0.45, warn_hi=True)
+    _gauge(cv, gx, zc - 0.031, 0.026, "E", "F", 0.75)
     return cv.save(path)
+
+
+# Dash face colours (sRGB, before the bake's AO; feature round 2026-10-19, the owner: "darker charcoal plastics"):
+# the face 56 (was 64), the top band 46, the stack panel 50; detail a step either side
+DASH_FACE, DASH_TOPBAND, DASH_STACK = 56, 46, 50
+
+
+def _louvres(cv, x0, x1, z0, z1, n, frame=4):
+    """A vent: a lighter bezel, a near-black opening and n horizontal louvres, each a lit top edge over a face that
+    darkens downward and a shadow under it (depth the coarse flat face cannot model)."""
+    f = frame * 0.001
+    cv.fill(cv.rect(x0, x1, z0, z1, 0.004), (66, 66, 68))
+    cv.fill(cv.rect(x0 + f + 0.002, x1 - f - 0.002, z0 + f + 0.002, z1 - f - 0.002), (8, 8, 9))
+    pitch = (z1 - z0 - 2 * f - 0.004) / n
+    for k in range(n):
+        zt = z1 - f - 0.002 - pitch * k                  # top of louvre k
+        cv.fill(cv.rect(x0 + f + 0.002, x1 - f - 0.002, zt - 0.0018, zt), (74, 74, 76))          # lit lip
+        cv.fill(cv.rect(x0 + f + 0.002, x1 - f - 0.002, zt - 0.0050, zt - 0.0018), (46, 46, 48))  # louvre face
+        cv.fill(cv.rect(x0 + f + 0.002, x1 - f - 0.002, zt - 0.0068, zt - 0.0050), (28, 28, 29))  # its underside
+    cv.fill(cv.rect((x0 + x1) / 2 - 0.0015, (x0 + x1) / 2 + 0.0015, z0 + f, z1 - f), (40, 40, 42))   # the vane knob's bar
+
+
+def _knob(cv, x, z, r, pointer_deg=90.0):
+    """A round rotary knob seen face-on: a lit rim, a darker dished face with a soft highlight above, the pointer."""
+    cv.fill(cv.disc(x, z, r), (84, 84, 86))
+    cv.fill(cv.disc(x, z, r * 0.84), (44, 44, 46))
+    hi = cv.disc(x, z + r * 0.30, r * 0.50) & cv.disc(x, z, r * 0.80)
+    cv.fill(hi, (54, 54, 56))
+    a = math.radians(pointer_deg)
+    cv.fill(cv.seg((x + r * 0.25 * math.cos(a), z + r * 0.25 * math.sin(a)), (x + r * 0.78 * math.cos(a), z + r * 0.78 * math.sin(a)),
+                   0.0035), (196, 196, 198))
 
 
 def paint_dash(path):
     """Dash face decal, 2048 x 1024 over x -0.72..0.72, z 0.48..1.21 (14 px/cm). On a 1024 interior
     sheet the scratch bake measured 1.2 texels/cm at weight 1; the dash face is weighted 2.0 (2.4
     texels/cm) and the centre stack 3.0 (bake_atlas TEXEL_WEIGHT_MAT, _face_weights), so every feature
-    outside the stack is >= 1 cm (>= 2 sheet texels) and nothing is a 1 px groove."""
-    cv = Canvas(2048, 1024, -0.72, 0.72, 0.48, 1.21, 64)
+    outside the stack is >= 1 cm (>= 2 sheet texels) and nothing is a 1 px groove. The stack (feature round
+    2026-10-19, the owner's photos): twin vents with four deep louvres, the clock and the red hazard switch
+    between them, a head unit (display, cassette slot, presets, two knobs), three round HVAC knobs with
+    their scales (fan, temperature blue to red, mode), the A/C and recirculation buttons, the tray."""
+    cv = Canvas(2048, 1024, -0.72, 0.72, 0.48, 1.21, DASH_FACE)
     cv.noise(0.025)
-    cv.fill(cv.ZZ >= 1.10, (52, 52, 53))                   # the face's top band: the dash top's colour
-    cv.fill(cv.ZZ <= 0.56, (50, 50, 51))                   # shadow band at the floor
+    cv.fill(cv.ZZ >= 1.10, (DASH_TOPBAND,) * 3)            # the face's top band: the dash top's colour
+    cv.fill(cv.ZZ <= 0.56, (44, 44, 45))                   # shadow band at the floor
     # centre stack panel and its contents (3x texels)
-    cv.fill(cv.rect(-0.13, 0.13, 0.56, 1.16, 0.01), (58, 58, 59))
-    for x0, x1 in ((-0.125, -0.025), (0.025, 0.125)):      # twin centre vents with three slats
-        cv.fill(cv.rect(x0, x1, 1.100, 1.155, 0.004), (72, 72, 74))
-        cv.fill(cv.rect(x0 + 0.006, x1 - 0.006, 1.106, 1.149), (18, 18, 19))
-        for k in range(3):
-            cv.fill(cv.rect(x0 + 0.006, x1 - 0.006, 1.111 + 0.0135 * k, 1.115 + 0.0135 * k), (50, 50, 52))
-    cv.fill(cv.rect(-0.016, 0.016, 1.112, 1.143, 0.003), (34, 34, 36))      # clock between the vents
-    cv.fill(cv.rect(-0.011, 0.011, 1.119, 1.136), (40, 52, 44))
-    cv.fill(cv.rect(-0.092, 0.092, 0.972, 1.068, 0.004), (72, 72, 74))      # radio: bezel, face, display, slot, buttons
-    cv.fill(cv.rect(-0.086, 0.086, 0.978, 1.062), (30, 30, 31))
-    cv.fill(cv.rect(-0.050, 0.030, 1.030, 1.050, 0.002), (44, 58, 52))
-    cv.fill(cv.rect(-0.070, 0.070, 1.004, 1.010), (14, 14, 15))
-    for k in range(6):
-        x = -0.070 + 0.028 * k
-        cv.fill(cv.rect(x - 0.009, x + 0.009, 0.983, 0.993, 0.002), (78, 78, 80))
-    cv.fill(cv.disc(0.068, 1.040, 0.010), (70, 70, 72))
-    cv.fill(cv.rect(-0.120, 0.120, 0.858, 0.955, 0.006), (40, 40, 41))      # HVAC panel
-    for x in (-0.075, 0.0, 0.075):                         # three rotary knobs: ring, centre, pointer
-        cv.fill(cv.disc(x, 0.915, 0.022), (95, 95, 97))
-        cv.fill(cv.disc(x, 0.915, 0.017), (45, 45, 47))
-        cv.fill(cv.seg((x, 0.915), (x, 0.931), 0.004), (150, 150, 152))
-    for x in (-0.090, -0.030, 0.030, 0.090):
-        cv.fill(cv.rect(x - 0.0075, x + 0.0075, 0.866, 0.877, 0.002), (75, 75, 77))
-    cv.fill(cv.rect(-0.110, 0.110, 0.758, 0.822, 0.006), (70, 70, 72))      # tray: lip, opening
-    cv.fill(cv.rect(-0.104, 0.104, 0.764, 0.812, 0.004), (26, 26, 27))
+    cv.fill(cv.rect(-0.13, 0.13, 0.56, 1.16, 0.01), (DASH_STACK,) * 3)
+    for x0, x1 in VENTS_C:                                 # twin centre vents
+        _louvres(cv, x0, x1, 1.100, 1.155, VENT_LOUVRES)
+    cv.fill(cv.rect(-0.021, 0.005, 1.114, 1.141, 0.003), (28, 28, 30))      # clock between the vents
+    cv.fill(cv.rect(-0.017, 0.001, 1.120, 1.135), (36, 50, 42))
+    cv.fill(cv.rect(0.008, 0.021, 1.113, 1.142, 0.002), (40, 40, 42))       # hazard switch: a red button in its bezel
+    cv.fill(cv.rect(0.010, 0.019, 1.116, 1.139, 0.002), (168, 34, 30))
+    # the head unit: chrome-grey bezel, black face; display, cassette door, six presets, volume and tuning knobs
+    cv.fill(cv.rect(-0.092, 0.092, 0.972, 1.068, 0.004), (70, 70, 72))
+    cv.fill(cv.rect(-0.087, 0.087, 0.977, 1.063, 0.002), (20, 20, 21))
+    cv.fill(cv.rect(-0.046, 0.046, 1.031, 1.057, 0.002), (30, 44, 40))      # display window
+    for k, ch in enumerate("885"):
+        cv.text(ch, -0.020 + 0.012 * k, 1.044, 0.014, 0.0022, (96, 150, 128))
+    cv.fill(cv.rect(-0.040, -0.030, 1.040, 1.048), (70, 110, 96))           # band / mode segments
+    cv.fill(cv.rect(-0.050, 0.050, 1.008, 1.022, 0.002), (34, 34, 36))      # cassette door
+    cv.fill(cv.rect(-0.044, 0.044, 1.013, 1.017), (8, 8, 9))                # its slot
+    for k in range(6):                                     # presets 1-6
+        x = -0.0625 + 0.025 * k
+        cv.fill(cv.rect(x - 0.0105, x + 0.0105, 0.982, 0.997, 0.002), (66, 66, 68))
+        cv.fill(cv.rect(x - 0.0105, x + 0.0105, 0.995, 0.997), (82, 82, 84))
+    for x in (-0.072, 0.072):                              # volume (left), tuning (right)
+        _knob(cv, x, RADIO_KNOB_Z, RADIO_KNOB_R, 110.0 if x < 0 else 70.0)
+    for x in (-0.056, 0.056):                              # seek / band buttons beside the display
+        cv.fill(cv.rect(x - 0.006, x + 0.006, 1.034, 1.054, 0.002), (52, 52, 54))
+    # HVAC: panel, three round knobs (fan, temperature, mode) with their scales, the button row under them
+    cv.fill(cv.rect(-0.120, 0.120, 0.858, 0.962, 0.006), (40, 40, 41))
+    for i, x in enumerate(HVAC_X):
+        for k in range(5):                                 # scale marks round the knob's upper half
+            a = math.radians(160.0 - 35.0 * k)
+            if i == 1:
+                col = (60 + 40 * k, 70, 200 - 35 * k)       # temperature: blue to red
+            else:
+                col = (170, 170, 172)
+            cv.fill(cv.seg((x + 0.025 * math.cos(a), HVAC_Z + 0.025 * math.sin(a)),
+                           (x + 0.031 * math.cos(a), HVAC_Z + 0.031 * math.sin(a)), 0.0035 if i != 1 else 0.005), col)
+        _knob(cv, x, HVAC_Z, HVAC_R, (125.0, 90.0, 55.0)[i])
+    for k, x in enumerate((-0.090, -0.030, 0.030, 0.090)):
+        cv.fill(cv.rect(x - 0.0080, x + 0.0080, 0.865, 0.879, 0.002), (70, 70, 72))
+        if k in (1, 2):                                    # A/C and recirculation: an indicator in the button (unlit)
+            cv.fill(cv.rect(x - 0.003, x + 0.003, 0.874, 0.877), (96, 70, 30))
+    cv.fill(cv.rect(-0.110, 0.110, 0.758, 0.822, 0.006), (64, 64, 66))      # tray: lip, opening
+    cv.fill(cv.rect(-0.104, 0.104, 0.764, 0.812, 0.004), (20, 20, 21))
     # passenger side: glovebox outline (1 cm), latch with its handle
     gb = cv.rect(0.23, 0.65, 0.885, 1.065, 0.02)
-    cv.fill(gb & ~cv.rect(0.24, 0.64, 0.895, 1.055, 0.015), (40, 40, 41))
-    cv.fill(cv.rect(0.405, 0.475, 1.025, 1.055, 0.004), (30, 30, 31))
-    cv.fill(cv.rect(0.415, 0.465, 1.031, 1.043, 0.003), (82, 82, 84))
-    for sx in (-1, 1):                                     # side vents at the dash ends: frame, two slats
+    cv.fill(gb & ~cv.rect(0.24, 0.64, 0.895, 1.055, 0.015), (34, 34, 35))
+    cv.fill(cv.rect(0.405, 0.475, 1.025, 1.055, 0.004), (24, 24, 25))
+    cv.fill(cv.rect(0.415, 0.465, 1.031, 1.043, 0.003), (76, 76, 78))
+    for sx in (-1, 1):                                     # side vents at the dash ends: frame, three louvres
         x0, x1 = sorted((sx * 0.600, sx * 0.700))
-        cv.fill(cv.rect(x0, x1, 1.060, 1.130, 0.005), (70, 70, 72))
-        cv.fill(cv.rect(x0 + 0.007, x1 - 0.007, 1.067, 1.123), (18, 18, 19))
-        for k in range(2):
-            cv.fill(cv.rect(x0 + 0.007, x1 - 0.007, 1.078 + 0.020 * k, 1.088 + 0.020 * k), (52, 52, 54))
+        _louvres(cv, x0, x1, 1.060, 1.130, 3, frame=6)
     # driver side: switch bank left of the binnacle (2 x 2), coin box under it
-    cv.fill(cv.rect(-0.705, -0.625, 0.945, 1.030, 0.005), (44, 44, 45))
+    cv.fill(cv.rect(-0.705, -0.625, 0.945, 1.030, 0.005), (38, 38, 39))
     for x, z in ((-0.685, 0.965), (-0.645, 0.965), (-0.685, 1.010), (-0.645, 1.010)):
-        cv.fill(cv.rect(x - 0.012, x + 0.012, z - 0.012, z + 0.012, 0.003), (80, 80, 82))
-    cv.fill(cv.rect(-0.560, -0.460, 0.900, 0.950, 0.004), (40, 40, 41))
-    cv.fill(cv.rect(-0.550, -0.470, 0.910, 0.940, 0.003), (30, 30, 31))
+        cv.fill(cv.rect(x - 0.012, x + 0.012, z - 0.012, z + 0.012, 0.003), (74, 74, 76))
+    cv.fill(cv.rect(-0.560, -0.460, 0.900, 0.950, 0.004), (34, 34, 35))
+    cv.fill(cv.rect(-0.550, -0.470, 0.910, 0.940, 0.003), (24, 24, 25))
+    return cv.save(path)
+
+
+# The passenger airbag door in the dash top (feature round 2026-10-19, the owner): a rounded rectangle seam, its
+# lid a shade darker than the dash top. Multiplied over the CabDark grain on the dash top's up-facing faces
+# (bake_atlas TEXTURED CabDark, gate: normal z > 0.5, x > 0.10); 1024 x 512 over x 0.10..0.74, y 0.56..0.88
+DASH_TOP = (0.10, 0.74, 0.56, 0.88)
+AIRBAG = (0.20, 0.60, 0.64, 0.80, 0.025)                    # x0, x1, y0, y1, corner radius
+
+
+def paint_dash_top(path):
+    x0, x1, y0, y1 = DASH_TOP
+    cv = Canvas(1024, 512, x0, x1, y0, y1, 255)            # Canvas's z axis is model y here
+    ax0, ax1, ay0, ay1, r = AIRBAG
+    cv.fill(cv.rect(ax0, ax1, ay0, ay1, r), (236, 236, 236))                  # the lid, slightly darker
+    cv.fill(cv.rect(ax0, ax1, ay0, ay1, r) & ~cv.rect(ax0 + 0.006, ax1 - 0.006, ay0 + 0.006, ay1 - 0.006, r - 0.006),
+            (120, 120, 120))                                                  # the seam: a 6 mm dark line
     return cv.save(path)
 
 
@@ -1721,6 +2168,7 @@ def build(low=LOW):
         os.makedirs(BAKE, exist_ok=True)
         print("CABIN decal", paint_dash(os.path.join(BAKE, "cabin_dash.png")))
         print("CABIN decal", paint_cluster(os.path.join(BAKE, "cabin_cluster.png")))
+        print("CABIN decal", paint_dash_top(os.path.join(BAKE, "cabin_dash_top.png")))
     return ob, pieces
 
 

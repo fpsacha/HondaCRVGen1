@@ -5,8 +5,9 @@ and render it with the game's culling from the game's camera.
     blender -b --factory-startup --python scripts/pzview.py -- [--out DIR] [--mod DIR]
             [--poses shut,open] [--az 0,45,...] [--scale 6.5] [--close] [--eye] [--res 1400]
             [--acc [--acc-parts CRVSpareCover,...]] [--rack N] [--decal retro_blue,script_white,...]
-            [--gz 150] [--cap 512] [--script HondaCRVGen1LiftAlloy] [--folded]
+            [--gz 150] [--cap 512] [--script HondaCRVGen1LiftAlloy] [--folded] [--cargo N]
             [--frac 0.15] [--eyes FILE.json] [--probe view,px,py [--probe-all]] [--bay full|low]
+            [--awning stowed|deployed]
 Poses: shut, open, left, right, front, gate, hood, fl / fr / rl / rr (one door), win / win_fl.. (windows
 down), joined with '+' (left+win); --frac F poses every opening clip at F of its travel. --eye adds the
 eye-level ring, the 'low' and crouch rings, the seats and (with --folded) the cargo bed; --eyes FILE.json
@@ -99,6 +100,19 @@ FOLDED = "--folded" in argv        # function feature: the rear bench folded fla
                                    # car's own bench (no item, drawn bare or fitted); its Lua shows the upright
                                    # model (InteriorSeatsUp), or the folded one (*Folded) while folded
 SEATS_PART = "CRVFunctionSeats"
+# cargo clutter (scripts/features/clutter.py): part CRVClutterCargo is the car's own (no item, drawn bare or fitted);
+# HondaCRVGen1_Clutter.lua shows InteriorClutter1..N for the trunk's fill state N (incremental: each adds pieces),
+# plus InteriorClutterWell (the blanket filling the well) while the picnic table is out, and nothing while the rear
+# seats are folded. --cargo N draws state N (0 = empty, the default): the well with it unless the table is drawn
+# (--acc with CRVPicnicTable among the parts)
+CARGO = int(_arg("--cargo", "0"))
+CLUTTER_PART = "CRVClutterCargo"
+# awning feature: part CRVAwning draws its bag (the part's first model) whenever it is fitted; the Lua shows the canopy
+# and the poles (AwningCanopy, AwningPoles) while it is rolled out. --awning stowed|deployed draws the part in that
+# state (with or without --acc); --acc alone draws it stowed, as every awning spawns
+AWNING = _arg("--awning", None)
+AWNING_PART = "CRVAwning"
+AWNING_OUT = ("AwningCanopy", "AwningPoles")
 # the engine bay (performance pass, 2026-10-19): part CRVEngineBay is the car's own bay (no item, drawn bare or
 # fitted). HondaCRVGen1_EngineBay.lua shows EngineBay while the hood is open, opening or gone, and the shut
 # bay's stand-in EngineBayLow otherwise: here every pose that opens EngineDoor (open, hood, at any --frac) draws
@@ -106,6 +120,9 @@ SEATS_PART = "CRVFunctionSeats"
 BAY_PART = "CRVEngineBay"
 BAY_MODELS = {"full": "EngineBay", "low": "EngineBayLow"}
 BAY = _arg("--bay", "auto")
+# the cabin (round 5, 2026-10-19): part CRVCabin is the car's own interior (no item, always drawn: its Lua shows
+# both models on init; gen_scripts.cabin_part). Older builds put the same models on GloveBox, drawn the same here.
+CABIN_PART = "CRVCabin"
 SHOW = _arg("--show", None)        # lights | mask | rust: draw that vehicle texture on the skinned
                                    # models instead of the paint (rust through the second UV set)
 CAP = int(_arg("--cap", "0"))      # the loader's texture-size cap (see the docstring); 0 = none
@@ -481,6 +498,16 @@ TIRE_WHEEL = {"TireFrontLeft": "FrontLeft", "TireFrontRight": "FrontRight",
               "TireRearLeft": "RearLeft", "TireRearRight": "RearRight"}
 
 
+def _clutter_shown(model_id):
+    """Whether HondaCRVGen1_Clutter.lua would show this model of CLUTTER_PART at --cargo N."""
+    if FOLDED or CARGO <= 0:
+        return False
+    if model_id.endswith("Well"):
+        return not (ACC and (not ACC_ONLY or "CRVPicnicTable" in ACC_ONLY))
+    m = re.search(r"(\d+)$", model_id)
+    return m is not None and int(m.group(1)) <= CARGO
+
+
 def build(vehicle_mod):
     models = {b.name: b for b in vehicle_mod.all("model")}
     veh = vehicle_mod.all("vehicle")[0]
@@ -497,8 +524,9 @@ def build(vehicle_mod):
         if is_decal:
             if not DECALS:
                 continue
-        elif (part.name.startswith("CRV") and part.name not in (SEATS_PART, BAY_PART)
-              and (not ACC or (ACC_ONLY and part.name not in ACC_ONLY))):
+        elif (part.name.startswith("CRV") and part.name not in (SEATS_PART, BAY_PART, CLUTTER_PART, CABIN_PART)
+              and (not ACC or (ACC_ONLY and part.name not in ACC_ONLY))
+              and not (AWNING and part.name == AWNING_PART)):
             continue
         # tyre parts name their wheel through the vanilla Tire template (wheel = FrontLeft ...)
         wname = part.get("wheel") or TIRE_WHEEL.get(part.name)
@@ -512,8 +540,12 @@ def build(vehicle_mod):
                 continue                                  # --hide-models: a variant the Lua keeps hidden
             if part.name == SEATS_PART and pm.name.endswith("Folded") != FOLDED:
                 continue                                  # the rear bench: upright, or folded with --folded
+            if part.name == CLUTTER_PART and not _clutter_shown(pm.name):
+                continue                                  # the trunk's load: --cargo N
             if is_decal and pm.name not in DECALS:
                 continue                                  # --decal: only the chosen variants
+            if part.name == AWNING_PART and pm.name in AWNING_OUT and AWNING != "deployed":
+                continue                                  # the awning rolled up (--awning deployed: rolled out)
             off = vec(pm.get("offset"))
             rot = [math.radians(a) for a in vec(pm.get("rotate"))]
             sc = float(pm.get("scale", "1").rstrip("f"))

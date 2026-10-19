@@ -26,6 +26,15 @@ exactly one of them wherever the car is drawn. The twins carry crv_variant = "re
 one variant never shades another; the upright one, crv_variant_default, shades the car as the bench
 always did). pzview draws the upright bench, `--folded` the folded one.
 
+The folded model is a made-up bed (2026-10-19, "make the folded bed LOOK like a bed"): build_cabin.bed_set adds a
+thin foam pad over the folded backs and the cargo deck (bridging the riser gap and the picnic table's tub, which it
+hides when the table is out), an open rectangular sleeping bag with its top turned back, and a pillow at the front
+end, ~250 coarse triangles (twin ~1,700) in materials of their own (build_cabin.BED_MATS; BAKE_TEXTURED below).
+Same switch as the folded seats: nothing extra to show or hide, nothing drawn while the seats are up.
+
+A pillow counts on the bed (client/HondaCRVGen1_Menu.lua, getBedQuality): in hand, in the sleeper's seat container
+(vanilla's own vehicle rule), on the folded load floor (CRVFunctionCargo) or the cargo deck (TruckBed).
+
 The icon is drawn by scripts/function_icon.py (our own pixel art) and shipped as MEDIA.
 """
 
@@ -64,6 +73,16 @@ SEATS_UP, SEATS_FOLD = "acc_function_seats_up", "acc_function_seats_fold"
 SEAT_MODELS = (("InteriorSeatsUp", SEATS_UP), ("InteriorSeatsFolded", SEATS_FOLD))
 OBJECTS = {SEATS_UP: {"space": "interior"}, SEATS_FOLD: {"space": "interior"}}
 VARIANT_SET = "rear_seats"                          # bake_atlas._bake_hilo: crv_variant / crv_variant_default
+# the made-up bed's materials (build_cabin.BED_MATS; base colours in build_cabin.MATERIALS, taken as they are): a
+# faint grain on the foam, the nylon and the cotton, a two-pitch weave on the flannel lining (5.0 / 3.2 cm: 3+
+# texels a period at ~1 texel/cm, no moire)
+BAKE_TEXTURED = {
+    "BedPad": [("noise", 60.0, 0.05)],
+    "BedBag": [("noise", 35.0, 0.05)],
+    "BedLining": [("stripes", 0.050, 0.16), ("stripes", 0.032, 0.08)],
+    "BedPillow": [("noise", 45.0, 0.03)],
+}
+BAKE_MAT_WEIGHTS = {"BedPad": 0.5, "BedBag": 0.7, "BedLining": 0.8, "BedPillow": 0.7}
 
 
 def BUILD(report):

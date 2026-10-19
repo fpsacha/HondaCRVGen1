@@ -129,6 +129,7 @@ PALETTE = {
                                             # team): spokes ship ~150-155 under a brighter centre cap (~195-205, the
                                             # hubcap.png decal's own level); 0.32 shipped ~151 at the spoke centres
     "Plastique_noir": (0.030, 0.030, 0.033),
+    "WellTub": (0.012, 0.012, 0.013),          # the cargo tub under the picnic table (build_table.WELL_MAT): black plastic
     "Partie_noir": (0.015, 0.015, 0.015),
     "Body_plastique": (0.075, 0.075, 0.080),  # charcoal bumper and cladding
     "Dessous": (0.030, 0.030, 0.030),
@@ -150,14 +151,16 @@ PALETTE = {
     # tints in TEXTURED land these albedos (linear) at the sRGB in the comments
     "Interieur": (0.060, 0.060, 0.062),           # shell, headliner, pillar trims: sRGB 70
     "Interieur_sol": (0.030, 0.030, 0.031),       # carpet: sRGB 48
-    "CabDark": (0.032, 0.032, 0.034),             # dash top, binnacle, wheel, column, tray: sRGB 52
-    "CabDash": (0.050, 0.050, 0.052),             # dash face and stack (cabin_dash.png): sRGB 64
+    "CabDark": (0.026, 0.026, 0.028),             # dash top, binnacle, wheel, column, tray: sRGB 46 (was 52)
+    "CabDash": (0.040, 0.040, 0.042),             # dash face and stack (cabin_dash.png): sRGB 56 (was 64)
     # seats (polish round 2, R2-OC-3): the RD1's grey cloth reads sRGB 116-130 in the cabin photos, front, rear and
     # bolsters alike (one fabric); at 85 / 57 the interior sheet's AO (compose AO_K_SPACE 0.50) shipped them at 67-71 /
-    # 41-46, black plastic beside a 31-38 dash. Raised so the shipped median lands ~115 after the AO
-    "SeatCloth": (0.258, 0.264, 0.278),           # striped seat insert: sRGB ~140 before the AO
-    "SeatBolster": (0.258, 0.262, 0.273),         # bolsters, the same cloth: sRGB ~140 (a first try at ~146 shipped
-                                                  # 108-139, median ~121)
+    # 41-46, black plastic beside a 31-38 dash. Raised so the shipped median lands ~115 after the AO.
+    # Feature round 2026-10-19 (the owner's photos of the car: DARK grey cloth, grey on grey; ours read as light-grey
+    # boxes, shipped 106-151): target shipped sRGB ~55-75 on the bolsters, ~45-65 on the striped insert (darker than
+    # the bolsters); x ~0.28 / ~0.22 linear from the 2026-10-18 levels
+    "SeatCloth": (0.057, 0.058, 0.062),           # striped seat insert: sRGB ~68 before the AO
+    "SeatBolster": (0.073, 0.074, 0.078),         # bolsters, the same cloth plain: sRGB ~77 before the AO
     "Siege": (0.115, 0.115, 0.118),
     "Siege_2": (0.145, 0.145, 0.150),
     "Miroir": (0.100, 0.100, 0.105),
@@ -216,20 +219,24 @@ TEXTURED = {
                       ("zmix", 1.10, 1.18, (0.36, 0.36, 0.35), 0.03)],
     # cabin_cluster.png on the binnacle's driver-facing face only: the y gate keeps it off the wheel
     # (rim and hub surfaces facing the driver lie at y <= 0.468) and off the dash face (y >= 0.59)
-    "CabDark":       [("box", "fabric_leather_01_diffuse_1k.jpg",     0.12, (0.053, 0.053, 0.055), 0.55),
+    # feature round 2026-10-19: tints for the darker PALETTE (CabDark 0.026, CabDash 0.040); cabin_dash_top.png
+    # multiplies the passenger airbag door's seam onto the dash top (up-facing faces only, x 0.10..0.74)
+    "CabDark":       [("box", "fabric_leather_01_diffuse_1k.jpg",     0.12, (0.043, 0.043, 0.047), 0.55),
                       ("decal", "cabin_cluster.png", ("x", -0.575, -0.225), ("z", 1.035, 1.165), "replace",
-                       [("normal", "y", "<", -0.6), ("range", "y", 0.475, 0.53)])],
+                       [("normal", "y", "<", -0.6), ("range", "y", 0.475, 0.53)]),
+                      ("decal", "cabin_dash_top.png", ("x", 0.10, 0.74), ("y", 0.56, 0.88), "multiply",
+                       [("normal", "z", ">", 0.5), ("range", "z", 1.0, 1.3)])],
     # cabin_dash.png (vents, radio, HVAC, glovebox, switch bank) on the faces turned to the cabin
-    "CabDash":       [("box", "fabric_leather_01_diffuse_1k.jpg",     0.15, (0.090, 0.090, 0.093), 0.50),
+    "CabDash":       [("box", "fabric_leather_01_diffuse_1k.jpg",     0.15, (0.072, 0.072, 0.075), 0.50),
                       ("decal", "cabin_dash.png", ("x", -0.72, 0.72), ("z", 0.48, 1.21), "replace",
                        [("normal", "y", "<", -0.3), ("range", "y", 0.44, 0.80)])],
-    # the RD1 insert's diagonal stripes (both photos): two pitches beat into bands of uneven width;
-    # 4.6 and 2.9 cm apart on a cushion (3.4+ texels a period: no moire at 1.2 texels/cm). The old
-    # single 3 cm stripe at 12 % was 2.5 texels a period and too faint to read at the game's zoom
-    # tints x2.9 / x4.1 in polish round 2 (R2-OC-3: PALETTE SeatCloth / SeatBolster, sRGB ~140 before the AO)
-    "SeatCloth":     [("box", "poly_wool_herringbone_diffuse_1k.jpg", 0.30, (0.506, 0.518, 0.545), 0.40),
-                      ("stripes", 0.065, 0.14), ("stripes", 0.041, 0.08)],
-    "SeatBolster":   [("box", "poly_wool_herringbone_diffuse_1k.jpg", 0.30, (0.408, 0.415, 0.432), 0.55)],
+    # the RD1 insert's diagonal stripes: feature round 2026-10-19 (the owner's photos: "a darker diagonal-stripe
+    # weave, broad diagonal stripes on the backrest and cushion"): one broad 7 cm stripe at +-38 % (dark / light
+    # 1.8 : 1, ~8 texels a period at 1.2 texels/cm) over a faint 3.1 cm one for the weave; the polish-round-2
+    # pair (6.5 / 4.1 cm at 14 / 8 %) read as a fine light hatch. Tints for PALETTE SeatCloth / SeatBolster
+    "SeatCloth":     [("box", "poly_wool_herringbone_diffuse_1k.jpg", 0.30, (0.112, 0.114, 0.122), 0.40),
+                      ("stripes", 0.070, 0.38), ("stripes", 0.031, 0.06)],
+    "SeatBolster":   [("box", "poly_wool_herringbone_diffuse_1k.jpg", 0.30, (0.116, 0.117, 0.123), 0.55)],
     "Plastique_noir": [("box", "fabric_leather_01_diffuse_1k.jpg",    0.12, (0.22, 0.22, 0.23), 0.60)],
     # noise amplitudes (2026-10-12): 12-25 % per texel at 40-160 /m was pixel-level speckle at 1.2-2.7
     # texels per screen pixel (GL_LINEAR, no mips); KI5's tyres and cladding are flat with drawn
@@ -1082,10 +1089,11 @@ def _face_weights(ob, space):
         elif ob.name == "cabin" and p.normal.y < -0.5 and (
                 (-0.59 < p.center.x < -0.21 and 1.02 < p.center.z < 1.18 and p.center.y > 0.47)
                 or (-0.14 < p.center.x < 0.14 and 0.72 < p.center.z < 1.20 and p.center.y < 0.58)
-                or (-0.48 < p.center.x < -0.30 and 0.97 < p.center.z < 1.11 and p.center.y < 0.42)):
+                or (-0.51 < p.center.x < -0.27 and 0.94 < p.center.z < 1.13 and p.center.y < 0.425)):
             w = 3.0          # the cluster face (y > 0.47: not the wheel), the centre stack (y < 0.58: not the dash
                              # face hidden behind it) and the hub pad with its H carry the painted / projected detail;
-                             # at 1x the cluster was white specks and the H lost its crossbar (1.2 texels/cm at 1024)
+                             # at 1x the cluster was white specks and the H lost its crossbar (1.2 texels/cm at 1024).
+                             # The pad grew to 22 x 17 cm in the feature round (2026-10-19): its box with it
         elif ob.name == "acc_spare_cover" and p.normal.y < -0.75:
             w = SPARE_WEIGHT                             # the cover's face carries the CR-V print
         elif (SPARE_HUB_WEIGHT and space == "shell" and ob.name == "trunk" and hub is not None and mat in SPARE_HUB_WEIGHT_MATS

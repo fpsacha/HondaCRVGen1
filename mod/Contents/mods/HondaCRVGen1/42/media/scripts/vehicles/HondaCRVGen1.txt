@@ -427,6 +427,78 @@ module Base
 		boneWeight = trunkglass_bone 1.0,
 	}
 
+	model HondaCRVGen1Acc_awning_bag
+	{
+		mesh = vehicles/Vehicles_HondaCRVGen1_Body|crvgen1_acc_awning_bag,
+		shader = vehiclewheel,
+		invertX = FALSE,
+		texture = Vehicles/Vehicles_HondaCRVGen1_Awning,
+		scale = 2.0,
+	}
+
+	model HondaCRVGen1Acc_awning_canopy
+	{
+		mesh = vehicles/Vehicles_HondaCRVGen1_Body|crvgen1_acc_awning_canopy,
+		shader = vehiclewheel,
+		invertX = FALSE,
+		texture = Vehicles/Vehicles_HondaCRVGen1_Awning,
+		scale = 2.0,
+	}
+
+	model HondaCRVGen1Acc_awning_poles
+	{
+		mesh = vehicles/Vehicles_HondaCRVGen1_Body|crvgen1_acc_awning_poles,
+		shader = vehiclewheel,
+		invertX = FALSE,
+		texture = Vehicles/Vehicles_HondaCRVGen1_Awning,
+		scale = 2.0,
+	}
+
+	model HondaCRVGen1Acc_awning_poles_lift
+	{
+		mesh = vehicles/Vehicles_HondaCRVGen1_Body|crvgen1_acc_awning_poles_lift,
+		shader = vehiclewheel,
+		invertX = FALSE,
+		texture = Vehicles/Vehicles_HondaCRVGen1_Awning,
+		scale = 2.0,
+	}
+
+	model HondaCRVGen1Acc_clutter_load1
+	{
+		mesh = vehicles/Vehicles_HondaCRVGen1_Body|crvgen1_acc_clutter_load1,
+		shader = vehiclewheel,
+		invertX = FALSE,
+		texture = Vehicles/Vehicles_HondaCRVGen1_Clutter,
+		scale = 2.0,
+	}
+
+	model HondaCRVGen1Acc_clutter_load2
+	{
+		mesh = vehicles/Vehicles_HondaCRVGen1_Body|crvgen1_acc_clutter_load2,
+		shader = vehiclewheel,
+		invertX = FALSE,
+		texture = Vehicles/Vehicles_HondaCRVGen1_Clutter,
+		scale = 2.0,
+	}
+
+	model HondaCRVGen1Acc_clutter_load3
+	{
+		mesh = vehicles/Vehicles_HondaCRVGen1_Body|crvgen1_acc_clutter_load3,
+		shader = vehiclewheel,
+		invertX = FALSE,
+		texture = Vehicles/Vehicles_HondaCRVGen1_Clutter,
+		scale = 2.0,
+	}
+
+	model HondaCRVGen1Acc_clutter_well
+	{
+		mesh = vehicles/Vehicles_HondaCRVGen1_Body|crvgen1_acc_clutter_well,
+		shader = vehiclewheel,
+		invertX = FALSE,
+		texture = Vehicles/Vehicles_HondaCRVGen1_Clutter,
+		scale = 2.0,
+	}
+
 	model HondaCRVGen1Acc_function_seats_up
 	{
 		mesh = vehicles/Vehicles_HondaCRVGen1_Body|crvgen1_acc_function_seats_up,
@@ -920,7 +992,7 @@ module Base
 			}
 		}
 
-		part GloveBox
+		part CRVCabin
 		{
 			model Interior
 			{
@@ -933,6 +1005,12 @@ module Base
 				file = HondaCRVGen1Cabin,
 				offset = 0.0 0.0 0.0,
 				rotate = 0.0 0.0 0.0,
+			}
+			category = nodisplay,
+			setAllModelsVisible = false,
+			lua
+			{
+				init = HondaCRVGen1.Cabin.Init,
 			}
 		}
 
@@ -2413,6 +2491,96 @@ module Base
 			{
 				create = HondaCRVGen1.Armour.Create,
 				init = HondaCRVGen1.Armour.Init,
+			}
+		}
+
+		part CRVAwning
+		{
+			model CRVAwning
+			{
+				file = HondaCRVGen1Acc_awning_bag,
+			}
+			model AwningCanopy
+			{
+				file = HondaCRVGen1Acc_awning_canopy,
+			}
+			model AwningPoles
+			{
+				file = HondaCRVGen1Acc_awning_poles,
+			}
+			area = SeatRearRight,
+			category = bodywork,
+			specificItem = false,
+			itemType = Base.CRVGen1_Awning,
+			mechanicRequireKey = false,
+			repairMechanic = true,
+			durability = 5,
+			table install
+			{
+				items
+				{
+					1
+					{
+						tags = base:wrench,
+						count = 1,
+						keep = true,
+						equip = primary,
+					}
+				}
+				time = 700,
+				skills = Mechanics:1,
+				recipes = Basic Mechanics,
+				test = Vehicles.InstallTest.Default,
+				complete = HondaCRVGen1.Awning.InstallComplete,
+			}
+			table uninstall
+			{
+				items
+				{
+					1
+					{
+						tags = base:wrench,
+						count = 1,
+						keep = true,
+						equip = primary,
+					}
+				}
+				time = 700,
+				skills = Mechanics:1,
+				recipes = Basic Mechanics,
+				test = Vehicles.UninstallTest.Default,
+				complete = HondaCRVGen1.Awning.UninstallComplete,
+			}
+			lua
+			{
+				create = HondaCRVGen1.Awning.Create,
+				init = HondaCRVGen1.Awning.Init,
+			}
+		}
+
+		part CRVClutterCargo
+		{
+			model InteriorClutter1
+			{
+				file = HondaCRVGen1Acc_clutter_load1,
+			}
+			model InteriorClutter2
+			{
+				file = HondaCRVGen1Acc_clutter_load2,
+			}
+			model InteriorClutter3
+			{
+				file = HondaCRVGen1Acc_clutter_load3,
+			}
+			model InteriorClutterWell
+			{
+				file = HondaCRVGen1Acc_clutter_well,
+			}
+			category = nodisplay,
+			setAllModelsVisible = false,
+			lua
+			{
+				init = HondaCRVGen1.Clutter.Init,
 			}
 		}
 

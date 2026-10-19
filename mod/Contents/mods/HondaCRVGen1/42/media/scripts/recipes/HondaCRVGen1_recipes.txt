@@ -171,6 +171,30 @@ module Base
 		}
 	}
 
+	craftRecipe CRVGen1_MakeAwning
+	{
+		timedAction = SewingCloth,
+		time = 600,
+		Tags = AnySurfaceCraft,
+		category = Tailoring,
+		SkillRequired = Tailoring:3;Mechanics:1,
+		xpAward = Tailoring:20;Mechanics:5,
+		inputs
+		{
+			item 2 [Base.Tarp],
+			item 2 [Base.MetalPipe],
+			item 1 [Base.Rope],
+			item 4 [Base.Screws],
+			item 2 tags[base:heavythread],
+			item 1 tags[base:sewingneedle] mode:keep flags[MayDegradeLight],
+			item 1 tags[base:screwdriver] mode:keep flags[MayDegradeLight],
+		}
+		outputs
+		{
+			item 1 Base.CRVGen1_Awning,
+		}
+	}
+
 	craftRecipe CRVGen1_MakeLiftKit
 	{
 		timedAction = Welding_Surface,

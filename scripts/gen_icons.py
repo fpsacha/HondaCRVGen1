@@ -62,7 +62,7 @@ STUDIO_ROT = 0.0
 
 def _table(ic):
     """The picnic table standing on its legs (build_table, the sprite's bold tube sizes), its top the
-    car's dark moulded grey, the legs aluminium."""
+    placed table's grey moulded top, the legs black."""
     import bmesh
     import build_table
     bm = bmesh.new()
@@ -71,7 +71,7 @@ def _table(ic):
     bm.to_mesh(me)
     bm.free()
     import build_accessories as A
-    cols = {build_table.TOP_MAT: (0.11, 0.11, 0.115), build_table.CHROME_MAT: (0.60, 0.61, 0.64)}
+    cols = {build_table.TOP_MAT: (0.36, 0.36, 0.37), build_table.CHROME_MAT: (0.08, 0.08, 0.085)}
     for name in A.MATS:
         me.materials.append(ic.flat_material("icon_" + name, cols.get(name, (0.20, 0.20, 0.21))))
     ob = bpy.data.objects.new("icon_table", me)

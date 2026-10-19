@@ -35,6 +35,7 @@ acc("CRVArmourDoorRearLeft", "acc_armour_door_rl")
 acc("CRVArmourArchRearLeft", "acc_armour_arch_rl")
 acc("CRVArmourDoorRearRight", "acc_armour_door_rr")
 acc("CRVArmourArchRearRight", "acc_armour_arch_rr")
+acc("CRVAwning", "acc_awning")
 acc("CRVOffroadSnorkel", "acc_offroad_snorkel")
 acc("CRVOffroadSkidPlate", "acc_offroad_skid")
 acc("CRVOffroadRearBumper", "acc_offroad_bumper")
@@ -89,6 +90,7 @@ rect("CRVArmourDoorRearLeft", 48, 41, 75, 69)
 rect("CRVArmourArchRearLeft", 110, 41, 137, 69)
 rect("CRVArmourDoorRearRight", 208, 41, 235, 69)
 rect("CRVArmourArchRearRight", 146, 41, 173, 69)
+rect("CRVAwning", 232, 229, 266, 262)
 rect("CRVOffroadSnorkel", 17, 528, 55, 567)
 rect("CRVOffroadSkidPlate", 59, 528, 97, 567)
 rect("CRVOffroadRearBumper", 101, 528, 139, 567)
@@ -104,8 +106,9 @@ local OPTIONAL = {
     "CRVGuardFrontLeft", "CRVGuardFrontRight", "CRVGuardRearLeft", "CRVGuardRearRight",
     "CRVPicnicTable", "CRVSpareCover", "CRVArmourDoorFrontLeft", "CRVArmourArchFrontLeft",
     "CRVArmourDoorFrontRight", "CRVArmourArchFrontRight", "CRVArmourDoorRearLeft", "CRVArmourArchRearLeft",
-    "CRVArmourDoorRearRight", "CRVArmourArchRearRight", "CRVOffroadSnorkel", "CRVOffroadSkidPlate",
-    "CRVOffroadRearBumper", "CRVOffroadLadder", "CRVOffroadCanGate", "CRVOffroadCanRoof",
+    "CRVArmourDoorRearRight", "CRVArmourArchRearRight", "CRVAwning", "CRVOffroadSnorkel",
+    "CRVOffroadSkidPlate", "CRVOffroadRearBumper", "CRVOffroadLadder", "CRVOffroadCanGate",
+    "CRVOffroadCanRoof",
 }
 local EMPTY = {multipleImg = true, img = {}}
 local renderCarOverlay = ISVehicleMechanics.renderCarOverlay

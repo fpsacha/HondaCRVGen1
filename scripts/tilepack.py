@@ -51,7 +51,7 @@ CX, CY = 64, 224                       # the tile's ground centre
 TOP_W, TOP_L = 0.778, 0.681           # build_table.TOP_W / TOP_L: the footprint the shadow diamond covers
 ALPHA_T = 96                           # raw alpha >= this is opaque: at 128 the 2 px tubes break into dashes, 64 is slightly fatter
 RIM = 0.80                             # 1 px darker rim on every opaque pixel touching a transparent one (vanilla edges are a shade darker)
-TOP_TARGET = 52                        # = build_table.STAND_TOP (2026-10-13): the placed model's top, which the sprite must match (was 87, the car's AccTable texel mean)
+TOP_TARGET = 100                       # = build_table.STAND_TOP (2026-10-13): the placed model's top, which the sprite must match (was 87, the car's AccTable texel mean)
 TOP_PATCH = (44, 84, 160, 178)         # x0, x1, y0, y1 of the top's far half on the canvas, clear of the rim
 SHADOW_ALPHA = 51                      # vanilla: exactly 20 %
 

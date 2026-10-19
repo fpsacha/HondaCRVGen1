@@ -96,6 +96,30 @@ ENGINE_LOW = "engine_low"                 # Blender object / FBX geometry crvgen
 BAY_LUA = "HondaCRVGen1.Bay"
 
 
+# The cabin (round 5, 2026-10-19; bug: taking the glove box out emptied the car). The interior shell and the cabin
+# furniture were two models of the template's part GloveBox, which has an item: removing it ran
+# VehiclePart.setInventoryItem(null) -> setAllModelsVisible(false) and hid the whole cabin (and a car spawned
+# without a glove box had none). Part CABIN_PART has no item, so nothing the player installs or removes touches
+# it; setAllModelsVisible = false says the engine never shows or resets its models (BaseVehicle.setModelVisible is
+# reached only through setInventoryItem and Lua), and 42/media/lua/shared/HondaCRVGen1_Cabin.lua shows both
+# models on the part's init, which runs on every side for every car created, loaded or streamed in.
+CABIN_PART = "CRVCabin"
+CABIN_MODELS = (("Interior", "Interior"), ("InteriorCabin", "Cabin"))   # model id ('Interior' in it: pzview's
+CABIN_LUA = "HondaCRVGen1.Cabin"                                         # cabin ID pass paints it), file suffix
+
+
+def cabin_part():
+    t = "\t\t\t"
+    lines = ["\t\tpart %s" % CABIN_PART, "\t\t{"]
+    for mid, f in CABIN_MODELS:
+        lines += ["%smodel %s" % (t, mid), "%s{" % t, "%s\tfile = %s%s," % (t, VEHICLE, f),
+                  "%s\toffset = 0.0 0.0 0.0," % t, "%s\trotate = 0.0 0.0 0.0," % t, "%s}" % t]
+    lines += ["%scategory = nodisplay," % t,
+              "%ssetAllModelsVisible = false," % t,
+              "%slua" % t, "%s{" % t, "%s\tinit = %s.Init," % (t, CABIN_LUA), "%s}" % t, "\t\t}"]
+    return "\n".join(lines)
+
+
 def engine_bay_part():
     t = "\t\t\t"
     lines = ["\t\tpart %s" % ENGINE_BAY_PART, "\t\t{"]
@@ -777,21 +801,7 @@ def vehicle_section(name=VEHICLE, mechanic_type=1, off_road="1.05", engine_repai
         _require_uninstalled("Windshield"),
         "\t\t}",
         "",
-        "\t\tpart GloveBox",
-        "\t\t{",
-        "\t\t\tmodel Interior",
-        "\t\t\t{",
-        "\t\t\t\tfile = %sInterior," % VEHICLE,
-        "\t\t\t\toffset = 0.0 0.0 0.0,",
-        "\t\t\t\trotate = 0.0 0.0 0.0,",
-        "\t\t\t}",
-        "\t\t\tmodel InteriorCabin",                   # the cabin furniture (build_cabin.py); 'Interior' in the
-        "\t\t\t{",                                     # name: pzview's cabin ID pass paints it green
-        "\t\t\t\tfile = %sCabin," % VEHICLE,
-        "\t\t\t\toffset = 0.0 0.0 0.0,",
-        "\t\t\t\trotate = 0.0 0.0 0.0,",
-        "\t\t\t}",
-        "\t\t}",
+        cabin_part(),
         "",
         engine_bay_part(),
         "",
@@ -1076,6 +1086,7 @@ def translations(translate_dir=None):
     for part, _g, _i, _a, _d, _r, _t, _tm, _sk, name in ACC_PARTS:
         ui["IGUI_VehiclePart%s" % part] = name
     ui["IGUI_VehiclePart%s" % ENGINE_BAY_PART] = "Engine Bay"      # nodisplay: never listed, named all the same
+    ui["IGUI_VehiclePart%s" % CABIN_PART] = "Cabin"                # nodisplay too
     items ={"Base.%s" % item: name for item, _w, _e, name in ACC_ITEMS}
     items["Base." + TABLE_ITEM] = "CRV Picnic Table"
     ui.update({"IGUI_CRV_SeatsFolded": "Rear seats folded flat into a bed",
