@@ -187,6 +187,8 @@ def _material(name):
 def _mat(name):
     if name == "Interieur":                                 # the visors are in the headliner cloth
         return bpy.data.materials.get("Interieur") or _material("CabDash")
+    if name == "Interieur_sol":                             # the rear backs' carpet: the cabin floor's own
+        return bpy.data.materials.get("Interieur_sol") or _material("CabDark")
     return _material(name)
 
 
@@ -711,7 +713,7 @@ def column(b):
 # or square instead of rounded, fewer stations across, the faces nobody sees dropped. The full twin
 # adds the rounding, the seams (SeatSeam grooves, 1.6 cm: two texels of the 1024 interior sheet) and
 # the small parts the bake paints onto the coarse surfaces (rails, recline lever, post collars).
-SEAT_MATS = ["SeatBolster", "SeatCloth", "SeatSeam", "CabDark", "Metal"]
+SEAT_MATS = ["SeatBolster", "SeatCloth", "SeatSeam", "CabDark", "Metal", "Interieur_sol"]   # carpet: the rear backs (_rear_back_mat)
 SEAM_W, SEAM_D = 0.016, 0.005     # seam groove width and depth (full twin)
 SEAT_RS = 0.025                   # rounding of the seats' side edges (full twin; the coarse side sits halfway in)
 COARSE_DROP = ("bottom", "rear", "hidden")      # labels the coarse build drops by default (backrest bottoms, under the deck)
@@ -1030,6 +1032,13 @@ REAR_SEAT_ATTR = "rear_seat"      # INT face attribute: 1 on the rear bench's fa
 #             turned BACK_FOLD deg forward about the point of its rear face at the deck edge (y -1.05,
 #             BACK_HINGE_Z): its rear face is then the top, at the deck height
 #   headrest  with its posts, face down against the tumbled cushion's rear face, HEAD_STORE up it
+# 2026-10-18 (feedback, with photos of a real cargo bay: "i should see the seats"; chose "backs fold onto the
+# cushions"): seen from the gate the tumbled cushions read as two black boxes with headrests on them, not as
+# seats. FOLD_ONTO: the cushion stays where it is and the back pivots forward onto it about its front edge at
+# the cut, its cloth face down on the cushion, its carpeted rear face up (the bed), the headrest taken off.
+FOLD_ONTO = True
+ONTO_DEG = 98.9                   # the front face leans 8.9 deg back upright (B_BACK 1 -> 4): this lays it flat
+ONTO_FACE_H = -0.100              # the folded front face's height off the hip: just over the bolsters (-0.11)
 CUSHION_TUMBLE = 76.0             # deg; the seat surface faces forward and 14 deg up
 BACK_FOLD = 98.0                  # deg: the rear face leans 8 deg back upright, so 98 lays it flat
 BACK_CUT = -0.030                 # backrest section kept for the folded back: h >= this (B_BACK points 1..8)
@@ -1065,9 +1074,10 @@ def _rear_side(b, hip, pose):
                lambda u, kind: _cushion_ring(b.fine, B_BOTTOM, B_REAR, rise(u), kind in ("insert", "edge_i"), crease=False,
                                                        tuck=0.03),
                lambda u, s, h: Vector((side * u, hip.y + s, hip.z + h)), _cushion_mat,
-               # upright: 2 cm over the carpet, the rear end in the floor riser; tumbled both show: closed
-               drop=() if fold else ("bottom", "rear"))
-    if fold:
+               # upright: 2 cm over the carpet, the rear end in the floor riser; tumbled both show: closed;
+               # under a back folded onto it, the rear end shows from the cargo bay
+               drop=(("bottom",) if FOLD_ONTO else ()) if fold else ("bottom", "rear"))
+    if fold and not FOLD_ONTO:
         pivot = Vector((0.0, hip.y + SEAT_NOSE, hip.z + B_BOTTOM))
         _pose(b.objs[k:], pivot, -CUSHION_TUMBLE)
     # backrest: its lower back corner pulled in to |x| 0.53 (the wheel housing behind y -0.95 below
@@ -1096,16 +1106,29 @@ def _rear_side(b, hip, pose):
     _seat_loft(b, piece, "backrest", stations,
                lambda u, kind: _back_ring(b.fine, sect, coarse, B_SEAM_H,
                                           B_WING * _smooth01((u - s1) / (B_OUT - s1)), kind in ("insert", "edge_i")),
-               lambda u, s, h: Vector((bx(u, s, h), hip.y + s, hip.z + h)), _back_mat,
+               lambda u, s, h: Vector((bx(u, s, h), hip.y + s, hip.z + h)), _rear_back_mat,
                drop=() if fold else COARSE_DROP)
-    if fold:
+    if fold and FOLD_ONTO:
+        hinge = Vector((0.0, hip.y + B_BACK[1][0], hip.z + BACK_CUT))       # the front edge of the cut
+        _pose(b.objs[k:], hinge, -ONTO_DEG, lift=ONTO_FACE_H - BACK_CUT)
+    elif fold:
         hinge = Vector((0.0, hip.y + B_BACK[8][0], hip.z + BACK_CUT))
         _pose(b.objs[k:], hinge, -BACK_FOLD, lift=BACK_HINGE_Z - hinge.z)
+    if fold and FOLD_ONTO:                                 # the head restraint comes off to fold the back
+        return b.objs[n0:]
     k = len(b.objs)
     _headrest(b, piece, hip, (-0.250, 0.428), 0.125, 0.085, 0.09, 0.065, 0.05, caps=fold)
     if fold:
         _store_headrest(b.objs[k:], hip, (-0.250, 0.428), 0.085, 0.09, 0.05)
     return b.objs[n0:]
+
+
+def _rear_back_mat(kind, lab):
+    """The rear bench's backs: cloth on the front and over the top, a carpeted rear face like the real car's
+    (feedback photo 2026-10-18: dark carpet on the back, the grey cloth only on top). Folded, that face is the bed."""
+    if lab in ("back", "hidden", "bottom"):
+        return "Interieur_sol"
+    return _back_mat(kind, lab)
 
 
 def _pose(objs, pivot, deg, lift=0.0):

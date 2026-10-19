@@ -48,7 +48,7 @@ TILE_W, TILE_H = 128, 256
 TILEDEF_ID = 7361                      # unique per mod among loaded mods (Neat Building uses 7811)
 PX = 90.5                              # px per metre at 2x
 CX, CY = 64, 224                       # the tile's ground centre
-TOP_W = TOP_L = 0.78                   # build_table.TOP_W / TOP_L: the footprint the shadow diamond covers
+TOP_W, TOP_L = 0.778, 0.681           # build_table.TOP_W / TOP_L: the footprint the shadow diamond covers
 ALPHA_T = 96                           # raw alpha >= this is opaque: at 128 the 2 px tubes break into dashes, 64 is slightly fatter
 RIM = 0.80                             # 1 px darker rim on every opaque pixel touching a transparent one (vanilla edges are a shade darker)
 TOP_TARGET = 52                        # = build_table.STAND_TOP (2026-10-13): the placed model's top, which the sprite must match (was 87, the car's AccTable texel mean)
@@ -58,7 +58,7 @@ SHADOW_ALPHA = 51                      # vanilla: exactly 20 %
 # tilesheet -> [(tile name, png file, properties)]; properties as the game's own table tiles carry
 # them (furniture_tables_high_01). Surface is in 1x pixels, about 42.5 per metre of table height
 # (vanilla high_01_0: 0.78 m -> 33, high_01_4: 0.69 m -> 30, round _6: 0.64 m -> 27, heights read
-# off each sprite's top-centre row at 78.4 px/m); ours is build_table.HEIGHT 0.76 m -> 32.
+# off each sprite's top-centre row at 78.4 px/m); ours is build_table.HEIGHT 0.42 m -> 18.
 _TABLE_PROPS = [
     ("CustomItem", "Base.CRVGen1_PicnicTable"),
     ("CustomName", "Picnic Table"),
@@ -70,7 +70,7 @@ _TABLE_PROPS = [
     ("Material", "SmallSheetMetal"),
     ("Material2", "Plastic"),
     ("PickUpWeight", "60"),
-    ("Surface", "32"),
+    ("Surface", "18"),
     ("solidtrans", ""),
 ]
 SHEETS = {
@@ -297,7 +297,8 @@ def main():
         for _name, png, props in tiles:                  # one raw render per facing (render_tile.FACINGS)
             raw = "_raw_table_%s.png" % dict(props).get("Facing", "S")
             if os.path.exists(os.path.join(TILES_IN, raw)):
-                compose_sprite(raw, png)
+                facing = dict(props).get("Facing", "S")       # E: the model turned 90 degrees, so is its footprint
+                compose_sprite(raw, png, (TOP_W, TOP_L) if facing == "S" else (TOP_L, TOP_W))
             else:
                 print("SPRITE %s: no %s, packing the existing composite" % (png, raw))
     p1 = write_pack(PACK_OUT, SHEETS)

@@ -33,6 +33,7 @@ def _arg(flag, default=None):
 
 
 OUT = _arg("--out")
+OUT = os.path.abspath(OUT) if OUT else OUT      # Blender resolves a relative render path against C:\, not the cwd
 SHOTS = _arg("--shots")
 SAMPLES = int(_arg("--samples", "64"))
 import pzview  # noqa: E402  (parses the same argv: --skin, --script, --acc ... apply)

@@ -47,12 +47,12 @@ SIDE_PNG = "cargo_side.png"
 TABLE_PNG = "cargo_table.png"
 FLOOR_X = (-0.72, 0.72)          # the deck: kotris interior, z 0.766, x -0.70..0.70, y -1.98..-1.04
 FLOOR_Y = (-2.06, -1.02)
-FLOOR_Z = (0.74, 0.80)           # deck height band (the table well's floor at 0.626 stays plain)
+FLOOR_Z = (0.74, 0.80)           # deck height band (the table well, a tub down to z 0.526, stays plain)
 SIDE_Y = (-2.06, -1.22)          # behind the rear doors (which end at y -1.215)
 SIDE_Z = (0.76, 1.20)            # below the quarter glass
 SIDE_X = (0.45, 0.80)            # |x| of the side walls
-TABLE_X = (-0.39, 0.39)          # build_table: TOP_W / TOP_L 0.78, centre y -1.58, top z 0.766 + 0.002
-TABLE_Y = (-1.97, -1.19)
+TABLE_X = (-0.389, 0.389)        # build_table: TOP_W 0.778 / TOP_L 0.681, centre y -1.58, top z 0.766 + 0.002
+TABLE_Y = (-1.9205, -1.2395)
 TABLE_Z = (0.75, 0.80)
 PX_PER_M = 200.0
 PREFILTER = 0.003                # half a BAKE texel: the 2x bake samples 1.4-1.6 /cm (0.006 was half a shipped
@@ -170,8 +170,8 @@ def render_table():
     for x in (0.045, W - 0.045):
         for y in (0.09, H - 0.09):
             c.scale(c.circle(x, y, 0.007), 0.35)
-    # the moulded CR-V plate beside the grab slot (slot at x 0 +- 5.5 cm, y centre + 0.10)
-    sy = -1.58 + 0.10 - ya
+    # the moulded CR-V plate beside the grab slot (slot at x 0 +- 5.5 cm, y centre + build_table.SLOT_Y -0.28)
+    sy = -1.58 - 0.28 - ya
     plate = c.rrect(0.5 * W + 0.085, sy - 0.022, 0.5 * W + 0.285, sy + 0.022, 0.012)
     c.groove(plate, 0.006, k=0.65, hi=1.06, hw=0.005)
     # the script: four strokes at low contrast (C, R, dash, V), >= 1 cm each

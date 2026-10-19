@@ -399,8 +399,13 @@ PHOTOS = {
                ["shut", [-5.6, 5.0, 1.3], [0.0, 0.0, 0.9], 36, {"sun": [30, 150]}],
                ["--skin", "silver", "--acc", "--acc-parts", ",".join(ARMOUR), "--hide-models", ",".join(GUARD_BARS)]),
     "bed": ("Fold the rear seats into a flat bed",
-            ["gate", [0.35, -3.2, 1.55], [0.0, -0.7, 0.75], 58, {"interior": True, "exposure": -0.4, "sun": [40, 120]}],
-            ["--skin", "silver", "--folded"]),
+            ["gate", [0.3, -3.7, 1.65], [0.0, -1.6, 0.72], 52, {"interior": True, "exposure": -0.3, "sun": [40, 120],
+                                                               "ground": "grass"}],
+            ["--skin", "silver", "--folded", "--acc", "--acc-parts", "CRVPicnicTable"]),
+    "cargo": ("The cargo bay: the picnic table is the floor, the rear seats fold flat behind it",
+              ["gate", [0.3, -3.7, 1.65], [0.0, -1.6, 0.72], 52, {"interior": True, "exposure": -0.3, "sun": [40, 120],
+                                                                 "ground": "grass"}],
+              ["--skin", "silver", "--acc", "--acc-parts", "CRVPicnicTable"]),
 }
 RETIRED = ["front34", "lifted34", "rear_open", "cabin"]       # older gallery names the photos replace (cabin: the
                                                      # low-poly seats read boxy in a close photo; the bed shot shows the cabin)

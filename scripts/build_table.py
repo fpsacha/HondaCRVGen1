@@ -40,9 +40,10 @@ Shape from photos of the real 1997-2001 table (samarins.com, Autoweek) and owner
 thick, with a recessed grab slot; two thin chrome tube frames, one along each LONG side, each a
 vertical leg at either end joined by a ground bar whose ends curl up into feet, hinged under the
 long edge and folding inward flat under the top (the far frame a little narrower so they nest);
-one diagonal brace between the frames. Knee high (58 cm).
+a short folding lock strut per frame, no cross brace (eBay listing photos, 2026-10-18). 42 cm high.
 Model space: metres, +X vehicle right, +Y forward, +Z up.
 """
+import math
 import sys
 
 import bmesh
@@ -51,18 +52,26 @@ from mathutils import Vector
 
 from build_accessories import (PLATE, STEEL, _box, _new_object, _round, _sweep, tris)
 
-TOP_W, TOP_L, TOP_T = 0.78, 0.78, 0.020          # x, y, thickness: the top is SQUARE (feedback; the photos agree)
-HEIGHT = 0.76                                    # standing: ground to top surface. The RD1 table is 26 in (0.66), but next to a
-                                                 # PZ character that reads low (feedback, Viewpoint: 0.56 was knee high, wants
-                                                 # crotch high); vanilla tables are 0.69..0.78, so ours sits with them
+TOP_W, TOP_L, TOP_T = 0.778, 0.681, 0.029       # x (across the car), y, thickness: measured on a real table (r/crv,
+                                                 # 30-5/8 x 26-13/16 x 1-1/8 in; it was a 0.78 m square, 2 cm thick)
+HEIGHT = 0.42                                    # standing: ground to top surface. Measured 2026-10-18 on two eBay listings of
+                                                 # the 1997-2001 table standing (top 30.5 x 26.5-27.5 in): about 40-43 cm, a
+                                                 # low camp table (the "26 in" quoted online is the top's depth). 0.76 then
+                                                 # 0.66 read too high (feedback: "its too high ... real proportion")
+KNEE = (0.12, 0.12)                              # the folding lock strut on each frame: from the top's underside this far inboard
+                                                 # of the hinge, to the near leg this far below the top (the photos; no X brace)
 ARCH = 0.03                                      # the ground bars hump up this much over their middle 24 cm
 TUBE_R = 0.006                                   # 12 mm chrome tube
 HINGE_X = TOP_W / 2 - 0.045                      # frames hinge this far either side of the centre line (4.5 cm in from the edge)
-LEG_Y = (0.32, 0.29)                             # legs this far either side of the middle: near frame, far frame (nests inside)
+LEG_Y = (0.29, 0.26)                             # legs this far either side of the middle: near frame, far frame (nests inside)
 FOOT = 0.04                                      # ground bar runs this far past each leg, then curls up
 FLOOR_Z = 0.766                                  # the kotris cargo floor
 CENTRE_Y = -1.58                                 # between the rear seatback (y -1.17) and the gate (y -2.11)
-WELL_DEPTH = 0.14
+WELL_DEPTH = 0.14                                # (the old box well's depth)
+TUB_DEPTH = 0.24                                 # the rounded tub's bottom under the deck (z 0.526; underbody 0.40-0.46)
+LEDGE_DROP = 0.031                               # the ledge under the opening's rim: the table (TOP_T) rests on it flush
+LEDGE_W = 0.030                                  # ledge width inside the opening
+TUB_SEG = 6                                      # points per rounded corner
 WELL_GAP = 0.012                                 # well walls past the top's edge
 TABLE = "acc_table"
 TOP_MAT, CHROME_MAT = "AccTable", "AccChrome"    # added to build_accessories.MATS on first use
@@ -75,11 +84,12 @@ TOP_MAT, CHROME_MAT = "AccTable", "AccChrome"    # added to build_accessories.MA
 # The slot and plug are drawn bolder than the car part's (11 x 2.8 cm, 3.6 cm): ~8 x 2 px and a
 # 3 x 2 px dot at 1x instead of 7 x 1.6 and 2 x 1.5.
 STAND_TUBE_R = 0.008
-STAND_TOP_T = 0.025
+STAND_TOP_T = 0.029
 STAND_BRACE_R = 0.0065
 STAND_SLOT = (0.065, 0.018)                      # grab slot half length (x), half width (y), metres
 STAND_PLUG_R = 0.023                             # umbrella plug radius
-SLOT_Y, PLUG_Y = 0.10, -0.06                     # their centres along y (as _top places them)
+SLOT_Y, PLUG_Y = -0.28, 0.0                      # their centres along y (as _top places them): the real top has its grab
+                                                 # recess near one long edge (the gate side in the car) and the hole in the middle
 
 # The placed table's own sheet (not the 1024 car shell). A model drawn with no shader line gets the
 # game's basicEffect and falls under the Texture Size option (default 256), so 256 is loaded as
@@ -170,10 +180,12 @@ def standing_table(bm, tube_r=STAND_TUBE_R, top_t=STAND_TOP_T, brace_r=STAND_BRA
     the bold slot and plug (STAND_SLOT / STAND_PLUG_R)."""
     top, chrome = _mats()
     _top(bm, 0.0, 0.0, HEIGHT, top, top_t, STAND_SLOT, STAND_PLUG_R)
+    z_under = HEIGHT - top_t
     for side in (-1, 1):
-        _leg_frame(bm, 0.0, 0.0, HEIGHT - top_t, side, False, chrome, tube_r, top_t)
-    # one diagonal brace: near frame's hinge at one end to the far frame's foot at the other
-    _sweep(bm, [(HINGE_X, -LEG_Y[0], HEIGHT - top_t - 0.012), (-HINGE_X, LEG_Y[1], tube_r + 0.02)], _round(brace_r, 5), mat=chrome)
+        _leg_frame(bm, 0.0, 0.0, z_under, side, False, chrome, tube_r, top_t)
+        # the folding lock strut (the real table has one per frame, on its near leg; there is no cross brace)
+        xh, ly = side * HINGE_X, LEG_Y[0] if side > 0 else LEG_Y[1]
+        _sweep(bm, [(xh - side * KNEE[0], ly, z_under - 0.008), (xh, ly, z_under - KNEE[1])], _round(brace_r, 5), mat=chrome)
     return bm
 
 
@@ -304,7 +316,7 @@ def carve_well(report):
         report("  well: cargo floor not found")
         bm.free()
         return 0
-    zb = FLOOR_Z - WELL_DEPTH
+    zb = FLOOR_Z - TUB_DEPTH
     if any(abs(f.calc_center_median().z - zb) < 0.005 and x0 < f.calc_center_median().x < x1 and y0 < f.calc_center_median().y < y1
            for f in bm.faces):
         report("  well: already cut (rerun on a prepared parts file)")
@@ -318,33 +330,64 @@ def carve_well(report):
     inside = [f for f in floor_faces() if x0 + 1e-4 < f.calc_center_median().x < x1 - 1e-4 and y0 + 1e-4 < f.calc_center_median().y < y1 - 1e-4]
     bmesh.ops.delete(bm, geom=inside, context='FACES')
     mi_wall = names.index("Plastique_noir") if "Plastique_noir" in names else 0
-    mi_floor = names.index("Interieur_sol")
-    c = {}
-    for (x, y, z) in ((x0, y0, FLOOR_Z), (x1, y0, FLOOR_Z), (x1, y1, FLOOR_Z), (x0, y1, FLOOR_Z),
-                      (x0, y0, zb), (x1, y0, zb), (x1, y1, zb), (x0, y1, zb)):
-        c[(x, y, z)] = bm.verts.new((x, y, z))
-    top = [c[(x0, y0, FLOOR_Z)], c[(x1, y0, FLOOR_Z)], c[(x1, y1, FLOOR_Z)], c[(x0, y1, FLOOR_Z)]]
-    bot = [c[(x0, y0, zb)], c[(x1, y0, zb)], c[(x1, y1, zb)], c[(x0, y1, zb)]]
+    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+    hx, hy = (x1 - x0) / 2, (y1 - y0) / 2
+    # the rounded tub (2026-10-18, feedback with the samarins photo: "the hole is wrong ... it should be more
+    # round"): the rectangular opening drops LEDGE_DROP to a flat ledge the table rests on, then a black plastic
+    # tub with rounded corners, walls drawing in and a rounded bottom edge, TUB_DEPTH under the deck (the
+    # underbody is at z 0.40-0.46 here: 7 cm to spare). Rings: (inset from the opening, corner radius, depth)
+    rings = [(LEDGE_W, 0.090, LEDGE_DROP), (LEDGE_W + 0.020, 0.085, LEDGE_DROP + 0.070),
+             (LEDGE_W + 0.050, 0.075, TUB_DEPTH - 0.035), (LEDGE_W + 0.085, 0.050, TUB_DEPTH)]
+
+    def rounded(inset, r):
+        """A rounded rectangle inset from the opening: TUB_SEG points per corner, counter-clockwise."""
+        ax, ay = hx - inset - r, hy - inset - r
+        pts = []
+        for qx, qy, a0 in ((1, 1, 0.0), (-1, 1, 90.0), (-1, -1, 180.0), (1, -1, 270.0)):
+            for i in range(TUB_SEG):
+                a = math.radians(a0 + 90.0 * i / (TUB_SEG - 1))
+                pts.append((cx + qx * ax + r * math.cos(a), cy + qy * ay + r * math.sin(a)))
+        return pts
+
+    def to_rect(px, py):
+        """Where the ray from the centre through (px, py) leaves the opening."""
+        dx, dy = px - cx, py - cy
+        k = min(hx / abs(dx) if abs(dx) > 1e-9 else 1e9, hy / abs(dy) if abs(dy) > 1e-9 else 1e9)
+        return cx + dx * k, cy + dy * k
+    first = rounded(*rings[0][:2])
+    outer = [to_rect(px, py) for px, py in first]
+    vt = [bm.verts.new((px, py, FLOOR_Z)) for px, py in outer]                  # the opening's rim
+    vl = [bm.verts.new((px, py, FLOOR_Z - LEDGE_DROP)) for px, py in outer]     # its foot, the ledge's outer edge
+    loops = [vt, vl] + [[bm.verts.new((px, py, FLOOR_Z - d)) for px, py in rounded(ins, r)] for ins, r, d in rings]
     new = []
-    for k in range(4):
-        f = bm.faces.new((top[k], bot[k], bot[(k + 1) % 4], top[(k + 1) % 4]))
+    n = len(first)
+    for a, b in zip(loops[:-1], loops[1:]):
+        for i in range(n):
+            j = (i + 1) % n
+            quad = [a[i], a[j], b[j], b[i]]
+            if len({v.index for v in quad}) < 4 or len({tuple(round(c, 6) for c in v.co) for v in quad}) < 4:
+                quad = [v for k, v in enumerate(quad) if all((v.co - w.co).length > 1e-6 for w in quad[:k])]
+            if len(quad) >= 3:
+                new.append(bm.faces.new(quad))
+    zb = FLOOR_Z - TUB_DEPTH
+    mid = bm.verts.new((cx, cy, zb))
+    last = loops[-1]
+    for i in range(n):
+        new.append(bm.faces.new((last[i], last[(i + 1) % n], mid)))
+    above = Vector((cx, cy, FLOOR_Z + 0.30))
+    for f in new:                                            # facing into the tub (it is seen from inside the car)
         f.material_index = mi_wall
-        new.append(f)
-    f = bm.faces.new(bot)
-    f.material_index = mi_floor
-    new.append(f)
-    centre = Vector(((x0 + x1) / 2, (y0 + y1) / 2, FLOOR_Z - WELL_DEPTH / 2))
-    for f in new:                                            # inward-facing (the well is seen from inside the car)
         f.normal_update()
-        if f.normal.dot(centre - f.calc_center_median()) < 0:
+        if f.normal.dot(above - f.calc_center_median()) < 0:
             f.normal_flip()
-        f.smooth = False
+        f.smooth = True
         f[gl] = 3                                            # generated: baked direct, modest texels
     bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
     bm.to_mesh(me)
     bm.free()
     me.update()
-    report("  well: %d floor faces removed, recess %.2f x %.2f m, %.0f mm deep" % (len(inside), x1 - x0, y1 - y0, WELL_DEPTH * 1000))
+    report("  well: %d floor faces removed, opening %.2f x %.2f m, rounded tub %.0f mm deep (%d faces)"
+           % (len(inside), x1 - x0, y1 - y0, TUB_DEPTH * 1000, len(new)))
     return len(inside)
 
 
