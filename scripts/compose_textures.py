@@ -80,6 +80,7 @@ KEY_TOL = 6
 # Seam lines from the 1.2 cm gap pass (bake_atlas.GAP_DISTANCE): gap AO <= GAP_LO is a full seam,
 # >= GAP_HI open surface; a seam darkens the texel by GAP_DARK. KI5's gaps are a 1-texel dark line
 # at 0.6 texels/cm; at our ~1 texel/cm the 1.2 cm reach gives 1-2 texels a side.
+LIGHTS_REDUCE = 2                              # the Lights sheet ships at shell size / this (2026-10-19)
 GAP_DARK = 0.60
 GAP_LO = 0.30
 GAP_HI = 0.60
@@ -857,7 +858,10 @@ def main():
     # full size, in register with the shell: at half size (LANCZOS) the binary lens edge came out a
     # 2-texel staircase with ringing, the jagged rim of the lit tail lamp (2026-10-13). RGB and
     # alpha averaged apart (the RGB beyond a lens already carries its colour: no dark fringe)
-    reduce_box(lights, ss).save(p)
+    # 2026-10-19 performance pass: shipped at HALF the shell (1024): the sheet is ~2 % lit texels, and at
+    # 2048 it cost 16 MB of video memory per car for players on the 2048 setting (the default 512 shrinks it
+    # anyway). Box-averaged, so the lens edge stays a clean ramp (not the LANCZOS staircase above)
+    reduce_box(lights, ss * LIGHTS_REDUCE).save(p)
     written.append(p)
     p = os.path.join(a.out, "%s_Rust.png" % PT.NAME)
     rust_rgba(max(256, sheet // 2)).save(p)

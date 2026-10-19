@@ -112,8 +112,12 @@ RIM_HUB_R = 0.070             # the hub inside this (the decal's cap and nuts)
 RIM_LUG_R, RIM_CAP_R = 0.057, 0.032   # the decal's lug circle (5 x 114.3 mm) and centre cap
 RIM_FACE_R = 0.174            # the spoke face meets the lip's last lathe ring here
 RIM_DEPTH = 0.050             # the disc behind the windows lies this far behind the face's rim edge
-RIM_DISC_R = 0.180            # its 16-gon reaches past every window (inscribed radius 0.1765)
-RIM_HUB_SEG = 16
+RIM_DISC_R = 0.180            # its RIM_DISC_SEG-gon reaches past every window (inscribed radius 0.1712 > 0.1665)
+# 2026-10-19 performance pass: the disc is one flat polygon (only seen through the windows: 8 tris, was a
+# 16-tri fan), the hub cone a 10-gon with a corner on every window's and slot's centre line (its 6 mm band
+# to the window tips kept; the cap and nuts are the decal's, inside r 0.066), was 16 (+16 in the face)
+RIM_DISC_SEG = 10
+RIM_HUB_SEG = 10
 RIM_SPOKES = 5
 RIM_SHADE_DEEP = 0.22         # corner attribute rim_shade on the walls: 1 at the face, this at the disc
 RIM_ROAD_PHASE = 90.0         # road wheels: a window centred straight up (object +z), 72 degrees apart, as the
@@ -128,8 +132,10 @@ RIM_ROAD_PHASE = 90.0         # road wheels: a window centred straight up (objec
 # the lip; window tips ~0.075-0.085. So: the windows a little fuller (25 deg half width at the lip, tip at 0.076,
 # 6 mm past the hub cone), the slot from 0.083 to the lip (85 % of the spoke), 1.0-1.4 cm wide: arms 2.5-3 cm.
 # Same point counts (the wheel's triangle count is unchanged)
-RIM_WINDOW = ((0.076, 0.0), (0.085, -9.0), (0.100, -15.5), (0.121, -20.5), (0.144, -23.5), (0.1655, -25.0),
-              (0.1665, 0.0), (0.1655, 25.0), (0.144, 23.5), (0.121, 20.5), (0.100, 15.5), (0.085, 9.0))
+# 2026-10-19 performance pass: the (0.121, +-20.5) points dropped, they lay 0.7 mm off the straight side
+# between their neighbours (10 points a window: 6 tris less each, walls and face)
+RIM_WINDOW = ((0.076, 0.0), (0.085, -9.0), (0.100, -15.5), (0.144, -23.5), (0.1655, -25.0),
+              (0.1665, 0.0), (0.1655, 25.0), (0.144, 23.5), (0.100, 15.5), (0.085, 9.0))
 RIM_SLOT = ((0.083, 0.0), (0.092, -3.0), (0.155, -2.7), (0.1650, 0.0), (0.155, 2.7), (0.092, 3.0))
 MAT_DEV = {"Body": 0.005, "Body_plastique": 0.006}   # shape guard per material (default lowpoly.MAX_DEV,
                                                      # 12 mm): paint and cladding hold their roof ribs,
@@ -1208,7 +1214,7 @@ def _rim_face(bm, c, ax, u, v, ring_out, t_hub, phase, hub_mat, hub_gen, mats):
     def flat(p):                            # 2D in the face plane
         d = p - c
         return (d.dot(u), d.dot(v))
-    hub_ring = [bm.verts.new(at(RIM_HUB_R, 360.0 * k / RIM_HUB_SEG)) for k in range(RIM_HUB_SEG)]
+    hub_ring = [bm.verts.new(at(RIM_HUB_R, phase + 360.0 * k / RIM_HUB_SEG)) for k in range(RIM_HUB_SEG)]
     loops = []
     for s in range(RIM_SPOKES):
         for outline, centre in ((RIM_WINDOW, phase + 72.0 * s), (RIM_SLOT, phase + 36.0 + 72.0 * s)):
@@ -1250,12 +1256,11 @@ def _rim_face(bm, c, ax, u, v, ring_out, t_hub, phase, hub_mat, hub_gen, mats):
             for lp in f.loops:
                 lp[shade] = 1.0 if lp.vert in loop else RIM_SHADE_DEEP
             walls.append(f)
-    # the disc behind the windows (brake rotor / hub face), facing out
-    centre = bm.verts.new(c + ax * t_back)
-    disc_ring = [bm.verts.new(c + ax * t_back + (u * math.cos(2 * math.pi * k / RIM_HUB_SEG)
-                                                  + v * math.sin(2 * math.pi * k / RIM_HUB_SEG)) * RIM_DISC_R)
-                 for k in range(RIM_HUB_SEG)]
-    disc = [bm.faces.new((centre, disc_ring[k], disc_ring[(k + 1) % RIM_HUB_SEG])) for k in range(RIM_HUB_SEG)]
+    # the disc behind the windows (brake rotor / hub face), facing out: one flat polygon (triangulated below)
+    disc_ring = [bm.verts.new(c + ax * t_back + (u * math.cos(2 * math.pi * k / RIM_DISC_SEG)
+                                                  + v * math.sin(2 * math.pi * k / RIM_DISC_SEG)) * RIM_DISC_R)
+                 for k in range(RIM_DISC_SEG)]
+    disc = [bm.faces.new(disc_ring)]
     for f in disc:
         f.material_index = mats["Rotor"]
         f[gl] = RIM_GEN
@@ -1280,7 +1285,7 @@ def _rim_face(bm, c, ax, u, v, ring_out, t_hub, phase, hub_mat, hub_gen, mats):
             face += 1
             if f.normal.dot(ax) < 0:
                 f.normal_flip()
-    return {"face": face, "walls": len(walls), "disc": len(disc), "hub": len(hub),
+    return {"face": face, "walls": len(walls), "disc": RIM_DISC_SEG - 2, "hub": len(hub),
             "depth": t_out - t_back, "phase": phase}
 
 
@@ -1844,11 +1849,10 @@ def _lathe_replace(ob, src, cap, rim=None, hub="Jante"):
     # the back of the wheel (inner bead to the axle), seen under the car from low: the dark well colour, not the
     # alloy's silver (2026-10-17 review WHL-6: "a flat silver disc")
     back_mi = mi["RimWell"] if "RimWell" in mi else _mat_index(me, "RimWell", lambda: _node_material("RimWell", (0.20, 0.20, 0.21), 0.6))
-    back = bm.verts.new(c + ax * prof[0][0])
-    for k in range(LATHE_SEG):
-        f = bm.faces.new((back, rings[0][(k + 1) % LATHE_SEG], rings[0][k]))
-        f.material_index = back_mi
-        made.append((f, -ax))
+    # one flat polygon (LATHE_SEG - 2 tris), not a fan round a centre vertex (2026-10-19 performance pass)
+    f = bm.faces.new(list(reversed(rings[0])))
+    f.material_index = back_mi
+    made.append((f, -ax))
     if cap and rim is None:
         centre = bm.verts.new(c + ax * prof[-1][0])
         for k in range(LATHE_SEG):

@@ -65,7 +65,11 @@ def check(cond, msg):
 WORLD = r'''
 EVENT_ARGS = {}
 function countHandlers(name) return EVENTS[name] and #EVENTS[name] or 0 end
-function TICK(n) for i = 1, (n or 1) do triggerEvent("OnTick", 0) end end
+-- a frame is ~16 ms of wall clock (getTimestampMs); isGamePaused() is PAUSED (the engine bay's holds count unpaused time)
+NOW_MS, PAUSED = 1000000, false
+function getTimestampMs() return NOW_MS end
+function isGamePaused() return PAUSED end
+function TICK(n) for i = 1, (n or 1) do NOW_MS = NOW_MS + 16; triggerEvent("OnTick", 0) end end
 function ZombRand(a, b)
     if b == nil then if a <= 0 then return 0 end return math.random(0, a - 1) end
     if b <= a then return a end
@@ -341,6 +345,7 @@ function Player:getPrimaryHandItem() return nil end
 function Player:getSecondaryHandItem() return nil end
 function Player:getUsername() return self.name end
 function Player:isLocalPlayer() return true end
+function Player:getNearVehicle() return PLAYER_NEAR_VEHICLE(self) end   -- (again: Player was redefined above)
 function Player:getCurrentSquare() return getSquare(self.x, self.y, 0) end
 function Player:getSquare() return getSquare(self.x, self.y, 0) end
 
@@ -485,7 +490,9 @@ function Veh:transmitPartModData(p) SENT.moddata = SENT.moddata + 1; if ROLE == 
 function Veh:transmitPartCondition(p) SENT.cond = SENT.cond + 1; if ROLE == "server" then PY_PACKET("cond", self.id, p.id) end end
 function Veh:transmitPartItem(p) SENT.item = SENT.item + 1; if ROLE == "server" then PY_PACKET("item", self.id, p.id) end end
 function Veh:transmitPartWindow(p) SENT.window = SENT.window + 1; if ROLE == "server" then PY_PACKET("window", self.id, p.id) end end
-function Veh:transmitPartDoor(p) SENT.door = SENT.door + 1 end
+function Veh:transmitPartDoor(p) SENT.door = SENT.door + 1; if ROLE == "server" then PY_PACKET("door", self.id, p.id) end end
+ANIMS = {}
+function Veh:playPartAnim(p, anim) table.insert(ANIMS, p.id .. ":" .. anim) end
 function Veh:transmitEngine() SENT.other = SENT.other + 1 end
 function Veh:transmitRust() SENT.other = SENT.other + 1 end
 function Veh:transmitColorHSV() SENT.other = SENT.other + 1 end
@@ -579,6 +586,24 @@ function ISBaseTimedAction:stop() self.stopped = true end
 function ISBaseTimedAction:setActionAnim(a) self.anim = a end
 function ISBaseTimedAction:setOverrideHandModels() end
 function ISBaseTimedAction:getJobDelta() return 0.5 end
+''',
+    # 42.21 ISOpenVehicleDoor: start() plays the part's Open clip at once, complete() opens the door afterwards
+    "shared/Vehicles/TimedActions/ISOpenVehicleDoor.lua": r'''
+require "TimedActions/ISBaseTimedAction"
+ISOpenVehicleDoor = ISBaseTimedAction:derive("ISOpenVehicleDoor")
+function ISOpenVehicleDoor:isValid() return self.part ~= nil and self.part:getDoor() ~= nil end
+function ISOpenVehicleDoor:start() self.vehicle:playPartAnim(self.part, "Open") end
+function ISOpenVehicleDoor:complete()
+    if not self.part:getDoor():isLocked() then self.part:getDoor():setOpen(true); self.vehicle:transmitPartDoor(self.part) end
+    return true
+end
+function ISOpenVehicleDoor:new(character, vehicle, part)
+    local o = ISBaseTimedAction.new(self, character)
+    o.vehicle = vehicle
+    o.part = part
+    o.maxTime = 0
+    return o
+end
 ''',
     "shared/Vehicles/TimedActions/ISOpenCloseVehicleWindow.lua": r'''
 require "TimedActions/ISBaseTimedAction"
@@ -810,7 +835,8 @@ ProceduralDistributions = { list = setmetatable({}, { __index = function(t, k) l
 ''',
 }
 VANILLA_GLOBALS = {"Ctx", "ENTERED", "ISBaseTimedAction", "ISCarMechanicsOverlay", "ISContextMenu", "ISEnterVehicle",
-                   "ISInstallVehiclePart", "ISModalRichText", "ISOpenCloseVehicleWindow", "ISPathFindAction", "ISRepairEngine",
+                   "ISInstallVehiclePart", "ISModalRichText", "ISOpenCloseVehicleWindow", "ISOpenVehicleDoor",
+                   "ISPathFindAction", "ISRepairEngine",
                    "ISSwitchVehicleSeat", "ISTimedActionQueue", "ISUninstallVehiclePart", "ISVehicleMechanics", "ISVehicleMenu",
                    "ISWorldObjectContextMenu", "ProceduralDistributions", "QUEUE", "TRANSFERS", "VANILLA_OUTSIDE",
                    "VANILLA_UNINSTALL_CALLS", "VehicleDistributions", "VehicleUtils", "Vehicles", "newCtx"}
@@ -1160,6 +1186,8 @@ class WorldNet(Net):
                     client.run("cv.parts[%s].cont:AddItem(newItem(%s, %r))" % (_lua(pid), _lua(it.ft), it.weight))
             if sp.win is not None:
                 client.run("cv.parts[%s].win.open = %s" % (_lua(pid), "true" if sp.win.open else "false"))
+            if sp.door is not None:
+                client.run("cv.parts[%s].door.open = %s" % (_lua(pid), "true" if sp.door.open else "false"))
         client.run("createPhysics(cv)")
         return client.eval("cv")
 
@@ -1210,6 +1238,8 @@ class WorldNet(Net):
                         cp.cond = sp.cond
                     elif kind == "window":
                         c.run("VEHICLES[%d].parts[%s].win.open = %s" % (vid, _lua(pid), "true" if sp.win.open else "false"))
+                    elif kind == "door":
+                        c.run("VEHICLES[%d].parts[%s].door.open = %s" % (vid, _lua(pid), "true" if sp.door.open else "false"))
                     elif kind == "item":
                         new = c.eval("newItem")(sp.item.ft) if sp.item is not None else None
                         cp.setInventoryItem(cp, new)
@@ -1359,6 +1389,78 @@ def radial_menus(g):
     g.run("PLAYER.vehicle = nil")
 
 
+BAY_TICKS = {"grace": 4000 // 16 + 2, "hold": 3000 // 16 + 2}     # HondaCRVGen1.Bay.OPEN_GRACE / CLOSE_HOLD in frames
+
+
+def engine_bay_sp(g):
+    """The engine bay (HondaCRVGen1_EngineBay.lua) in the game's load order, single player: the stand-in on a shut
+    hood, the bay from the moment the open action starts, held while the hood swings shut, shown with the hood off."""
+    check(g.eval("vis(v, 'CRVEngineBay')") == "EngineBayLow", "engine bay: a new CR-V with the hood shut shows the "
+          "stand-in (%s)" % g.eval("vis(v, 'CRVEngineBay')"))
+    check(g.eval("rawget(ISOpenVehicleDoor, 'HondaCRVGen1BayWrapped')") is True, "engine bay: ISOpenVehicleDoor:start wrapped once")
+    g.run("ANIMS = {}; ACT = ISOpenVehicleDoor:new(PLAYER, v, v.parts.EngineDoor)")
+    ok, r = g.try_run("ACT:start()")
+    check(ok and g.eval("ANIMS[1]") == "EngineDoor:Open", "engine bay: the wrapped start still plays the Open clip (%s)" % r)
+    check(g.eval("vis(v, 'CRVEngineBay')") == "EngineBay", "engine bay: shown as the hood starts opening, before complete()")
+    g.try_run("TICK(%d)" % BAY_TICKS["grace"])
+    check(g.eval("vis(v, 'CRVEngineBay')") == "EngineBayLow", "engine bay: an open that never completed falls back to the stand-in")
+    ok, r = g.try_run("ACT:start(); TICK(5); ACT:complete(); TICK(%d)" % BAY_TICKS["grace"])
+    check(ok and g.eval("vis(v, 'CRVEngineBay')") == "EngineBay", "engine bay: shown while the hood is open (%s)" % r)
+    g.try_run("v.parts.EngineDoor.door.open = false; TICK(10)")
+    check(g.eval("vis(v, 'CRVEngineBay')") == "EngineBay", "engine bay: still shown while the hood swings shut")
+    g.try_run("PAUSED = true; TICK(%d)" % (2 * BAY_TICKS["hold"]))
+    check(g.eval("vis(v, 'CRVEngineBay')") == "EngineBay", "engine bay: the hold does not run out while the game is paused")
+    g.try_run("PAUSED = false; TICK(%d)" % BAY_TICKS["hold"])
+    check(g.eval("vis(v, 'CRVEngineBay')") == "EngineBayLow", "engine bay: the stand-in once the hood is down")
+    g.try_run("v.parts.EngineDoor:setInventoryItem(nil); TICK(1)")
+    check(g.eval("vis(v, 'CRVEngineBay')") == "EngineBay", "engine bay: shown with the hood removed")
+    g.try_run("v.parts.EngineDoor:setInventoryItem(newItem('Base.EngineDoor1')); TICK(%d)" % BAY_TICKS["hold"])
+    check(g.eval("vis(v, 'CRVEngineBay')") == "EngineBayLow", "engine bay: the stand-in again with a shut hood refitted")
+    calls = g.eval("v.parts.CRVEngineBay.calls")
+    g.try_run("TICK(50)")
+    check(g.eval("v.parts.CRVEngineBay.calls") == calls, "engine bay: idle ticks call no setModelVisible")
+    g.run("ANIMS = {}")
+    ok, r = g.try_run("ACT = ISOpenVehicleDoor:new(PLAYER, suv, suv.parts.EngineDoor); ACT:start(); ACT:complete(); TICK(2)")
+    check(ok and g.eval("ANIMS[1]") == "EngineDoor:Open" and g.eval("suv.parts.EngineDoor.door.open") is True,
+          "engine bay: a vanilla car's hood opens as before (%s)" % r)
+    g.run("suv.parts.EngineDoor.door.open = false; ACT = nil")
+
+
+def engine_bay_mp(net, S, A, B):
+    """The engine bay in multiplayer: nothing drawn on the dedicated server; each client follows the synced door
+    and item, and the client whose player opens the hood shows the bay at the action's start."""
+    for c in (A, B):
+        check(c.eval("vis(v, 'CRVEngineBay')") == "EngineBayLow", "%s: engine bay: a streamed-in CR-V shows the stand-in" % c.name)
+    check(S.eval("v.parts.CRVEngineBay.calls") == 0, "server: engine bay: the dedicated server draws nothing")
+    ok, r = A.try_run("ACT = ISOpenVehicleDoor:new(PLAYER, v, v.parts.EngineDoor); ACT:start()")
+    check(ok and A.eval("vis(v, 'CRVEngineBay')") == "EngineBay" and B.eval("vis(v, 'CRVEngineBay')") == "EngineBayLow",
+          "engine bay: alice starts opening the hood: her client shows the bay at once, bob's not yet (%s)" % r)
+    ok, r = S.try_run("ACT = ISOpenVehicleDoor:new(PLAYERS.alice, v, v.parts.EngineDoor); ACT:start(); ACT:complete(); ACT = nil")
+    check(ok and S.eval("v.parts.CRVEngineBay.calls") == 0, "server: the open completes, still nothing drawn (%s)" % r)
+    net.pump()
+    for c in (A, B):
+        c.try_run("TICK(1)")
+        check(c.eval("vis(v, 'CRVEngineBay')") == "EngineBay", "%s: engine bay shown once the open door is synced" % c.name)
+    S.run("v.parts.EngineDoor.door.open = false; v:transmitPartDoor(v.parts.EngineDoor)")
+    net.pump()
+    for c in (A, B):
+        c.try_run("TICK(10)")
+        check(c.eval("vis(v, 'CRVEngineBay')") == "EngineBay", "%s: engine bay held while the hood swings shut" % c.name)
+        c.try_run("TICK(%d)" % BAY_TICKS["hold"])
+        check(c.eval("vis(v, 'CRVEngineBay')") == "EngineBayLow", "%s: the stand-in once the hood is down" % c.name)
+    S.run("v.parts.EngineDoor:setInventoryItem(nil); v:transmitPartItem(v.parts.EngineDoor)")
+    net.pump()
+    for c in (A, B):
+        c.try_run("TICK(1)")
+        check(c.eval("vis(v, 'CRVEngineBay')") == "EngineBay", "%s: engine bay shown with the hood removed" % c.name)
+    S.run("v.parts.EngineDoor:setInventoryItem(newItem('Base.EngineDoor1')); v:transmitPartItem(v.parts.EngineDoor)")
+    net.pump()
+    for c in (A, B):
+        c.try_run("TICK(%d)" % BAY_TICKS["hold"])
+        check(c.eval("vis(v, 'CRVEngineBay')") == "EngineBayLow", "%s: the stand-in with the hood refitted, shut" % c.name)
+        c.run("ACT = nil")
+
+
 def single_player():
     print("\n=== single player: every file loaded in the game's order, OnGameStart")
     g = Game("sp").boot()
@@ -1405,6 +1507,7 @@ def single_player():
     g.run("QUEUE = {}")
     radial_menus(g)
     action_params(g)
+    engine_bay_sp(g)
 
     # armour plate + window mesh
     ok, r = g.try_eval("{install(PLAYER, v, 'CRVArmourDoorFrontLeft', 'Base.CRVGen1_ArmourDoorFront')}")
@@ -1468,6 +1571,7 @@ def single_player():
     check(g.eval("n.parts.CRVOffroadCanRoof.item:getFluidContainer():getAmount()") == 9, "lifted car: the roof can keeps its petrol")
     check(g.eval("vis(n, 'CRVGuardFrontLeft')") == "ArmourMesh", "lifted car: mesh only (%s)" % g.eval("vis(n, 'CRVGuardFrontLeft')"))
     check(g.eval("vis(n, 'CRVRoofRack')") == "CRVRoofRack,RackLoad2", "lifted car: rack load 2 (%s)" % g.eval("vis(n, 'CRVRoofRack')"))
+    check(g.eval("vis(n, 'CRVEngineBay')") == "EngineBayLow", "lifted car: the engine bay's stand-in (%s)" % g.eval("vis(n, 'CRVEngineBay')"))
     check(g.eval("HondaCRVGen1.Shared.isBed(n)") is True and g.eval("n.parts.CRVFunctionCargo.cont:count()") == 1,
           "lifted car: folded, the load floor's cargo kept")
     check(g.eval("HondaCRVGen1.Function.isFloorFound(n)") is True and g.eval("n.parts.CRVFunctionUnderfloor.cont:count()") == 1,
@@ -1513,6 +1617,7 @@ def multiplayer():
     for side in (S, A, B):
         tests_return(side, "suv", "PLAYER", "%s: vanilla SUV" % side.name)
         tests_return(side, "v", "PLAYER", "%s: CR-V as spawned" % side.name)
+    engine_bay_mp(net, S, A, B)
     S.run("bare(v)")
     net.pump()
     for pid in list(S.eval("v.order").values()):
@@ -1567,6 +1672,7 @@ def multiplayer():
             check(c.eval("n.script") == "Base.HondaCRVGen1LiftSteel", "%s: has the lifted car" % c.name)
             check(c.eval("vis(n, 'CRVGuardFrontLeft')") == "ArmourMesh", "%s: lifted car, mesh only (%s)" % (c.name, c.eval("vis(n, 'CRVGuardFrontLeft')")))
             check(c.eval("vis(n, 'CRVRoofRack')") == "CRVRoofRack,RackLoad2", "%s: lifted car, rack load (%s)" % (c.name, c.eval("vis(n, 'CRVRoofRack')")))
+            check(c.eval("vis(n, 'CRVEngineBay')") == "EngineBayLow", "%s: lifted car, the engine bay's stand-in" % c.name)
             check(c.eval("HondaCRVGen1.Shared.isBed(n)") is True and c.eval("HondaCRVGen1.Function.isFloorFound(n)") is True,
                   "%s: lifted car, folded + floor found" % c.name)
             ok, r = c.try_eval("ISOpenCloseVehicleWindow:new(PLAYER, n.parts.WindowFrontLeft, true):isValid()")

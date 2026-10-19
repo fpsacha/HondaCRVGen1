@@ -86,6 +86,28 @@ DOORS = [("fl", "FrontLeft", "SeatFrontLeft", 270.0),
          ("rr", "RearRight", "SeatRearRight", 90.0)]
 
 
+# The engine bay (performance pass, 2026-10-19): drawn only while the hood is open or gone. Part ENGINE_BAY_PART
+# has no item and setAllModelsVisible = false (the engine never shows or resets its models: VehiclePart
+# .setInventoryItem is the only caller of setAllModelsVisible); 42/media/lua/shared/HondaCRVGen1_EngineBay.lua
+# shows the full bay (EngineBay) or the shut bay's stand-in (EngineBayLow, scripts/bay/standin.py) from the
+# hood's synced door state and item. Before, the bay was a second model of GloveBox, drawn on every car always.
+ENGINE_BAY_PART = "CRVEngineBay"
+ENGINE_LOW = "engine_low"                 # Blender object / FBX geometry crvgen1_engine_low (export_fbx)
+BAY_LUA = "HondaCRVGen1.Bay"
+
+
+def engine_bay_part():
+    t = "\t\t\t"
+    lines = ["\t\tpart %s" % ENGINE_BAY_PART, "\t\t{"]
+    for mid, f in (("EngineBay", "%sEngine" % VEHICLE), ("EngineBayLow", "%sEngineLow" % VEHICLE)):
+        lines += ["%smodel %s" % (t, mid), "%s{" % t, "%s\tfile = %s," % (t, f),
+                  "%s\toffset = 0.0 0.0 0.0," % t, "%s\trotate = 0.0 0.0 0.0," % t, "%s}" % t]
+    lines += ["%scategory = nodisplay," % t,
+              "%ssetAllModelsVisible = false," % t,
+              "%slua" % t, "%s{" % t, "%s\tinit = %s.Init," % (t, BAY_LUA), "%s}" % t, "\t\t}"]
+    return "\n".join(lines)
+
+
 # Accessories: geometry from scripts/build_accessories.py, behaviour in
 # 42/media/lua/server/Vehicles/HondaCRVGen1Accessories.lua (our own code: KI5's damnlib may not be
 # copied). Each is a removable bodywork part whose model the game shows only while an item is
@@ -206,6 +228,10 @@ def models_section():
            _model("%sCabin" % VEHICLE, "crvgen1_cabin",
                   texture="%s_Interior" % TEX, shader="vehiclewheel"),
            _model("%sEngine" % VEHICLE, "crvgen1_engine_block",
+                  texture="%s_Engine" % TEX, shader="vehiclewheel"),
+           # the shut bay's stand-in (scripts/bay/standin.py): a few dark boxes on the engine sheet, drawn
+           # instead of the bay while the hood is shut (part CRVEngineBay, HondaCRVGen1_EngineBay.lua)
+           _model("%sEngineLow" % VEHICLE, "crvgen1_" + ENGINE_LOW,
                   texture="%s_Engine" % TEX, shader="vehiclewheel"),
            _model("%sHood" % VEHICLE, "crvgen1_hood", static=False, bone=HOOD_BONES),
            # the gate's track must weight the glass bone too: WindshieldRear and CRVGuardWindshieldRear
@@ -759,19 +785,15 @@ def vehicle_section(name=VEHICLE, mechanic_type=1, off_road="1.05", engine_repai
         "\t\t\t\toffset = 0.0 0.0 0.0,",
         "\t\t\t\trotate = 0.0 0.0 0.0,",
         "\t\t\t}",
-        "\t\t\tmodel EngineBay",                       # the bay rides the same always-present part as
-        "\t\t\t{",                                     # the interior; declared on part Engine it did not draw
-        "\t\t\t\tfile = %sEngine," % VEHICLE,
-        "\t\t\t\toffset = 0.0 0.0 0.0,",
-        "\t\t\t\trotate = 0.0 0.0 0.0,",
-        "\t\t\t}",
-        "\t\t\tmodel InteriorCabin",                    # the cabin furniture (build_cabin.py); 'Interior' in the
+        "\t\t\tmodel InteriorCabin",                   # the cabin furniture (build_cabin.py); 'Interior' in the
         "\t\t\t{",                                     # name: pzview's cabin ID pass paints it green
         "\t\t\t\tfile = %sCabin," % VEHICLE,
         "\t\t\t\toffset = 0.0 0.0 0.0,",
         "\t\t\t\trotate = 0.0 0.0 0.0,",
         "\t\t\t}",
         "\t\t}",
+        "",
+        engine_bay_part(),
         "",
         door_parts(),
         "",
@@ -1053,7 +1075,8 @@ def translations(translate_dir=None):
     ui = {"IGUI_VehicleName%s" % VEHICLE: "Honda CRV"}
     for part, _g, _i, _a, _d, _r, _t, _tm, _sk, name in ACC_PARTS:
         ui["IGUI_VehiclePart%s" % part] = name
-    items = {"Base.%s" % item: name for item, _w, _e, name in ACC_ITEMS}
+    ui["IGUI_VehiclePart%s" % ENGINE_BAY_PART] = "Engine Bay"      # nodisplay: never listed, named all the same
+    items ={"Base.%s" % item: name for item, _w, _e, name in ACC_ITEMS}
     items["Base." + TABLE_ITEM] = "CRV Picnic Table"
     ui.update({"IGUI_CRV_SeatsFolded": "Rear seats folded flat into a bed",
                "IGUI_CRV_SeatsUp": "Rear seats put back",

@@ -52,7 +52,7 @@ MOD = os.path.join(ROOT, "mod", "Contents", "mods", "HondaCRVGen1")
 LOCAL = os.path.expandvars(r"%USERPROFILE%\Zomboid\mods\HondaCRVGen1")
 S = os.path.dirname(os.path.abspath(__file__))
 STEPS = ["rebuild", "bake", "compose", "export", "scripts", "overlays", "tiles", "check"]
-KEEP = re.compile(r"(AUDIT|DONE|EXPORTED|WROTE|FEATURE|COPIED|REMOVED|OVERLAY (rects|ALIGN|preview)|HIT TEST|bake:|reduce:|CLEARANCE|prune|solidify|spike|hub:|trim faces|TOTAL|PZVIEW|low poly|HOLECHECK (TOTAL|hole)|BACKFILL|GLASS|ACCESSORIES|ICON|TILE|SPRITE|well:|sill strips|door lip|seam backing|gate card|door card|dilate:|\bpaint:|\buvmesh:|engine_block|surround|aperture|behind the trim|cargo corner|mud flap|lock hole|wheelhouse|sail backing|belt seal|hood edge|clip translations|CABIN|cabin|_strip|warning|Error|Traceback|line \d+)", re.I)
+KEEP = re.compile(r"(AUDIT|DONE|EXPORTED|WROTE|FEATURE|COPIED|REMOVED|OVERLAY (rects|ALIGN|preview)|HIT TEST|bake:|reduce:|CLEARANCE|prune|solidify|spike|hub:|trim faces|TOTAL|PZVIEW|low poly|HOLECHECK (TOTAL|hole)|BACKFILL|GLASS|ACCESSORIES|ICON|TILE|SPRITE|well:|sill strips|door lip|seam backing|gate card|door card|dilate:|\bpaint:|\buvmesh:|engine_block|engine_low|surround|aperture|behind the trim|cargo corner|mud flap|lock hole|wheelhouse|sail backing|belt seal|hood edge|clip translations|CABIN|cabin|_strip|warning|Error|Traceback|line \d+)", re.I)
 
 
 def run(cmd, label):
@@ -148,7 +148,7 @@ def check_compose():
             if im.size != (size * ss, size * ss):
                 bad.append("bake %s_color %dx%d, want %d (sheet %d x %d)" % (space, im.size[0], im.size[1], size * ss, size, ss))
     shell = spaces["shell"][1]
-    want = {"Mask": shell, "Lights": shell, "Rust": max(256, shell // 2), "Interior": spaces["interior"][1],
+    want = {"Mask": shell, "Lights": shell // _const("compose_textures.py", "LIGHTS_REDUCE"), "Rust": max(256, shell // 2), "Interior": spaces["interior"][1],
             "Wheel": spaces["wheel"][1], "Engine": spaces["engine"][1]}
     want.update({spec["texture"]: int(spec["size"]) for spec in features.new_spaces().values()})   # the plugins' own sheets
     skins = sorted(f for f in os.listdir(tex) if f.startswith(name + "_Shell") and f.endswith(".png"))

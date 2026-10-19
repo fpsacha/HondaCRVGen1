@@ -381,17 +381,33 @@ module Base
 				offset = 0.0 0.0 0.0,
 				rotate = 0.0 0.0 0.0,
 			}
+			model InteriorCabin
+			{
+				file = HondaCRVGen1Cabin,
+				offset = 0.0 0.0 0.0,
+				rotate = 0.0 0.0 0.0,
+			}
+		}
+
+		part CRVEngineBay
+		{
 			model EngineBay
 			{
 				file = HondaCRVGen1Engine,
 				offset = 0.0 0.0 0.0,
 				rotate = 0.0 0.0 0.0,
 			}
-			model InteriorCabin
+			model EngineBayLow
 			{
-				file = HondaCRVGen1Cabin,
+				file = HondaCRVGen1EngineLow,
 				offset = 0.0 0.0 0.0,
 				rotate = 0.0 0.0 0.0,
+			}
+			category = nodisplay,
+			setAllModelsVisible = false,
+			lua
+			{
+				init = HondaCRVGen1.Bay.Init,
 			}
 		}
 

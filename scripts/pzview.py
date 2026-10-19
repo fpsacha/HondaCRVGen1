@@ -6,7 +6,7 @@ and render it with the game's culling from the game's camera.
             [--poses shut,open] [--az 0,45,...] [--scale 6.5] [--close] [--eye] [--res 1400]
             [--acc [--acc-parts CRVSpareCover,...]] [--rack N] [--decal retro_blue,script_white,...]
             [--gz 150] [--cap 512] [--script HondaCRVGen1LiftAlloy] [--folded]
-            [--frac 0.15] [--eyes FILE.json] [--probe view,px,py [--probe-all]]
+            [--frac 0.15] [--eyes FILE.json] [--probe view,px,py [--probe-all]] [--bay full|low]
 Poses: shut, open, left, right, front, gate, hood, fl / fr / rl / rr (one door), win / win_fl.. (windows
 down), joined with '+' (left+win); --frac F poses every opening clip at F of its travel. --eye adds the
 eye-level ring, the 'low' and crouch rings, the seats and (with --folded) the cargo bed; --eyes FILE.json
@@ -99,6 +99,13 @@ FOLDED = "--folded" in argv        # function feature: the rear bench folded fla
                                    # car's own bench (no item, drawn bare or fitted); its Lua shows the upright
                                    # model (InteriorSeatsUp), or the folded one (*Folded) while folded
 SEATS_PART = "CRVFunctionSeats"
+# the engine bay (performance pass, 2026-10-19): part CRVEngineBay is the car's own bay (no item, drawn bare or
+# fitted). HondaCRVGen1_EngineBay.lua shows EngineBay while the hood is open, opening or gone, and the shut
+# bay's stand-in EngineBayLow otherwise: here every pose that opens EngineDoor (open, hood, at any --frac) draws
+# the bay, every other pose the stand-in. --bay full|low forces one for every view.
+BAY_PART = "CRVEngineBay"
+BAY_MODELS = {"full": "EngineBay", "low": "EngineBayLow"}
+BAY = _arg("--bay", "auto")
 SHOW = _arg("--show", None)        # lights | mask | rust: draw that vehicle texture on the skinned
                                    # models instead of the paint (rust through the second UV set)
 CAP = int(_arg("--cap", "0"))      # the loader's texture-size cap (see the docstring); 0 = none
@@ -490,7 +497,7 @@ def build(vehicle_mod):
         if is_decal:
             if not DECALS:
                 continue
-        elif (part.name.startswith("CRV") and part.name != SEATS_PART
+        elif (part.name.startswith("CRV") and part.name not in (SEATS_PART, BAY_PART)
               and (not ACC or (ACC_ONLY and part.name not in ACC_ONLY))):
             continue
         # tyre parts name their wheel through the vanilla Tire template (wheel = FrontLeft ...)
@@ -530,6 +537,7 @@ def build(vehicle_mod):
             ob = instance(f, models, skin_png, xf, label)
             if ob is not None:
                 ob["pz_part"] = part.name
+                ob["pz_model"] = pm.name
             drawn.append(ob)
         for a in part.all("anim"):
             anims.setdefault(part.name, {})[a.name] = (a.get("anim"), truthy(a.get("reverse", "false")))
@@ -764,6 +772,21 @@ def pose(arms, dm, opened):
                         pb.location = loc
                         pb.rotation_quaternion = q
     bpy.context.view_layer.update()
+
+
+def hood_opened(opened):
+    """Does this pose (pose()'s argument) open EngineDoor?"""
+    toks = str(opened).split("+") if isinstance(opened, str) else (["open"] if opened else ["shut"])
+    return any(t == "open" or "EngineDoor" in POSE_PARTS.get(t, ()) for t in toks)
+
+
+def bay_models(drawn, opened):
+    """Show the model of BAY_PART the mod's Lua would for this pose; returns its id."""
+    want = BAY if BAY in BAY_MODELS else ("full" if hood_opened(opened) else "low")
+    for ob in drawn:
+        if ob.get("pz_part") == BAY_PART and ob.get("pz_model") in BAY_MODELS.values():
+            ob.hide_render = ob.get("pz_model") != BAY_MODELS[want]
+    return BAY_MODELS[want]
 
 
 # ----------------------------------------------------------------------------------------------
@@ -1353,6 +1376,9 @@ def main():
     for p, az, tgt, sc, tag, eye in views:
         if p != current:
             pose(arms, dm, p)
+            bay = bay_models(drawn, p)
+            if any(ob.get("pz_part") == BAY_PART for ob in drawn):
+                print("PZVIEW pose %s: engine bay %s" % (p, bay))
             current = p
         if eye is not None:
             aim_eye(cam, *eye)

@@ -36,6 +36,7 @@ import rig_vehicle
 import uv_atlas
 import uv_project
 import wheel_uv
+from bay import standin               # the shut bay's stand-in, built here (out of the parts and bake blends)
 
 ROOT = os.environ.get("CRV_ROOT") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_DIR = os.path.join(ROOT, "mod", "Contents", "mods", "HondaCRVGen1",
@@ -69,7 +70,7 @@ ACCESSORIES = ["acc_bullbar", "acc_roofrack", "acc_guard_ws", "acc_guard_rear", 
 ACCESSORIES += features.body_objects()                                               # the feature plugins' meshes
 WORLD_ITEMS_DIR = os.path.join(ROOT, "mod", "Contents", "mods", "HondaCRVGen1", "common", "media", "models_X", "WorldItems")
 # "cabin" (build_cabin.py): its own geometry crvgen1_cabin like the interior, on the interior sheet
-BODY_OBJECTS = (bh.SHELL_PARTS + [build_interior.NAME, "cabin", "bumper_rear", "engine_block", "arch_liners", "bay_walls",
+BODY_OBJECTS = (bh.SHELL_PARTS + [build_interior.NAME, "cabin", "bumper_rear", "engine_block", standin.NAME, "arch_liners", "bay_walls",
                                   "mirror_L", "mirror_R", "roofrail_L", "roofrail_R", "mudflaps", "antenna", "flares"]
                 + ACCESSORIES)
 WHEEL_OBJECTS = ["wheel_FR"]          # one wheel; the game mirrors and repeats it
@@ -249,7 +250,9 @@ def _bake_transform(ob):
 # 2, which vehicle_static.vert reads. vehiclewheel_static.vert reads slot 3 (written for the
 # game's .txt meshes: [position, normal, tangent, uv]), i.e. OUR SECOND UV LAYER: in 42.21 the
 # interior, engine and wheels drew as white shards until that layer was a copy of the first.
-PLAIN_SHADER = ("interior", "engine_block", "cabin") + tuple(features.plain_shader())   # + feature meshes off the shell
+PLAIN_SHADER = ("interior", "engine_block", standin.NAME, "cabin") + tuple(features.plain_shader())   # + feature meshes off the shell
+ENGINE_SHEET = os.path.join(ROOT, "mod", "Contents", "mods", "HondaCRVGen1", "common", "media", "textures", "Vehicles",
+                            "Vehicles_HondaCRVGen1_Engine.png")    # compose's engine sheet: the stand-in's colours
 
 
 def _mirror_uv(ob):
@@ -427,6 +430,7 @@ def export_all(out_dir=None):
         export_table(table)                                # before prepare() scales the car's meshes
     for feat, _r in features.call("EXPORT", print, {"out": out_dir, "world_items": WORLD_ITEMS_DIR}):
         print("EXPORTED feature %s's own files" % feat)    # also before prepare(): model metres
+    standin.add(ENGINE_SHEET)                              # engine_low, model metres too (bay/standin.py)
     arm, meshes = prepare()
     wheels = {PREFIX + n for n in WHEEL_OBJECTS}
     body = [ob for ob in meshes if ob.name not in wheels]
