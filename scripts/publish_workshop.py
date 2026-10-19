@@ -38,7 +38,16 @@ def workshop_txt():
 
 
 def q(s):
-    return '"%s"' % s.replace("\\", "\\\\").replace('"', '\\"')
+    """A VDF string. SteamCMD's reader ends a string at any '"', escaped or not, so quotes in the text become
+    curly ones (alternating open/close)."""
+    out, open_ = [], True
+    for ch in s.replace("\\", "\\\\"):
+        if ch == '"':
+            out.append("“" if open_ else "”")
+            open_ = not open_
+        else:
+            out.append(ch)
+    return '"%s"' % "".join(out)
 
 
 def main():
