@@ -133,14 +133,20 @@ function Rain.hold(p, h, dry)
     return changed
 end
 
+-- the game's Kahlua has no global 'next': an empty-table test with pairs
+local function empty(t)
+    for _ in pairs(t) do return false end
+    return true
+end
+
 function Rain.OnTick()
-    if next(Awning.out) == nil then
-        if next(Rain.held) ~= nil then Rain.held = {} end
+    if empty(Awning.out) then
+        if not empty(Rain.held) then Rain.held = {} end
         return
     end
     local cm = ClimateManager.getInstance()
     if not cm or not cm:isRaining() then
-        if next(Rain.held) ~= nil then Rain.held = {} end
+        if not empty(Rain.held) then Rain.held = {} end
         return
     end
     local now = getTimeInMillis()

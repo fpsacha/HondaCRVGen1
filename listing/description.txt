@@ -61,7 +61,7 @@ I really like the first-gen CRV and I really wanted one in Zomboid, so I made it
 
 [h2]Known issues[/h2]
 [list]
-[*] Version 0.4.0, still early. If you hit a bug, please post it with your console log
+[*] Version 0.4.1, still early. If you hit a bug, please post it with your console log
 [*] Still being tested on dedicated servers
 [*] I just changed how the lifted version handles hard braking and turns, so tell me how it feels
 [*] Damage dents are still soft blotches for now

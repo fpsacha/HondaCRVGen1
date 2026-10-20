@@ -256,7 +256,7 @@ def start_guard_tests():
     """A layer whose clip cannot start (handle 0) is not kept: no orphan emitter is moved or pitched."""
     s = side("sp")
     s.run("FAIL_PLAY = true; car = spawnCar(1, 0); car.engine = true; car.rpm = 1500; TICK(60)")
-    check(s.eval("next(HondaCRVGen1.Polish.cars) == nil"), "a layer that failed to start is not tracked")
+    check(s.eval("(function() for _ in pairs(HondaCRVGen1.Polish.cars) do return false end return true end)()"), "a layer that failed to start is not tracked")
     check(s.eval("(function() local n = 0; for _, e in ipairs(EMITTERS) do n = n + e.pitchCalls end; return n end)()") == 0,
           "nothing pitched for a layer that failed to start")
     s.run("FAIL_PLAY = false; TICK(30)")

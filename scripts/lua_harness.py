@@ -245,6 +245,7 @@ class Side:
         g.PY_SEND_SERVER = self._send_server
         g.PY_TRANSMIT_MODDATA = self._transmit
         self.L.execute(PRELUDE, role)
+        self.L.execute("next = nil")                      # the game's Kahlua has no global next (0.4.0 shipped one)
         self.L.execute("math.randomseed(%d)" % seed)
         self.player = player
         if player:
