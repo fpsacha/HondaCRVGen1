@@ -23,13 +23,19 @@ Where it sits (measured on the low parts of the 2026-10-19 main build, scratch a
   * the bag is clear of every other part that can be fitted on the right: the snorkel's ram head
     (x 0.58..0.72, y 0.14..0.38, z to 1.733), the ladder's top over the roof edge (x 0.52..0.68, y -1.70..
     -1.44, z to 1.769): BAG_Z0 1.79 stands over both; the flip-up glass (x to 0.624, hinge y -1.70): the
-    bag starts at x 0.635 and ends at y -1.62; the rack (x to 0.57). The antenna is on the LEFT A-pillar;
+    bag starts at x 0.635, outboard of it however far it swings up; the rack (x to 0.57). The antenna is on
+    the LEFT A-pillar;
+  * the bag is 2.8 m long (y -2.12..0.68; 2026-10-20, 40 % longer than the first 2.0 m one): past the roof's
+    rear end (y -1.80) over the gate to inside the bumper's line, and past the windscreen header (y 0.29) at
+    the front, as the 2.5 m rail-mounted awnings on these cars sit;
   * the canopy runs from the bag's lower outer edge (x 0.785, z 1.83) to x 2.55 at z 2.04 (a 1.77 m reach,
     rising 7 degrees: the bag sits at roof height and a standing character is ~1.72 m tall, so the outer edge
-    is the high one), y -1.59..0.35 (1.94 m), above the open doors (their tops at 1.62 m) and well clear of
-    their swing (the poles stand 1.74 m from the front door's hinge, the door is 1.1 m long).
+    is the high one), y -2.09..0.65 (2.74 m), above the open doors (their tops at 1.62 m) and the swung-open
+    gate, and clear of their swing (the front pole stands ~1.9 m from the front door's hinge, the door is
+    1.1 m long; the rear pole ~1.8 m from the gate's hinge). Two poles at the outer corners, as the 2.5 m
+    rail awnings have (no middle leg), and two rafters at the ends.
 
-Triangle budget (FEATURE_RULES: lean): bag + brackets ~160, canopy ~120, poles ~150 (BUILD reports them).
+Triangle budget (FEATURE_RULES: lean): bag + brackets ~160, canopy ~180, poles ~150 (BUILD reports them).
 Everything bakes on this feature's own 512 sheet ("awning", Vehicles_HondaCRVGen1_Awning.png, vehiclewheel
 shader); each piece carries its own ambient occlusion (acc_shade) like the other accessories.
 """
@@ -65,20 +71,30 @@ BRACKET_Y = (-1.20, -0.25)                    # clamps on the rail bar, between 
 BRACKET_W = 0.044                             # along y
 BAG_X = (0.635, 0.795)                        # the bag's inner and outer faces
 BAG_Z = (1.790, 1.910)                        # its underside and top
-BAG_Y = (-1.62, 0.38)                         # 2.0 m long
+BAG_Y = (-2.12, 0.68)                         # 2.8 m long (2026-10-20, the owner: "40% longer"; was -1.62..0.38, 2.0
+                                              # m): +0.50 m at the rear, +0.30 m at the front, so the brackets stay
+                                              # centred under it (0.92 / 0.93 m overhangs) and it ends inside the
+                                              # car's length (the bumper at y -2.24); the front end overhangs the
+                                              # windscreen header (y 0.29 at the roof's right edge) like the 2.5 m
+                                              # rail-mounted awnings on these cars; it clears the snorkel's head and
+                                              # the ladder's top below it (BAG_Z[0]) and the flip-up glass inboard
 BAG_R = 0.026                                 # section corner radius
 CAP = 0.014                                   # the hard end caps' length (rubber)
-STRAPS_Y = (-1.38, -0.62, 0.14)               # the velcro straps round the bag (painted bands, BAKE_TEXTURED)
+STRAPS_Y = tuple(round(BAG_Y[0] + (BAG_Y[1] - BAG_Y[0]) * f, 3) for f in (0.09, 0.363, 0.637, 0.91))
+                                              # the velcro straps round the bag (painted bands, BAKE_TEXTURED): 4
+                                              # evenly spread on the 2.8 m bag (3 on the 2.0 m one)
 STRAP_W = 0.045
 # canopy
 CAN_X = (0.785, 2.55)                         # the canvas root (inside the bag) and its outer edge
 CAN_Z = (1.830, 2.040)
 CAN_Y = (BAG_Y[0] + 0.03, BAG_Y[1] - 0.03)
 CAN_T = 0.006                                 # canvas thickness (a slab: its top and its underside are both seen)
-CAN_SAG = 0.045                               # between the rafters the canvas sags this much at its middle
-CAN_NU, CAN_NV = 6, 4                         # grid across the reach / along the car (round 5: was 4 x 2, whose
+CAN_SAG = 0.055                               # between the rafters the canvas sags this much at its middle (0.045
+                                              # over the 1.94 m canopy; its 2.74 m span sags a little more)
+CAN_NU, CAN_NV = 6, 6                         # grid across the reach / along the car (round 5: was 4 x 2, whose
                                               # 1 m faces drew the sag as two flat planes and the per-corner shade
-                                              # as dark diagonal blotches over the whole canvas)
+                                              # as dark diagonal blotches over the whole canvas; 6 along the 2.74 m
+                                              # canopy keeps its faces ~0.46 m, as the 4 did along 1.94 m)
 CAN_SHADE = (1.0, 0.90)                       # the slab's own shade, top / underside: smooth by construction (the
                                               # ray-cast acc_shade at 15 corners came out as triangles of 0.6-1.0)
 SEAMS_U = (1.0 / 3.0, 2.0 / 3.0)              # the canvas's panel seams, parallel to the bag (fraction of the reach)

@@ -14,7 +14,9 @@ Game-data checks on the generated mod files (system Python), each one a defect t
      put re-reads on the LiteratureCooldown), like all 84 vanilla recipe magazines;
   4. the owner's manual's oil figure (3.8 L / 4 US qt with the filter, not the 3.7 US qt without it);
   5. the cabin (2026-10-19): the interior models sit on part CRVCabin (no item, shown by its Lua init), never on
-     an item part such as GloveBox, whose removal hid the whole interior.
+     an item part such as GloveBox, whose removal hid the whole interior;
+  6. suspension (2026-10-20): each wheel can carry enough of the car's weight on the spring (travel) and under
+     Bullet's 6000 N limit with a fitted, loaded car, or a hard stop in a corner lands the body on the road.
 
     python scripts\test_gamedata.py [--mod42 <path to the mod's 42 folder>]
 """
@@ -49,6 +51,32 @@ def check_tuning(mod42):
                     fail("%s: %s = %s, want the tuned 300" % (fn, k, v.get(k)))
     print("GAMEDATA tuning: %d vehicle scripts, every key read by VehicleScript.Load, durability 300 front and rear"
           % len(names))
+
+
+# what one wheel can carry, as a multiple of its static load (spec/pz-conventions.md section 8): the spring
+# stops at maxSuspensionTravelCm x model scale, Bullet stops at 6000 N against script mass + parts + cargo
+# (FITTED_KG: ~310 vanilla parts + our accessories + some cargo). Below these the outer front wheel gives
+# out under a hard stop in a corner and the body lands on the road (2026-10-20)
+FITTED_KG, MIN_TRAVEL_CAP, MIN_FORCE_CAP = 680.0, 1.5, 1.7
+
+
+def check_suspension(mod42):
+    vdir = os.path.join(mod42, "media", "scripts", "vehicles")
+    out = []
+    for fn in sorted(f for f in os.listdir(vdir) if f.startswith(gen.VEHICLE) and f.endswith(".txt")):
+        for v in audit_mod.parse(open(os.path.join(vdir, fn), encoding="utf-8").read()).children[0].all("vehicle"):
+            scale = float(v.all("model")[0].get("scale"))
+            k, mass = float(v.get("suspensionStiffness")), float(v.get("mass"))
+            travel = v.get("maxSuspensionTravelCm")
+            if travel is None:
+                fail("%s: no maxSuspensionTravelCm (the SUV template's 10 cm leaves 2.6 cm of bump)" % fn)
+            travel_cap = 4 * k * float(travel) * scale / 100.0 / 9.8
+            force_cap = 6000.0 / ((mass + FITTED_KG) * 9.8 / 4)
+            if travel_cap < MIN_TRAVEL_CAP or force_cap < MIN_FORCE_CAP:
+                fail("%s: a wheel carries %.2f x its static load on the spring, %.2f x at Bullet's 6000 N with %d kg "
+                     "fitted (want %.2f / %.2f)" % (fn, travel_cap, force_cap, FITTED_KG, MIN_TRAVEL_CAP, MIN_FORCE_CAP))
+            out.append("%s %.2f/%.2f" % (v.name, travel_cap, force_cap))
+    print("GAMEDATA suspension: per-wheel capacity (spring / 6000 N with %d kg fitted): %s" % (FITTED_KG, ", ".join(out)))
 
 
 def check_routes(mod42):
@@ -167,6 +195,7 @@ def main():
     a = sys.argv[1:]
     mod42 = a[a.index("--mod42") + 1] if "--mod42" in a else gen.CHECKOUT_MOD42
     check_tuning(mod42)
+    check_suspension(mod42)
     check_cabin(mod42)
     check_routes(mod42)
     check_literature(mod42)

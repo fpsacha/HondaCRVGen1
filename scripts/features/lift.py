@@ -809,11 +809,23 @@ def _wheels(gen, x):
 # the game draws a wheel at offset + restLength - the current suspension length (BaseVehicle.updateTransform,
 # 42.21), so the ride height follows the static sag, which grows as 1 / suspensionStiffness. The softer 34
 # sat the car ~1 cm lower than LIFT_M (and pzview / lift_check) model; rollInfluence carries the extra roll.
+#
+# Roll and dive (2026-10-20, read from the game: gen_scripts TUNING, spec/pz-conventions.md section 8): Bullet's
+# centre of mass is the script origin, i.e. hub height. Dropping the wheels LIFT_M and fitting the taller tyre
+# raise it 0.236 -> 0.346 m over the road, so the same springs (same track, same roll stiffness) take ~47%
+# more load transfer per g: the lifted car rolls and dives more than the stock one with no tuning trick.
+# That transfer is what has to fit under each wheel's two limits. The 2026-10-15 fix (15 cm travel) lifted
+# the spring limit to 2.09 x the static load, but the other one, Bullet's 6000 N per wheel against the
+# game's mass (script + parts + cargo), stayed at 1.5 x on a fitted, loaded car: a hard stop in a corner
+# (1.6-2.0 x on the outer front wheel) still put the body on the road. Now MASS + 40 = 740 (1.72 x with
+# ~680 kg aboard) and engineForce 3640, so the power-to-weight with the usual parts is what it was
+# (4500 / 1300 = 3640 / 1050). The travel stays 15 cm: more buys little (the 6000 N limit comes first) and
+# at 0.15 the AT tyre's top already meets the arch lip (scripts/lift_check.py --bumps 0.15,0.18).
+# suspensionDamping / Compression here are inert in game: the suspension parts' items set them per wheel
+# (BaseVehicle.updatePartStats -> updateBulletStatsWheel); left as they were.
 def _tuning(gen):
-    # travel: the stock 10 cm is used up under a hard stop or turn while the lifted body hangs 7.5 cm higher,
-    # and the chassis hit the road (2026-10-15): 15 cm of travel. Roll back at the stock value: the extra
-    # roll was what let the body dip onto one side in a turn
-    return gen.tuning_with(engineForce="4500", maxSpeed="88.0", rollInfluence="0.95",
+    # roll back at the stock value: the extra roll (1.05) was what let the body dip onto one side in a turn
+    return gen.tuning_with(engineForce="3640", maxSpeed="88.0", rollInfluence="0.95",
                            suspensionRestLength="0.42", suspensionDamping="2.70", maxSuspensionTravelCm="15.0")
 
 

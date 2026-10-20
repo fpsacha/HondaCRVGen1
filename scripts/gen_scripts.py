@@ -77,8 +77,8 @@ SKINS = ["", "_white", "_black", "_red", "_blue", "_green", "_silver", "_gold"]
 
 # real RD1 numbers, converted with the factors in spec/pz-conventions.md section 4
 EXTENTS = "1.7500 1.2500 4.5200"        # metres, body box rocker-to-roof (KI5 convention; vanilla cars are half-size)
-CENTRE_OF_MASS = "0.0 0.4000 0.0"
-MASS = 950                    # (was 1450: the author 2026-10-13 "the car feels very slow"; see TUNING)
+CENTRE_OF_MASS = "0.0 0.4000 0.0"    # Java side only (extents / shadow centre): with `physics box`es Bullet never sees it
+MASS = 700                    # (1450, then 950 "feels very slow" 2026-10-13, 700 2026-10-20 scraping: see TUNING)
 
 DOORS = [("fl", "FrontLeft", "SeatFrontLeft", 270.0),
          ("fr", "FrontRight", "SeatFrontRight", 90.0),
@@ -574,16 +574,35 @@ ATTACHMENTS = [("trailer", "0.0 -0.4500 -2.4200", "-1.0"), ("trailerfront", "0.0
 # was 4200 / 1450 = 2.9, the slowest of them all ("feels very slow", the author). The RD1's 146 hp B20B in a
 # light compact SUV sits a touch above the vanilla SUV: 4800 / 950 = 5.05. Suspension forces scale with
 # the chassis mass in Bullet's raycast vehicle, so the ride height does not change with MASS.
+#
+# Suspension limits (2026-10-20, "the body touches the ground and makes a sound when I brake in a corner";
+# read from the 42.x jar and PZBullet64.dll, spec/pz-conventions.md section 8). The physics body is a
+# btRaycastVehicle whose centre of mass is the script origin (hub height: centerOfMassOffset never reaches
+# Bullet when `physics box`es are used). A wheel can carry at most
+#   * k x travel x mass: past maxSuspensionTravelCm (x the model scale 0.9) the spring stops pushing;
+#     the SUV template's 10 cm left the stock car 2.6 cm of bump over its 6.4 cm static sag (1.40 x its
+#     static load, the least of any vanilla or KI5 car surveyed); 11 cm gives 3.5 cm (1.54 x), the most
+#     before the front tyre's top meets the arch lip (scripts/lift_check.py --bumps 0.11,0.12). Past it
+#     the spring holds its force and the other three wheels take the rest: no scrape by itself
+#   * 6000 N (Bullet's default m_maxSuspensionForce, which PZ never raises), against a mass the game makes
+#     script mass + every fitted part's item weight + cargo (BaseVehicle.updateTotalMass): ~310 kg of
+#     vanilla parts, up to ~270 more of our accessories. At 950 a fitted, loaded car could hold only
+#     1.5 x its static load on the outer front wheel; a hard stop in a corner asks 1.6-2.0 x, the body
+#     pivots over that wheel until a physics box meets the road: jniIsCollide + a speed change > 1 m/s ->
+#     BaseVehicle.crash -> the VehicleCrash1/2 sound and a little front / rear damage.
+# MASS 700 (KI5's scale: ~half the real curb weight, as their Bronco 900 / Defender 750 / Hilux 700) keeps
+# that wheel under 6000 N for 1.7 x with ~680 kg of parts and cargo aboard; engineForce follows it so
+# acceleration with the usual parts (~310 kg) is what it was: 4800 / 1260 = 3850 / 1010.
 # Keys are the ones VehicleScript.Load reads in 42.21 (its string constants, PARSED_KEYS below): the
 # crash durability is `frontEndDurability` / `rearEndDurability` (read into the script's frontEndHealth
 # field, default 100; vanilla's generated scripts write the dead `frontEndHealth`). There is no
 # `brakingForce` key: BaseVehicle.updatePartStats sums the brake parts' items (getBrakeForce), so
 # braking follows the brakes fitted, as on every vanilla car.
 TUNING = [
-    ("engineForce", "4800"), ("maxSpeed", "95.0"), ("engineLoudness", "80"), ("engineQuality", "85"),
+    ("engineForce", "3850"), ("maxSpeed", "95.0"), ("engineLoudness", "80"), ("engineQuality", "85"),
     ("stoppingMovementForce", "3.4"), ("rollInfluence", "0.95"),
     ("suspensionStiffness", "38.0"), ("suspensionCompression", "3.83"), ("suspensionDamping", "2.88"),
-    ("suspensionRestLength", "0.35"), ("wheelFriction", "1.7"),
+    ("suspensionRestLength", "0.35"), ("maxSuspensionTravelCm", "11.0"), ("wheelFriction", "1.7"),
     ("frontEndDurability", "300"), ("rearEndDurability", "300"),
 ]
 # every string VehicleScript.Load compares a key or block name with (42.21 bytecode, javap of

@@ -62,13 +62,20 @@ HINGES = {
 # Gas struts on the flip-up glass (2026-10-17, the RD1 reference photos): one each side, from the D-pillar's
 # inner face below the glass to the glass's inner face. Right-side points (metres, shut); the left mirrors x.
 # The tube rides strut_*_tube_bone (on the body), the rod strut_*_rod_bone (a child of the glass bone); every
-# frame of trunk_opening aims each at the other end (strut_rotations), so the rod slides in the tube. Shut
-# 0.33 m between the ends, open 0.57 m: tube and rod 0.30 m each never poke past each other's end. The
-# ends were searched (2026-10-17) for a strut that clears the pillar's inner edge all the way: the body end
-# 3.7 cm off the pillar at the opening's top corner, the glass end 20 cm in from the glass's side.
-STRUT_B = (0.585, -1.89, 1.20)
-STRUT_G = (0.40, -1.863, 1.46)
-STRUT_TUBE, STRUT_ROD = 0.30, 0.30
+# frame of trunk_opening aims each at the other end (strut_rotations), so the rod slides in the tube: neither
+# is longer than the shut length (no end pokes past the other's eye) and together they overlap >= 6 cm open.
+# Until 2026-10-20 the body end sat low (0.585, -1.89, 1.20) and the glass end 20 cm in from the glass's side.
+# 2026-10-20 (the owner, first person: "the strut for the window is weirdly placed": it ran diagonally across the
+# glass from the pillar's foot to 20 cm in). The RD1's struts lie along the D-pillars: the body end is now HIGH on
+# the pillar trim's face (2.2 cm off it, under the roof corner), the glass end low on the glass at the same x, so
+# the shut strut runs down the trim's rear edge (x 0.48 against the edge's 0.50-0.57) and, seen from the cabin,
+# stands parallel to the pillar. A low body end cannot work: opening, the strut tilts back through the trim's rear
+# edge (z 1.39-1.41) by 5-10 mm whatever the glass end (scratch strut_search4/5, exact clearances over the travel:
+# only x 0.41 cleared). This pair clears body and interior by >= 7.6 mm over the whole swing, both sides; shut
+# 0.312 m between the ends, open 0.434 m.
+STRUT_B = (0.48, -1.85, 1.50)
+STRUT_G = (0.48, -1.987, 1.22)
+STRUT_TUBE, STRUT_ROD = 0.26, 0.24
 STRUT_R_TUBE, STRUT_R_ROD, STRUT_EYE = 0.011, 0.0045, 0.014
 STRUTS = {side: ((sx * STRUT_B[0], STRUT_B[1], STRUT_B[2]), (sx * STRUT_G[0], STRUT_G[1], STRUT_G[2]))
           for side, sx in (("r", 1.0), ("l", -1.0))}

@@ -140,7 +140,7 @@ def example(tmp, keep):
     lv = audit_mod.parse(lifted).children[0].all("vehicle")[0]
     check(lv.name == "HondaCRVGen1Example" and lv.get("offRoadEfficiency") == "1.25", "VEHICLE_SCRIPTS overrides")
     check(lv.all("model")[0].get("offset") == "0.0000 0.6417 0.0000", "second script's model offset")
-    check(lv.get("maxSpeed") == "90.0" and lv.get("engineForce") == "4800", "tuning_with")
+    check(lv.get("maxSpeed") == "90.0" and lv.get("engineForce") == "3850", "tuning_with")
     check("CRVExamplePlate" in {p.name for p in lv.all("part")}, "VEHICLE_PARTS in the second script too")
     check(not audit_mod.parse(lifted).children[0].all("model"), "the second script redeclares models")
     items = read(os.path.join(m, "scripts", "items", "HondaCRVGen1_items.txt"))

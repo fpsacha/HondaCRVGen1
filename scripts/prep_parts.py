@@ -70,11 +70,12 @@ ENGINE_BUDGET = 16000         # (v5; superseded by BUDGET in v6)
 # v7 cabin (2026-10-12): the interior keeps only kotris's shell, floor and firewall (520); the seats,
 # wheel, dash and the rest are build_cabin's `cabin` (1,292 coarse since the v8 seats, prebuilt like
 # the engine: it is decimated only if the coarse build comes out above its budget). 1,750 since the feature round
-# of 2026-10-19 (rounded seats and headrests, the walk-through tray with cup holders, round HVAC knobs)
+# of 2026-10-19 (rounded seats and headrests, the walk-through tray with cup holders, round HVAC knobs); 2,000 since
+# 2026-10-20 (the owner's first-person round: rounder rim, horn pads, clock and hazard, the front armrests)
 # The engine bay is not budgeted here since v2 (2026-10-17, spec/engine-bay-v2.md): build_bay.py builds it at
 # its final triangle count with no twin, so it is neither decimated nor projected (the bake self-bakes it)
 BUDGET = {"body": 3000, "hood": 380, "door_fl": 400, "door_fr": 400, "door_rl": 340, "door_rr": 340,
-          "trunk": 720, "trunk_top": 330, "interior": 520, "cabin": 1750,
+          "trunk": 720, "trunk_top": 330, "interior": 520, "cabin": 2000,
           "wheel_FR": 450, "wheel_FL": 450, "wheel_RR": 450, "wheel_RL": 450}
 SMALL_PIECES = {}                       # part -> closed pieces under this size are dropped before decimating
 # islands decimated on their own budget inside a part's: one budget for the gate and the spare let
@@ -1168,6 +1169,80 @@ def LINING_LAMP(mat):
     return mat == "SeamBack" or mat.startswith("Feux") or mat.startswith("Reflect")
 
 
+# The D-pillar trim's foot (2026-10-20, the owner in first person: "I can see outside", the white pillar trim does not
+# close and "jagged white triangles with red edges" show under it). kotris's trim ends on an open edge PILLAR_FOOT
+# (A forward by the quarter glass, B at the opening; |x|, y, z) 4-10 cm over the lamp; under it the eye met the cargo
+# lining above (copies of the decimated tail lamp's faces, light grey above z 1.10 by the Interieur zmix, red body
+# backs in the slivers between them). A flat trim panel now hangs straight down from that edge to PILLAR_FOOT_Z, facing
+# the cabin, in the trim's material: a vertical plane through A-B with nothing of the body, gate, glass, interior or
+# cabin in front of it (scratch panel_fit.py: 0 vertices within the outline), so the lining stays behind it unseen.
+# Behind the trim's rear edge B-C (C = (0.534, -1.916, 1.387)) the lining showed in a 0-5 cm slot up to the glass:
+# PILLAR_JAMB closes it, a face from that edge back to just in front of the glass, facing the cabin. And lining copies of faces just behind the trim poked through it
+# by 0.5-3 mm in slivers (scratch sliver_test.py: 9 faces, kotris trim face normal PILLAR_TRIM_N): _cargo_lining skips
+# a copy with a corner in front of the trim's plane above its lower edge (the trim covers that face from the cabin).
+PILLAR_FOOT = ((0.664, -1.767, 1.226), (0.574, -1.893, 1.284))
+PILLAR_FOOT_Z = 1.00
+# (the glass behind the edge, rays from the cabin: y -1.943 at B, -1.935 at z 1.335, -1.916 at C, where the trim's edge
+# meets it; the jamb's rear edge stays 6 mm in front of it: a first build ran it to -1.95 at C, through the glass, and
+# its backfilled copy showed outside, 41-74 cabin px in the shut ring)
+PILLAR_JAMB = ((0.574, -1.893, 1.284), (0.574, -1.937, 1.284), (0.554, -1.929, 1.335), (0.534, -1.916, 1.387))
+# and the trim itself has a triangular hole at that edge (B, its vertex D, C: open edges B-D on one trim face and D-C on
+# the next, pzview probe through it: the glass frame's red and white), filled
+PILLAR_GAP = ((0.574, -1.893, 1.284), (0.546, -1.852, 1.384), (0.534, -1.916, 1.387))
+PILLAR_TRIM_N = (-0.82, 0.40, -0.40)           # right side; |x| mirrors it
+
+
+def _pokes_trim(pts):
+    """True when a lining copy [(x, y, z)] has a corner in front of the kotris D-pillar trim's plane (through
+    PILLAR_FOOT's B, normal PILLAR_TRIM_N) above the trim's lower edge A-B, in the trim's corner box."""
+    (ax, ay, az), (bx, by, bz) = PILLAR_FOOT
+    nx, ny, nz = PILLAR_TRIM_N
+    nl = (nx * nx + ny * ny + nz * nz) ** 0.5
+    for p in pts:
+        x, y, z = abs(p[0]), p[1], p[2]
+        if not (0.50 <= x <= 0.72 and -1.93 <= y <= -1.76 and z <= 1.45):
+            continue
+        t = max(0.0, min(1.0, (y - ay) / (by - ay)))
+        if z <= az + (bz - az) * t:
+            continue
+        if ((x - bx) * nx + (y - by) * ny + (z - bz) * nz) / nl > -0.003:
+            return True
+    return False
+
+
+def _pillar_foot_panels(report):
+    it = bpy.data.objects.get("interior")
+    if it is None:
+        return 0
+    ime = it.data
+    mi = _mat_index(ime, "Interieur")
+    Wi = it.matrix_world.inverted()
+    bm = bmesh.new()
+    bm.from_mesh(ime)
+    gl = _gen_layer(bm)
+    k = 0
+    (ax, ay, az), (bx, by, bz) = PILLAR_FOOT
+    for sx in (1.0, -1.0):
+        foot = [(sx * ax, ay, PILLAR_FOOT_Z), (sx * bx, by, PILLAR_FOOT_Z), (sx * bx, by, bz), (sx * ax, ay, az)]
+        jamb = [(sx * x, y, z) for x, y, z in PILLAR_JAMB]
+        gap = [(sx * x, y, z) for x, y, z in PILLAR_GAP]
+        for quad in (foot, jamb, gap):
+            q = [Vector(p) for p in quad]
+            if (q[1] - q[0]).cross(q[2] - q[0]).x * sx > 0:
+                q.reverse()                               # wound to face the cabin (+x on the left, -x on the right)
+            f = bm.faces.new([bm.verts.new(Wi @ p) for p in q])
+            f.material_index = mi
+            f.smooth = False
+            f[gl] = 5
+            k += len(q) - 2
+    bm.to_mesh(ime)
+    bm.free()
+    ime.update()
+    report("  interior   cargo corner D-pillar trim feet, jambs and gaps: %d tris (the trim's open lower edge closed down"
+           " to z %.2f)" % (k, PILLAR_FOOT_Z))            # "cargo corner": a line build.py keeps
+    return k
+
+
 def _cargo_lining(report):
     body = bpy.data.objects.get("body")
     it = bpy.data.objects.get("interior")
@@ -1184,6 +1259,7 @@ def _cargo_lining(report):
     M = body.matrix_world
     R = M.to_3x3()
     picks = []
+    poked = 0
     backs = []
     for p in me.polygons:
         if gv[p.index] not in (0, 5) or names[p.material_index] in PANE_MATS:
@@ -1196,11 +1272,19 @@ def _cargo_lining(report):
         # every face whose back turns to an eye: a test of the face's own points missed the slivers between the lined
         # faces and the housing (teeth of open skin in a first build); lining a hidden back costs only its triangles
         if any((e - c).dot(n) < 0.0 for e in eyes):
-            picks.append([v - n * LINING_D for v in reversed(vs)])
+            pts = [v - n * LINING_D for v in reversed(vs)]
+            if _pokes_trim(pts):
+                poked += 1                                # behind the D-pillar trim: its copy would poke through it
+            else:
+                picks.append(pts)
             if c.y < LINING_BACK_Y:
                 backs.append([v - n * 0.0005 for v in reversed(vs)])
         elif LINING_LAMP(names[p.material_index]):
-            picks.append([v + n * LINING_D for v in vs])  # a lamp's inner side or plate turned to the cabin: covered too
+            pts = [v + n * LINING_D for v in vs]          # a lamp's inner side or plate turned to the cabin: covered too
+            if _pokes_trim(pts):
+                poked += 1
+            else:
+                picks.append(pts)
     if not picks:
         report("  interior   cargo corner lining: nothing seen from behind")
         return 0
@@ -1254,7 +1338,7 @@ def _cargo_lining(report):
         if len(normals) == len(me.loops) and all(v is not None for v in normals):
             me.normals_split_custom_set(normals)
     report("  interior   cargo corner lining: %d tris, %d body faces turned away from the cargo's eyes in its rear corners lined "
-           "(+%d dark back tris on the body by the opening)" % (k, len(picks), nb))
+           "(+%d dark back tris on the body by the opening; %d copies behind the D-pillar trim skipped)" % (k, len(picks), nb, poked))
     return k
 
 
@@ -5454,6 +5538,7 @@ def prep(report=print):
         report("  interior closures: %d housing slices" % _interior_closures(it))
         build_cabin.carve_footwells(report, it)                         # where the seated passengers' soles land
         _cargo_lining(report)                                           # the cargo's rear corners beside the lamps
+        _pillar_foot_panels(report)                                     # and the D-pillar trim's open foot over them
     _prune(report)
     total = 0
     for name in PARTS + ["engine_block", "cabin"]:

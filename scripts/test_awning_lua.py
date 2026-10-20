@@ -7,7 +7,8 @@ Lua 5.1) on scripts/lua_harness.py, single player and a dedicated server with tw
     shows the canopy and the poles on every side that draws the car, rolling it up hides them again;
   * the rules: engine off, standing still, out of the car, not broken; the car rolls it up itself when its
     engine runs, and tears it when it moves fast with it out; removing it rolls it up;
-  * the footprint (the car's local frame through getLocalPos and the script's model scale) and the cut-away:
+  * the footprint (Awning.AREA is features/awning.py's footprint(), the canopy the build makes; the car's local
+    frame through getLocalPos and the script's model scale; its ends and edges) and the cut-away:
     a client hides the canopy (not the poles) while ITS player stands under it, every other client keeps it;
     Project Viewpoint's first / third person keep it;
   * the rain: where the game is authoritative (single player, the server; never a multiplayer client), a
@@ -20,6 +21,7 @@ Lua 5.1) on scripts/lua_harness.py, single player and a dedicated server with tw
 """
 import sys
 
+from features import awning
 from lua_harness import Net, Side
 
 STATE = ("shared/HondaCRVGen1_State.lua", "server/HondaCRVGen1_StateServer.lua", "client/HondaCRVGen1_StateClient.lua")
@@ -199,12 +201,23 @@ def single_player():
     check(sp.eval("act:complete()") is True and sp.eval("A.isDeployed(v)") is True, "complete(): rolled out")
     check(sp.eval("vis(v)") == "BCP", "rolled out: bag, canopy, poles (%s)" % sp.eval("vis(v)"))
     check(sp.eval("v.parts.CRVAwning.md.crv_awning_deployed") is True, "the state is in the part's mod data")
-    # the footprint and the cut-away
+    # the footprint and the cut-away: the Lua's AREA is the canopy features/awning.py builds (footprint())
+    x0, x1, y0, y1 = awning.footprint()
+    lua = tuple(sp.eval("A.AREA.%s" % k) for k in ("x0", "x1", "y0", "y1"))
+    check(all(abs(a - b) < 1e-6 for a, b in zip(lua, (x0, x1, y0, y1))),
+          "Awning.AREA %s is the built canopy's footprint %s" % (lua, tuple(round(c, 4) for c in (x0, x1, y0, y1))))
+    check(abs((y1 - y0) - 2.74) < 0.01 and abs((x1 - x0) - 1.815) < 0.01,
+          "the footprint is 2.74 m along the car, 1.8 m out from it (%.3f x %.3f)" % (y1 - y0, x1 - x0))
     sp.run("PLAYER.x, PLAYER.y = worldAt(v, 1.6, -0.6); TICK(5)")
     check(sp.eval("A.isUnder(v, PLAYER)") is True, "a player beside the right doors is under it")
     check(sp.eval("vis(v)") == "B-P", "the player under it: canopy cut away, poles kept (%s)" % sp.eval("vis(v)"))
-    for (mx, my, what) in ((-1.6, -0.6, "the left side"), (2.8, -0.6, "past the poles"), (1.6, 0.6, "ahead of it"),
-                           (1.6, -1.8, "behind it"), (0.5, -0.6, "the car's own roof line")):
+    for (mx, my, what) in ((1.6, y1 - 0.1, "under its front end (by the front door's hinge)"),
+                           (1.6, y0 + 0.1, "under its rear end (behind the rear wheel)"),
+                           (x1 - 0.05, -0.6, "just inside the poles")):
+        sp.run("PLAYER.x, PLAYER.y = worldAt(v, %r, %r)" % (mx, my))
+        check(sp.eval("A.isUnder(v, PLAYER)") is True, "under it: %s" % what)
+    for (mx, my, what) in ((-1.6, -0.6, "the left side"), (x1 + 0.25, -0.6, "past the poles"), (1.6, y1 + 0.2, "ahead of it"),
+                           (1.6, y0 - 0.2, "behind it"), (0.5, -0.6, "the car's own roof line")):
         sp.run("PLAYER.x, PLAYER.y = worldAt(v, %r, %r)" % (mx, my))
         check(sp.eval("A.isUnder(v, PLAYER)") is False, "not under it: %s" % what)
     sp.run("TICK(5)")

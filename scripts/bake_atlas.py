@@ -225,7 +225,14 @@ TEXTURED = {
                       ("decal", "cabin_cluster.png", ("x", -0.575, -0.225), ("z", 1.035, 1.165), "replace",
                        [("normal", "y", "<", -0.6), ("range", "y", 0.475, 0.53)]),
                       ("decal", "cabin_dash_top.png", ("x", 0.10, 0.74), ("y", 0.56, 0.88), "multiply",
-                       [("normal", "z", ">", 0.5), ("range", "z", 1.0, 1.3)])],
+                       [("normal", "z", ">", 0.5), ("range", "z", 1.0, 1.3)]),
+                      # the steering wheel face-on (2026-10-20, build_cabin.paint_wheel: badge, horn pads, SRS badge, the
+                      # rim's perforated grips), mapped in the wheel's own plane: u along its in-plane right, v its up
+                      # (build_cabin.wheel_decal_frame(), printed by the cabin build), on the faces turned to the driver
+                      # in front of the binnacle (y < 0.47: not the cluster pod or the stalks)
+                      ("decal", "cabin_wheel.png", ((0.9998, 0.01909, -0.00577), -0.60265, -0.17265),
+                       ((0.0, 0.28918, 0.95728), 0.89534, 1.32534), "replace",
+                       [("normal", "y", "<", -0.5), ("range", "y", 0.30, 0.47)])],
     # cabin_dash.png (vents, radio, HVAC, glovebox, switch bank) on the faces turned to the cabin
     "CabDash":       [("box", "fabric_leather_01_diffuse_1k.jpg",     0.15, (0.072, 0.072, 0.075), 0.50),
                       ("decal", "cabin_dash.png", ("x", -0.72, 0.72), ("z", 0.48, 1.21), "replace",
@@ -936,6 +943,9 @@ DECAL_WEIGHT_MAT = {"DecalRadFins": 0.5, "DecalTieBar": 1.5, "DecalIntakeAirboxF
 # exact decal weights, not snapped to WEIGHT_LEVELS (their own chart group): the cam cover's front band carries
 # "HONDA MOTOR CO." in ~1.5 cm letters, ~4 texels tall at the snapped 4 (polish round 1, 2026-10-17)
 DECAL_WEIGHT_EXACT = {"DecalCoverFront": 6.0}
+# the instrument cluster's face (build_cabin.paint_cluster), exact, its own chart group: 7.2 texels/cm, the speedometer's
+# 7.5 mm numerals ~5.4 texels tall (2026-10-20, the owner: "the speedo legend should stay readable"); ~3 % of the sheet
+CLUSTER_WEIGHT = 6.0
 # every weight is snapped to one of these (nearest in log2) before the xatlas pass: each distinct
 # weight is its own mesh group for xatlas, and 17 groups per object fragmented the sheet into
 # ~9.5k charts whose padding ate three quarters of it (2026-10-12)
@@ -1086,14 +1096,17 @@ def _face_weights(ob, space):
             w = DECAL_WEIGHT_MAT[mat]
         elif mat.startswith("Decal"):
             w = DECAL_WEIGHT
+        elif (ob.name == "cabin" and p.normal.y < -0.5 and -0.59 < p.center.x < -0.21 and 1.02 < p.center.z < 1.18
+              and p.center.y > 0.47):
+            out.append(CLUSTER_WEIGHT)   # exact: the cluster face (2026-10-20: its numerals were ~5 texels tall at 4)
+            continue
         elif ob.name == "cabin" and p.normal.y < -0.5 and (
-                (-0.59 < p.center.x < -0.21 and 1.02 < p.center.z < 1.18 and p.center.y > 0.47)
-                or (-0.14 < p.center.x < 0.14 and 0.72 < p.center.z < 1.20 and p.center.y < 0.58)
-                or (-0.51 < p.center.x < -0.27 and 0.94 < p.center.z < 1.13 and p.center.y < 0.425)):
-            w = 3.0          # the cluster face (y > 0.47: not the wheel), the centre stack (y < 0.58: not the dash
-                             # face hidden behind it) and the hub pad with its H carry the painted / projected detail;
-                             # at 1x the cluster was white specks and the H lost its crossbar (1.2 texels/cm at 1024).
-                             # The pad grew to 22 x 17 cm in the feature round (2026-10-19): its box with it
+                (-0.14 < p.center.x < 0.14 and 0.72 < p.center.z < 1.20 and p.center.y < 0.58)
+                or (-0.61 < p.center.x < -0.17 and 0.82 < p.center.z < 1.24 and 0.30 < p.center.y < 0.47)):
+            w = 3.0          # the centre stack (y < 0.58: not the dash face hidden behind it) and the steering wheel's
+                             # driver-facing faces (cabin_wheel.png: badge, horn pads, grips; y 0.30-0.47: not the seat
+                             # backs, not the cluster) carry painted detail; at 1x the H lost its crossbar (1.2
+                             # texels/cm at 1024). 2026-10-20: the whole wheel, not only the pad (one density for the decal)
         elif ob.name == "acc_spare_cover" and p.normal.y < -0.75:
             w = SPARE_WEIGHT                             # the cover's face carries the CR-V print
         elif (SPARE_HUB_WEIGHT and space == "shell" and ob.name == "trunk" and hub is not None and mat in SPARE_HUB_WEIGHT_MATS

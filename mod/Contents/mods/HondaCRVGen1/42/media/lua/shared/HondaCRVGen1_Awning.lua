@@ -18,7 +18,7 @@ and the poles from the state: on the part's init (the car created, loaded or str
 State module reports, and when the part's item changes under a client (State.watchPart), as the roof rack's
 cargo does (HondaCRVGen1Accessories.lua).
 
-The canopy hides whatever stands under it from the game's camera (it is drawn opaque, 2.0 x 1.8 m, 2 m up).
+The canopy hides whatever stands under it from the game's camera (it is drawn opaque, 2.74 x 1.8 m, 2 m up).
 A client therefore leaves the canopy out of ITS OWN drawing while ITS player stands under it (Awning.localHide):
 the poles stay, like the game's own roofs that cut away over the player in a building. Every other player
 still sees it. Project Viewpoint's first- and third-person cameras look up at the canvas from under it: the
@@ -40,8 +40,9 @@ Awning.PART = "CRVAwning"
 Awning.ITEM = "Base.CRVGen1_Awning"
 Awning.KEY = "awning_deployed"
 Awning.MODELS = { canopy = "AwningCanopy", poles = "AwningPoles" }
--- the ground under the canopy: mesh metres, +x the car's right, +y forward (features/awning.py footprint())
-Awning.AREA = { x0 = 0.735, x1 = 2.55, y0 = -1.59, y1 = 0.35 }
+-- the ground under the canopy: mesh metres, +x the car's right, +y forward (features/awning.py footprint(); the
+-- canopy is 1.8 m out from the car and 2.74 m along it; scripts/test_awning_lua.py checks the two agree)
+Awning.AREA = { x0 = 0.735, x1 = 2.55, y0 = -2.09, y1 = 0.65 }
 Awning.SPAWN = 3                  -- percent of CR-Vs that spawn with one (stowed), before the sandbox scale
 Awning.MOVE_KMH = 1.0             -- faster than this, or the engine running: the car rolls it up
 Awning.TEAR_KMH = 8.0             -- faster than this with it still out: it tears

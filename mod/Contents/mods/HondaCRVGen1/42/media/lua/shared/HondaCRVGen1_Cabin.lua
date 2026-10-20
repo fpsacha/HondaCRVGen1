@@ -34,4 +34,5 @@ end
 -- part init (CRVCabin, every side)
 function Cabin.Init(vehicle, part)
     Cabin.show(vehicle)
+    if HondaCRVGen1.Power then HondaCRVGen1.Power.fix(vehicle) end   -- pre-0.4.2 saves (HondaCRVGen1_Power.lua)
 end

@@ -84,11 +84,11 @@ module Base
 			ignitionFail = VehicleIgnitionFailSmallCar,
 		}
 
-		mass = 990,
+		mass = 740,
 		extents = 1.7500 1.2500 4.5200,
 		physicsChassisShape = 1.7500 1.2500 4.5200,
 		centerOfMassOffset = 0.0 0.4000 0.0,
-		engineForce = 4500,
+		engineForce = 3640,
 		maxSpeed = 88.0,
 		engineLoudness = 80,
 		engineQuality = 85,
@@ -98,10 +98,10 @@ module Base
 		suspensionCompression = 3.83,
 		suspensionDamping = 2.70,
 		suspensionRestLength = 0.42,
+		maxSuspensionTravelCm = 15.0,
 		wheelFriction = 1.7,
 		frontEndDurability = 300,
 		rearEndDurability = 300,
-		maxSuspensionTravelCm = 15.0,
 		useChassisPhysicsCollision = false,
 		physics box
 		{

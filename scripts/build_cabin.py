@@ -23,10 +23,18 @@ since the feature round of 2026-10-19 (front seats 208 -> 348 each: rounded bols
 front roll, chamfered backrest top with rounded shoulders, rounded headrests; the walk-through tray with two
 cup holders 36 -> 134 with the handbrake; three round HVAC knobs +66; the large airbag pad +24). Both
 passes place the same pieces on the same centre lines, so the projection maps 1:1. The full pass also
-paints the three decals the bake maps by object position (bake_atlas.TEXTURED): blender/bake/cabin_dash.png
-(vents, head unit, HVAC, glovebox, switch bank on the dash face), blender/bake/cabin_cluster.png (the four
-gauges) and blender/bake/cabin_dash_top.png (the passenger airbag door's seam on the dash top). The file
+paints the four decals the bake maps by object position (bake_atlas.TEXTURED): blender/bake/cabin_dash.png
+(vents, clock, hazard, head unit, HVAC, glovebox, switch bank on the dash face), blender/bake/cabin_cluster.png
+(the three gauges), blender/bake/cabin_dash_top.png (the passenger airbag door's seam on the dash top) and
+blender/bake/cabin_wheel.png (the steering wheel face-on, in the wheel's own plane). The file
 name is not cluster.png: paint_engine_decals.cluster() writes that one.
+
+2026-10-20 (the owner in first person, photos 111-119 of real RD1s): the wheel's broad 3 / 9 o'clock spokes and
+the lower pair at 5 / 7 o'clock round a large tapered pad with raised horn pads, the badge, SRS mark and grips
+painted (paint_wheel), a 32-gon rim; the 97-01 cluster's three gauges on a charcoal face (paint_cluster:
+tachometer, km/h speedometer, fuel / temperature with the P R N D 2 1 strip; this supersedes the four-gauge note
+below); the 2000 facelift's top strip (vent, hazard, clock, vent) and stack (head unit over a pocket, the HVAC
+knobs with printed rings and the button column, lighter and coin tray); fold-down armrests on both front seats.
 
 RD1 facts used (scratchpad references: Car and Driver 1999 EX press photo, a 1999 EX automatic
 dealer photo; 2026-10-17 the Japanese Classics RD1 set, blender/references/engine_bay/web_jpc_other: DSC_7939
@@ -95,7 +103,8 @@ SHIFTER = "column"
 SMOOTH_ANGLE = math.radians(32)  # boxes and the dash: sharp corners, rounded only in the full twin
 ROUND = math.radians(75)          # tubes and the rim: 6-8 sides meet at 45-60 deg and must shade round
 SOFT = math.radians(60)           # seats: bolster slopes shade soft, the cushion's square edges stay crisp
-BUDGET = 1750                    # coarse triangles; prep_parts.BUDGET["cabin"] decimates above it
+BUDGET = 2000                    # coarse triangles; prep_parts.BUDGET["cabin"] decimates above it (2026-10-20: the 32-gon
+                                 # rim, horn pads, clock and hazard, the armrests)
 
 # Principled base colours = bake_atlas.PALETTE (linear), so Workbench previews and direct bakes agree.
 # The tints in bake_atlas.TEXTURED land them at sRGB 52 / 64 / 85 / 57 (KI5's Bronco sheet: mean 29).
@@ -118,9 +127,15 @@ X, Y, Z = Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1))
 # ---- measured layout (metres)
 C_WHEEL = Vector((-0.39, 0.43, 1.03))                    # kotris PCA centre (-0.387, 0.430, 1.033)
 N_WHEEL = Vector((0.02, -0.96, 0.29)).normalized()        # wheel normal toward the driver: 16.8 deg from vertical
-R_RIM, T_RIM = 0.190, 0.017                               # rim centre-line radius, tube radius (kotris diameter 0.394)
-HUB_HALF = (0.112, 0.084)          # airbag pad half width / height (22.4 x 16.8 cm: DSC_7939, ~0.6 of the rim's width)
-HUB_UP = 0.012                     # the pad's centre over the wheel's
+R_RIM, T_RIM = 0.190, 0.019                               # rim centre-line radius, tube radius (kotris diameter 0.394;
+                                                          # 1.7 -> 1.9 cm 2026-10-20, the owner: "slightly thicker")
+# 2026-10-20 (the owner's photos 112-114 and DSC_7939): the RD1's airbag pad fills most of the wheel, 0.68 of the
+# rim's outer width across its horn-pad shoulders, its lower half tapering into the two lower spokes (HUB_TAPER: the
+# outline's half width shrinks by this fraction toward the bottom). v9's 22 x 17 cm pad with thin bar spokes read as
+# a small hub on a cross.
+HUB_HALF = (0.126, 0.090)          # airbag pad half width / height (25 x 18 cm)
+HUB_TAPER = 0.22
+HUB_UP = 0.010                     # the pad's centre over the wheel's
 HUB_RINGS = ((-0.012, 1.0), (0.034, 1.0), (0.050, 0.84))   # (toward the driver, outline scale): a domed pad
 FIREWALL = [(0.00, 0.958), (0.10, 0.955), (0.22, 0.948), (0.30, 0.937), (0.38, 0.924), (0.46, 0.907),
             (0.54, 0.883), (0.62, 0.852), (0.66, 0.830), (0.725, 0.800)]   # kotris firewall y by |x| (body side past 0.66)
@@ -533,13 +548,15 @@ def _box_without(spec, hidden, fine):
     return v, [f[i] for i in keep], [t[i] for i in keep]
 
 
-def _proud_box(b, piece, x0, x1, z0, z1, face, proud, mat="CabDash", name="detail"):
-    """A small block standing `proud` off a face given as y(z): the detail's back sits 3 mm inside it."""
+def _proud_box(b, piece, x0, x1, z0, z1, face, proud, mat="CabDash", name="detail", coarse=False):
+    """A small block standing `proud` off a face given as y(z): the detail's back sits 3 mm inside it. coarse: the
+    shipped build drops the back (face 4, inside the face)."""
     yb0, yb1 = face(z0) + 0.003, face(z1) + 0.003
     yf0, yf1 = face(z0) - proud, face(z1) - proud
     corners = [(x0, yf0, z0), (x1, yf0, z0), (x1, yb0, z0), (x0, yb0, z0),
                (x0, yf1, z1), (x1, yf1, z1), (x1, yb1, z1), (x0, yb1, z1)]
-    return b.add(piece, name, hexa(corners), [mat], smooth=False)
+    return b.add(piece, name, hexa(corners), [mat], smooth=False,
+                 keep=(lambda t: t != 4) if coarse and not b.fine else None)
 
 
 def _frame_boxes(b, piece, x0, x1, z0, z1, w, face, proud, name):
@@ -548,11 +565,25 @@ def _frame_boxes(b, piece, x0, x1, z0, z1, w, face, proud, name):
 
 
 # The centre stack's controls (feature round 2026-10-19), shared by the full twin's relief and cabin_dash.png
-VENTS_C = ((-0.125, -0.025), (0.025, 0.125))               # twin centre vents (x0, x1), z 1.100..1.155
+# 2026-10-20, the owner's photos of the 2000 facelift's stack (images 116-119; 119 wins for the layout): ONE strip
+# across the top, left vent | red hazard switch | clock pod (amber digits, H M R buttons) | right vent (8.7, 1.9, 4.6,
+# 8.7 cm); under it the head unit in a recessed bezel with a storage pocket below it; the HVAC panel: three round
+# knobs with printed rings and a column of three buttons at its right edge (recirculation, A/C, rear defrost); the
+# lighter and the coin tray in the lower stack. Measured off photo 119 against the head unit's 18.4 cm bezel.
+VENTS_C = ((-0.1285, -0.0415), (0.0415, 0.1285))           # twin centre vents (x0, x1), z 1.100..1.155
 VENT_LOUVRES = 4                                           # their louvres (decal and twin)
-HVAC_X, HVAC_Z, HVAC_R = (-0.075, 0.0, 0.075), 0.915, 0.020   # three rotary knobs: fan, temperature, mode
+HAZARD = (-0.0355, -0.0165, 1.116, 1.141)                  # x0, x1, z0, z1: the hazard switch's bezel
+CLOCK = (-0.0105, 0.0355, 1.106, 1.151)                    # the clock pod (its display window in the upper half)
+RADIO_BEZEL = (-0.098, 0.098, 0.930, 1.074)                # the recessed bezel round the head unit and the pocket
+RADIO = (-0.090, 0.090, 1.000, 1.066)                      # the head unit
+POCKET = (-0.086, 0.086, 0.940, 0.990)                     # the storage pocket under it
+HVAC_PANEL = (-0.120, 0.120, 0.836, 0.924)
+HVAC_X, HVAC_Z, HVAC_R = (-0.084, -0.024, 0.036), 0.880, 0.021   # three rotary knobs: fan, temperature, mode
+HVAC_BTN_X, HVAC_BTN_Z = 0.094, (0.903, 0.880, 0.857)      # recirculation, A/C, rear defrost (3.0 x 1.7 cm each)
 HVAC_PROUD = 0.013
-RADIO_KNOB_Z, RADIO_KNOB_R = 1.020, 0.010                  # the head unit's volume and tuning knobs at x -/+0.072
+RADIO_KNOB_Z, RADIO_KNOB_R = 1.034, 0.010                  # the head unit's volume and tuning knobs at x -/+0.072
+LIGHTER = (-0.072, 0.795, 0.011)                           # x, z, r: the cigarette lighter in the lower stack
+COIN_TRAY = (-0.040, 0.104, 0.772, 0.818)                  # its coin / ash tray recess beside it
 
 
 def _vent_relief(b, x0, x1, z0, z1, n, face, name, frame=0.006):
@@ -575,6 +606,14 @@ def hvac_knobs(b):
         b.add("dash", "knob%d" % i, tube((x, y + 0.002, HVAC_Z), (x, y - HVAC_PROUD, HVAC_Z), HVAC_R, 20 if b.fine else 8,
                                           False, True, phase=math.pi / 8), ["CabDash"], smooth=ROUND,
               bevel=0.003 if b.fine else 0.0)
+        if b.fine:                                         # the grip ridge across the knob's face (photo 118)
+            b.add("dash", "knob_ridge", obox((x, y - HVAC_PROUD - 0.003, HVAC_Z), X, Y, Z, 0.0035, 0.004, HVAC_R * 0.85),
+                  ["CabDash"], bevel=0.0015)
+    # the clock pod and the hazard switch stand off the top strip in both builds (10 triangles each): from the seats
+    # they are the strip's only relief between the vents
+    stack = lambda z: STACK[2]                              # noqa: E731
+    _proud_box(b, "dash", *CLOCK, stack, 0.005, name="clock", coarse=True)
+    _proud_box(b, "dash", *HAZARD, stack, 0.007, name="hazard", coarse=True)
     if b.fine:
         for x in (-0.072, 0.072):
             b.add("dash", "radio_knob", tube((x, y + 0.002, RADIO_KNOB_Z), (x, y - 0.012, RADIO_KNOB_Z), RADIO_KNOB_R, 16),
@@ -586,15 +625,25 @@ def _dash_details(b):
     stack = lambda z: STACK[2]                              # noqa: E731  the slab face is vertical
     for i, (x0, x1) in enumerate(VENTS_C):                 # centre vents: bezel, pocket, louvres
         _vent_relief(b, x0, x1, 1.100, 1.155, VENT_LOUVRES, stack, "cvent%d_" % i)
-    _proud_box(b, "dash", 0.008, 0.021, 1.113, 1.142, stack, 0.006, name="hazard")
-    _frame_boxes(b, "dash", -0.092, 0.092, 0.972, 1.068, 0.005, stack, 0.006, "radio")   # head unit: bezel,
-    _proud_box(b, "dash", -0.050, 0.050, 1.008, 1.022, stack, 0.003, name="cassette")    # cassette door, presets
+    hx0, hx1, hz0, hz1 = HAZARD                             # the hazard's red button inside its bezel
+    _proud_box(b, "dash", hx0 + 0.003, hx1 - 0.003, hz0 + 0.003, hz1 - 0.003, stack, 0.010, name="hazard_btn")
+    cx0, cx1, cz0, cz1 = CLOCK                              # the clock: its frame round the display, three buttons
+    _frame_boxes(b, "dash", cx0, cx1, cz0 + 0.017, cz1, 0.003, stack, 0.008, "clockrim")
+    for k in range(3):
+        x = cx0 + 0.0095 + k * 0.0135
+        _proud_box(b, "dash", x - 0.0045, x + 0.0045, cz0 + 0.004, cz0 + 0.009, stack, 0.008, name="clock_btn%d" % k)
+    _frame_boxes(b, "dash", *RADIO_BEZEL, 0.006, stack, 0.004, "radio_bezel")             # the recessed bezel's lip
+    _frame_boxes(b, "dash", *RADIO, 0.004, stack, 0.007, "radio")                         # head unit, its presets
     for k in range(6):
         x = -0.0625 + 0.025 * k
-        _proud_box(b, "dash", x - 0.0105, x + 0.0105, 0.982, 0.997, stack, 0.004, name="preset%d" % k)
-    for k, x in enumerate((-0.090, -0.030, 0.030, 0.090)):  # A/C, recirculation and the rest
-        _proud_box(b, "dash", x - 0.008, x + 0.008, 0.865, 0.879, stack, 0.004, name="hvac_btn%d" % k)
-    _frame_boxes(b, "dash", -0.110, 0.110, 0.758, 0.822, 0.006, stack, 0.006, "tray")    # tray lip
+        _proud_box(b, "dash", x - 0.0105, x + 0.0105, 1.004, 1.014, stack, 0.009, name="preset%d" % k)
+    _frame_boxes(b, "dash", *POCKET, 0.004, stack, 0.003, "pocket")                       # the pocket's rim
+    for k, z in enumerate(HVAC_BTN_Z):                    # recirculation, A/C, rear defrost
+        _proud_box(b, "dash", HVAC_BTN_X - 0.015, HVAC_BTN_X + 0.015, z - 0.0085, z + 0.0085, stack, 0.005,
+                   name="hvac_btn%d" % k)
+    _frame_boxes(b, "dash", *COIN_TRAY, 0.005, stack, 0.006, "tray")                      # coin tray lip
+    b.add("dash", "lighter", tube((LIGHTER[0], STACK[2] + 0.002, LIGHTER[1]), (LIGHTER[0], STACK[2] - 0.006, LIGHTER[1]),
+                                  LIGHTER[2], 16), ["CabDash"], smooth=ROUND, bevel=0.002)
     _proud_box(b, "dash", 0.23, 0.65, 0.900, 1.060, _face_y, 0.004, name="glovebox")     # glovebox lid
     _proud_box(b, "dash", 0.415, 0.465, 1.032, 1.050, _face_y, 0.008, name="glove_latch")
     for sx in (-1, 1):                                     # side vents: bezel, pocket, three louvres
@@ -675,40 +724,68 @@ def _wheel_frame():
 def wheel(b):
     h, up, n = _wheel_frame()
     c = C_WHEEL
-    # rim: 24 segments coarse (2026-10-17: the 18-gon read as a polygon from the driver's seat, 0.45 m away)
-    seg, ring = (36, 12) if b.fine else (24, 6)
+    # rim: 32 segments coarse (2026-10-17: the 18-gon read as a polygon from the driver's seat, 0.45 m away; 2026-10-20
+    # the owner: the 24-gon still "visibly polygonal" in first person)
+    seg, ring = (48, 12) if b.fine else (32, 6)
     b.add("wheel", "rim", torus(c, h, up, R_RIM, T_RIM, seg, ring), ["CabDark"], smooth=ROUND)
-    # hub pad: the RD1's large padded airbag cover (DSC_7939: it fills most of the wheel, two thirds of the rim's
-    # width, the side spokes' switch pods at its flanks; feature round 2026-10-19, the owner: "ours has a small
-    # hub"; v8's was 17 x 13 cm). HUB_HALF across and up, a rounded-square superellipse 2 cm above the centre (the
-    # lower spokes leave more room under it), domed: the face HUB_DOME back from the pad's full outline
-    a, bb = HUB_HALF
-    pts = [(a * math.copysign(abs(math.cos(t)) ** 0.6, math.cos(t)), bb * math.copysign(abs(math.sin(t)) ** 0.6, math.sin(t)))
-           for t in np.linspace(0, 2 * math.pi, 20 if b.fine else 12, endpoint=False)]
-    hcen = c + up * HUB_UP
-    rings = [[hcen + h * px * k + up * py * k + n * off for px, py in pts] for off, k in HUB_RINGS]
-    b.add("wheel", "hub", loft(rings), ["CabDark"], bevel=0.010, segments=3, smooth=SOFT)
-    # four spokes: 9 and 3 o'clock 8 deg low, two at the bottom 28 deg either side of straight down
-    for i, deg in enumerate((-8.0, 188.0, 242.0, 298.0)):
+    # hub pad: the RD1's large padded airbag cover (HUB_HALF, HUB_TAPER), domed (HUB_RINGS). Its face carries the
+    # painted badge, horn pads, seam and SRS mark (cabin_wheel.png, paint_wheel): the H used to be three 1.2 cm boxes
+    # of the full twin, ~6 texels each after the bake: "reads like a goalpost"
+    b.add("wheel", "hub", loft(_hub_rings(b.fine)), ["CabDark"], bevel=0.010, segments=3, smooth=SOFT)
+    # four spokes (the photos): two broad ones at 3 and 9 o'clock, 6 deg low, blending into the pad's shoulders, and two
+    # at about 5 and 7 o'clock from the pad's lower corners, the open window between them at the bottom. Each a
+    # tapered bar from inside the pad to inside the rim: (angle, half width at the pad, at the rim)
+    for i, (deg, w0, w1) in enumerate(SPOKES):
         t = math.radians(deg)
         d = math.cos(t) * h + math.sin(t) * up
         s = -math.sin(t) * h + math.cos(t) * up
         rings = []
-        for rad in (0.055, R_RIM - 0.004):
-            p = c + d * rad
-            rings.append([p + s * sx * 0.0175 + n * sz * 0.011 for sx, sz in ((-1, -1), (1, -1), (1, 1), (-1, 1))])
-        b.add("wheel", "spoke%d" % i, loft(rings, False, False), ["CabDark"], bevel=0.004, segments=2)
-    if b.fine:                                             # the H on the hub pad, 4.8 x 4.4 cm, 1.2 cm strokes, over the
-        hc = hcen + n * (HUB_RINGS[-1][0] + 0.0005) + up * 0.026        # pad's centre (DSC_7939)
-        # moulded into the pad, a shade lighter than it (DSC_7939): in "Metal" it was a light-grey block, the
-        # brightest thing in the driver's view
-        for (px, py, hx, hy) in ((-0.018, 0.0, 0.006, 0.022), (0.018, 0.0, 0.006, 0.022), (0.0, 0.0, 0.018, 0.0055)):
-            b.add("wheel", "h_logo", obox(hc + h * px + up * py, h, up, n, hx, hy, 0.0015), ["CabDash"], smooth=False)
-        # the two switch pods on the pad's flanks over the side spokes (DSC_7939), 2.6 x 3.0 cm, 5 mm proud, a shade
-        # lighter than the pad so the bake draws them
-        for side in (-1, 1):
-            p = hcen + n * (HUB_RINGS[1][0] + 0.006) + h * side * (a - 0.022) + up * 0.004
-            b.add("wheel", "horn", obox(p, h, up, n, 0.013, 0.015, 0.006), ["CabDash"], bevel=0.003)
+        for rad, w in ((0.070, w0), (R_RIM - 0.006, w1)):
+            p = c + d * rad + n * 0.004
+            rings.append([p + s * sx * w + n * sz * 0.012 for sx, sz in ((-1, -1), (1, -1), (1, 1), (-1, 1))])
+        b.add("wheel", "spoke%d" % i, loft(rings, False, False), ["CabDark"], bevel=0.005, segments=2)
+    # the two horn pads on the pad's shoulders over the side spokes (rounded squares, 3.2 x 3.8 cm, 4 mm proud of the
+    # dome): coarse too (their back is in the pad), so the first-person eye sees them raised
+    a = HUB_HALF[0]
+    hcen = c + up * HUB_UP
+    for side in (-1, 1):
+        p = hcen + n * (HUB_RINGS[-1][0] - 0.002) + h * side * (a - 0.030) + up * 0.012
+        b.add("wheel", "horn", obox(p, h, up, n, 0.016, 0.019, 0.006), ["CabDark"], bevel=0.004, segments=2,
+              keep=None if b.fine else (lambda t: t != 0))
+
+
+SPOKES = ((-6.0, 0.034, 0.026), (186.0, 0.034, 0.026), (240.0, 0.028, 0.021), (300.0, 0.028, 0.021))
+
+
+def _hub_outline(n):
+    """The pad's outline (in-plane right, up; metres about the pad's centre): a rounded-square superellipse whose
+    lower half narrows by HUB_TAPER toward the bottom, where the lower spokes leave it."""
+    a, bb = HUB_HALF
+    out = []
+    for t in np.linspace(0, 2 * math.pi, n, endpoint=False):
+        c, s = math.cos(t), math.sin(t)
+        k = 1.0 - HUB_TAPER * max(0.0, -s) ** 1.2
+        out.append((a * k * math.copysign(abs(c) ** 0.6, c), bb * math.copysign(abs(s) ** 0.6, s)))
+    return out
+
+
+def _hub_rings(fine):
+    h, up, n = _wheel_frame()
+    hcen = C_WHEEL + up * HUB_UP
+    pts = _hub_outline(24 if fine else 14)
+    return [[hcen + h * px * k + up * py * k + n * off for px, py in pts] for off, k in HUB_RINGS]
+
+
+def wheel_decal_frame():
+    """(u axis, u0, u1, v axis, v0, v1) of cabin_wheel.png: u along the wheel's in-plane right, v along its in-plane
+    up, a square WHEEL_DECAL_R either side of the centre (bake_atlas maps the decal by these dot products)."""
+    h, up, _n = _wheel_frame()
+    cu, cv = h.dot(C_WHEEL), up.dot(C_WHEEL)
+    r = WHEEL_DECAL_R
+    return tuple(h), cu - r, cu + r, tuple(up), cv - r, cv + r
+
+
+WHEEL_DECAL_R = 0.215
 
 
 def column(b):
@@ -1028,6 +1105,34 @@ def _headrest(b, piece, hip, base, w, hh, t, posts, gap, recline=8.0, tilt=8.0, 
             b.add(piece, "post_collar", tube(p - a * 0.006, p + a * 0.008, 0.013, 12), ["CabDark"], smooth=ROUND)
 
 
+# Fold-down armrests (2026-10-20, the owner: "missing arm rest"; the RD1's front seats each carry a padded armrest
+# on the inboard side of the backrest, in the seat cloth, folded down here). ARM: s from the pivot beside the backrest
+# to the rounded front end, h of its underside and top (metres from the hip), its width beside the backrest's side
+# (|u| F_BW + ARM_GAP .. + ARM_W). The pair leaves 12 cm between them over the walk-through tray.
+ARM_S, ARM_H, ARM_W, ARM_GAP = (-0.195, 0.115), (-0.025, 0.048), 0.062, 0.003
+
+
+def _armrest(b, piece, hip, inboard):
+    xa = hip.x + inboard * (F_BW + ARM_GAP)
+    xb = xa + inboard * ARM_W
+    h0, h1 = ARM_H
+    c = 0.014                                              # the top edges' chamfer (rounded on the full twin)
+
+    pts = [(xa, h0), (xb, h0), (xb, h1 - c), (xb - inboard * c, h1), (xa + inboard * c, h1), (xa, h1 - c)]
+    if b.fine:                                             # the coarse section's chamfers rounded (30 / 60 deg points)
+        arc = lambda x, sgn, ts: [(x - sgn * c * (1 - math.cos(math.radians(t))), h1 - c * (1 - math.sin(math.radians(t))))
+                                  for t in ts]             # noqa: E731
+        pts = ([(xa, h0), (xb, h0), (xb, h1 - c)] + arc(xb, inboard, (30, 60)) + [(xb - inboard * c, h1), (xa + inboard * c, h1)]
+               + arc(xa, -inboard, (60, 30)) + [(xa, h1 - c)])
+    xm, hc = (xa + xb) / 2, (h0 + h1) / 2
+    s0, s1 = ARM_S
+    # stations along s: (s, scale of the section about its centre): full size to 3.5 cm from the front, then the
+    # front end rounds in (coarse: one chamfered end ring)
+    stations = [(s0, 1.0), (s1 - 0.035, 1.0), (s1 - 0.010, 0.88), (s1, 0.62)] if b.fine else [(s0, 1.0), (s1 - 0.035, 1.0), (s1, 0.75)]
+    rings = [[Vector((xm + (x - xm) * k, hip.y + s, hip.z + hc + (h - hc) * k)) for x, h in pts] for s, k in stations]
+    b.add(piece, "armrest", loft(rings), ["SeatBolster"], smooth=SOFT, bevel=0.006 if b.fine else 0.0, segments=2)
+
+
 def front_seat(b, hip):
     piece = "seat_driver" if hip.x < 0 else "seat_passenger"
     out = 1.0 if hip.x > 0 else -1.0                       # outboard
@@ -1071,6 +1176,7 @@ def front_seat(b, hip):
                                           F_WING * _smooth01((abs(u) - F_BI) / (F_BW - F_BI)), kind in ("insert", "edge_i")),
                lambda u, s, h: hip + Vector((u * taper(h), s, h - shoulder(u, h))), _back_mat)
     _headrest(b, piece, hip, (-0.245, 0.467), 0.135, 0.095, 0.10, 0.075, 0.06, rs=F_HEAD_RS, rounded=True)
+    _armrest(b, piece, hip, -out)
     # outboard recliner cover: inner face 4 mm inside the cushion side, 1 cm proud of the backrest's
     x0, x1 = hip.x + out * (F_W - 0.004), hip.x + out * (F_BW + 0.010)
     V, F, tags = loft([[(x, hip.y + s, hip.z + h) for s, h in COVER] for x in (x0, x1)])
@@ -1786,79 +1892,237 @@ GLYPHS = {
     "7": [[(0, 1), (1, 1), (0.4, 0)]],
     "8": [[(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)], [(0, 0.5), (1, 0.5)]],
     "9": [[(1, 0.5), (0, 0.5), (0, 1), (1, 1), (1, 0), (0, 0)]],
+    # letters for the cluster, clock and stack legends (2026-10-20): the same stroke style
+    "A": [[(0, 0), (0, 1), (1, 1), (1, 0)], [(0, 0.5), (1, 0.5)]],
+    "B": [[(0, 0), (0, 1), (0.8, 1), (0.8, 0.5), (1, 0.5), (1, 0), (0, 0)], [(0, 0.5), (0.8, 0.5)]],
     "C": [[(1, 1), (0, 1), (0, 0), (1, 0)]],
-    "H": [[(0, 0), (0, 1)], [(1, 0), (1, 1)], [(0, 0.5), (1, 0.5)]],
+    "D": [[(0, 0), (0, 1), (0.7, 1), (1, 0.7), (1, 0.3), (0.7, 0), (0, 0)]],
     "E": [[(1, 1), (0, 1), (0, 0), (1, 0)], [(0, 0.5), (0.8, 0.5)]],
     "F": [[(1, 1), (0, 1), (0, 0)], [(0, 0.5), (0.8, 0.5)]],
+    "G": [[(1, 1), (0, 1), (0, 0), (1, 0), (1, 0.45), (0.55, 0.45)]],
+    "H": [[(0, 0), (0, 1)], [(1, 0), (1, 1)], [(0, 0.5), (1, 0.5)]],
+    "I": [[(0.5, 0), (0.5, 1)]],
+    "K": [[(0, 0), (0, 1)], [(1, 1), (0, 0.45), (1, 0)]],
+    "M": [[(0, 0), (0, 1), (0.5, 0.55), (1, 1), (1, 0)]],
+    "N": [[(0, 0), (0, 1), (1, 0), (1, 1)]],
+    "O": [[(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]],
+    "P": [[(0, 0), (0, 1), (1, 1), (1, 0.5), (0, 0.5)]],
+    "Q": [[(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)], [(0.6, 0.3), (1.1, -0.15)]],
+    "R": [[(0, 0), (0, 1), (1, 1), (1, 0.5), (0, 0.5), (1, 0)]],
+    "S": [[(1, 1), (0, 1), (0, 0.5), (1, 0.5), (1, 0), (0, 0)]],
+    "T": [[(0, 1), (1, 1)], [(0.5, 1), (0.5, 0)]],
+    "U": [[(0, 1), (0, 0), (1, 0), (1, 1)]],
+    "X": [[(0, 0), (1, 1)], [(0, 1), (1, 0)]],
+    "/": [[(0, 0), (1, 1)]],
+    ":": [[(0.5, 0.25), (0.5, 0.3)], [(0.5, 0.7), (0.5, 0.75)]],
 }
-WHITE, ORANGE = (235, 235, 235), (220, 70, 20)
-NEEDLE = (235, 95, 35)                                     # Honda's orange-red needles
-DIAL_FACE = (10, 10, 11)
+WHITE, ORANGE = (235, 235, 235), (226, 92, 26)
+NEEDLE = (236, 236, 232)                                   # white needles (the owner's cluster photo, images/115)
+# the RD1 cluster (2026-10-20, the owner's photo of a removed 97-01 cluster, images/115: "the face is dark, not
+# cream"): one charcoal face plate, three round gauges with darker faces and a thin lighter ring, white numerals and
+# ticks, an orange scale arc (the tachometer's red-orange band from 6.5), white needles at rest
+FACE_PLATE, DIAL_FACE, DIAL_RING = (40, 40, 42), (24, 24, 26), (70, 70, 72)
 
 
-def _dial(cv, cx, cz, r, ticks, labels, needle_frac, red_from=None, sweep=(225.0, -45.0), minor=True):
-    """Black face, white tick ring and white numerals (the owner's photos, 2026-10-19: white markings on black, no
-    coloured arcs), an orange-red needle; angles clockwise from sweep[0]. A thin white rim round the face."""
+def _needle(cv, cx, cz, r, ang, length=0.86, tail=0.14, w=0.0034):
+    a = math.radians(ang)
+    cv.fill(cv.seg((cx - r * tail * math.cos(a), cz - r * tail * math.sin(a)),
+                   (cx + r * length * math.cos(a), cz + r * length * math.sin(a)), w), NEEDLE)
+
+
+def _hubcap(cv, cx, cz, r):
+    cv.fill(cv.disc(cx, cz, r), (14, 14, 15))
+    cv.fill(cv.disc(cx - r * 0.25, cz + r * 0.25, r * 0.35), (34, 34, 36))
+
+
+def _scale_dial(cv, cx, cz, r, n_major, sub, labels, red_from=None, lab_r=0.66, lab_h=0.17, sweep=(225.0, -45.0)):
+    """A round gauge: face, ring, the orange arc along the scale (outer band) with white ticks across it, white
+    numerals inside; red_from (major index) paints a broad red-orange band from there to the end (the redline)."""
     a0, a1 = sweep
-    cv.fill(cv.disc(cx, cz, r), DIAL_FACE)
-    cv.fill(cv.ring(cx, cz, r * 0.985, r * 1.05), (120, 120, 122))
     span = a0 - a1
-    step = ticks // (len(labels) - 1) if labels else 0
+    cv.fill(cv.disc(cx, cz, r * 1.06), DIAL_RING)
+    cv.fill(cv.disc(cx, cz, r), DIAL_FACE)
+    cv.fill(cv.arc(cx, cz, r * 0.925, r * 0.965, a1, a0), ORANGE)
+    if red_from is not None:
+        cv.fill(cv.arc(cx, cz, r * 0.80, r * 0.965, a1, a0 - span * red_from / n_major), (214, 58, 28))
+    ticks = n_major * sub
     for k in range(ticks + 1):
         a = math.radians(a0 - span * k / ticks)
-        major = bool(labels) and k % step == 0
-        if not major and not minor:
-            continue
-        r0 = r * (0.76 if major else 0.84)
-        col = (225, 50, 40) if red_from is not None and k >= red_from else WHITE
-        cv.fill(cv.seg((cx + r0 * math.cos(a), cz + r0 * math.sin(a)), (cx + r * 0.94 * math.cos(a), cz + r * 0.94 * math.sin(a)),
-                       0.0034 if major else 0.0018), col)
-    if red_from is not None:                               # the red zone as a band outside the ticks
-        a_red = a0 - span * red_from / ticks
-        cv.fill(cv.arc(cx, cz, r * 0.90, r * 0.95, a1, a_red), (200, 40, 34))
+        major = k % sub == 0
+        r0 = r * (0.80 if major else 0.87)
+        cv.fill(cv.seg((cx + r0 * math.cos(a), cz + r0 * math.sin(a)), (cx + r * 0.965 * math.cos(a), cz + r * 0.965 * math.sin(a)),
+                       0.0030 if major else 0.0017), WHITE)
     for i, s in enumerate(labels):
         a = math.radians(a0 - span * i / (len(labels) - 1))
-        cv.text(s, cx + r * 0.56 * math.cos(a), cz + r * 0.56 * math.sin(a), r * 0.19, 0.0024, WHITE)
-    a = math.radians(a0 - span * needle_frac)
-    cv.fill(cv.seg((cx - r * 0.12 * math.cos(a), cz - r * 0.12 * math.sin(a)), (cx + r * 0.84 * math.cos(a), cz + r * 0.84 * math.sin(a)),
-                   0.0030), NEEDLE)
-    cv.fill(cv.disc(cx, cz, r * 0.11), (36, 36, 38))
+        cv.text(s, cx + r * lab_r * math.cos(a), cz + r * lab_r * math.sin(a), r * lab_h, 0.0019, WHITE)
 
 
-def _gauge(cv, cx, cz, r, lo, hi, frac, warn_hi=False):
-    """A small quarter-sweep gauge (temperature, fuel): five ticks, lo / hi letters, the needle; warn_hi paints the
-    last tick red (temperature's H)."""
-    a0, a1 = 135.0, 45.0
-    cv.fill(cv.disc(cx, cz, r), DIAL_FACE)
-    cv.fill(cv.ring(cx, cz, r * 0.98, r * 1.07), (120, 120, 122))
-    for k in range(5):
-        a = math.radians(a0 + (a1 - a0) * k / 4)
-        col = (225, 50, 40) if warn_hi and k == 4 else WHITE
-        cv.fill(cv.seg((cx + r * 0.62 * math.cos(a), cz + r * 0.62 * math.sin(a)), (cx + r * 0.90 * math.cos(a), cz + r * 0.90 * math.sin(a)),
-                       0.0032 if k in (0, 2, 4) else 0.0020), col)
-    cv.text(lo, cx - r * 0.62, cz - r * 0.05, r * 0.36, 0.0026, WHITE)
-    cv.text(hi, cx + r * 0.62, cz - r * 0.05, r * 0.36, 0.0026, (225, 50, 40) if warn_hi else WHITE)
-    a = math.radians(a0 + (a1 - a0) * frac)
-    pc = (cx, cz - r * 0.45)                               # the needle pivots low in the face
-    cv.fill(cv.seg(pc, (cx + r * 0.88 * math.cos(a), cz + r * 0.88 * math.sin(a)), 0.0030), NEEDLE)
-    cv.fill(cv.disc(pc[0], pc[1], r * 0.16), (36, 36, 38))
+def _half_gauge(cv, px, pz, rho, a_lo, a_hi, lo, hi, lab_side, frac, hot=False):
+    """One half of the combined gauge: a short orange arc of radius rho about the needle's pivot (px, pz) from a_lo
+    (the low end, at the bottom) to a_hi (the top), ticks at both ends and the middle, its letters beside the ends
+    (lab_side -1: left of them, +1 right), the needle at frac of the way up."""
+    lo_a, hi_a = sorted((a_lo, a_hi))
+    cv.fill(cv.arc(px, pz, rho * 0.90, rho * 1.06, lo_a, hi_a), ORANGE)
+    if hot:                                                # the temperature's red end at H
+        cv.fill(cv.arc(px, pz, rho * 0.86, rho * 1.06, *sorted((a_hi, a_hi + (a_lo - a_hi) * 0.18))), (214, 50, 30))
+    for t in (0.0, 0.5, 1.0):
+        a = math.radians(a_lo + (a_hi - a_lo) * t)
+        cv.fill(cv.seg((px + rho * 0.80 * math.cos(a), pz + rho * 0.80 * math.sin(a)),
+                       (px + rho * 1.10 * math.cos(a), pz + rho * 1.10 * math.sin(a)), 0.0026), WHITE)
+    for s, a in ((lo, a_lo), (hi, a_hi)):
+        a = math.radians(a)
+        cv.text(s, px + rho * 1.45 * math.cos(a) + lab_side * 0.004, pz + rho * 1.42 * math.sin(a), 0.0072, 0.0018, WHITE)
+    a = math.radians(a_lo + (a_hi - a_lo) * frac)
+    cv.fill(cv.seg((px, pz), (px + rho * 1.02 * math.cos(a), pz + rho * 1.02 * math.sin(a)), 0.0030), NEEDLE)
+    _hubcap(cv, px, pz, 0.0042)
 
 
 def paint_cluster(path):
-    """Four gauges under the hood (feature round 2026-10-19, the owner: tach, speedo, temperature, fuel, white
-    markings on black), 35 x 13 cm (CLUSTER), 544 x 208: tach 10 cm at u 0.17 (0-8, red from 6.5), the larger
-    speedo 11.6 cm at u 0.50 (0-120, numerals every 40), temperature over fuel at u 0.84, 5.2 cm each. The cluster face
-    bakes at weight 3 (bake_atlas._face_weights): ~4 texels/cm, numerals ~5 texels tall."""
+    """The 97-01 cluster face (images/115), 35 x 13 cm over CLUSTER, 1088 x 416 (31 px/cm; the bake samples it
+    at ~7 texels/cm, bake_atlas's exact cluster weight): the charcoal plate; the tachometer left (0-8 x1000 r/min,
+    the orange arc, red-orange from 6.5), the larger speedometer centre (0-220 km/h every 20 inside the orange arc,
+    the small inner mph scale, trip and odometer windows, km/h and MAINTENANCE REQUIRED), the combined gauge right
+    (fuel F / E with the pump on the left half, temperature H / C with the thermometer on the right, the P R N D 2 1
+    strip between them and O/D OFF under it); round warning lamps in the plate between and above the gauges."""
     x0, x1, z0, z1 = CLUSTER
-    cv = Canvas(544, 208, x0, x1, z0, z1, 16)
-    cv.fill(~cv.rect(x0 + 0.003, x1 - 0.003, z0 + 0.003, z1 - 0.003, 0.02), (34, 34, 36))   # bezel
-    zc = (z0 + z1) / 2
+    cv = Canvas(1088, 416, x0, x1, z0, z1, FACE_PLATE)
+    cv.noise(0.03)
     W = x1 - x0
-    _dial(cv, x0 + 0.17 * W, zc, 0.050, 16, ["0", "2", "4", "6", "8"], 0.09, red_from=13)
-    _dial(cv, x0 + 0.50 * W, zc, 0.058, 24, ["0", "40", "80", "120"], 0.0)
-    gx = x0 + 0.845 * W
-    _gauge(cv, gx, zc + 0.031, 0.026, "C", "H", 0.45, warn_hi=True)
-    _gauge(cv, gx, zc - 0.031, 0.026, "E", "F", 0.75)
+    zc = (z0 + z1) / 2
+    tx, tz, tr = x0 + 0.155 * W, zc - 0.006, 0.048        # tachometer
+    sx, sz, sr = x0 + 0.505 * W, zc + 0.003, 0.058        # speedometer
+    cx, cz, cr = x0 + 0.857 * W, zc - 0.004, 0.047        # combined fuel / temperature
+    # warning lamps: dark round lenses in the plate (unlit), tinted by their colour
+    lamps = [(tx + 0.030, zc + 0.058, (72, 44, 40)), (tx + 0.046, zc + 0.058, (70, 60, 38)), (tx + 0.062, zc + 0.056, (44, 60, 46)),
+             (tx + 0.054, zc + 0.040, (72, 44, 40)),
+             (sx + 0.068, zc + 0.058, (72, 44, 40)), (sx + 0.084, zc + 0.058, (70, 60, 38)), (sx + 0.100, zc + 0.056, (44, 60, 46)),
+             (sx + 0.072, zc + 0.040, (70, 60, 38)), (sx + 0.088, zc + 0.040, (72, 44, 40)), (sx + 0.068, zc - 0.044, (52, 52, 58)),
+             (tx + 0.064, zc - 0.046, (52, 52, 58))]
+    for lx, lz, col in lamps:
+        cv.fill(cv.disc(lx, lz, 0.0052), (22, 22, 23))
+        cv.fill(cv.disc(lx, lz, 0.0042), col)
+    # tachometer
+    _scale_dial(cv, tx, tz, tr, 8, 2, [str(k) for k in range(9)], red_from=6.5, lab_r=0.64, lab_h=0.17)
+    cv.text("X1000R/MIN", tx, tz - tr * 0.46, tr * 0.075, 0.0009, (200, 200, 200))
+    _needle(cv, tx, tz, tr, 228.0)
+    _hubcap(cv, tx, tz, tr * 0.12)
+    # speedometer: km/h outside, the small mph scale inside
+    _scale_dial(cv, sx, sz, sr, 11, 2, [str(20 * k) for k in range(12)], lab_r=0.68, lab_h=0.105)
+    span = 270.0
+    for k in range(7):                                     # mph 0..120 every 20 on the inner arc (120 mph = 193 km/h)
+        a = math.radians(225.0 - span * (k * 20 * 1.609) / 220.0)
+        cv.fill(cv.seg((sx + sr * 0.47 * math.cos(a), sz + sr * 0.47 * math.sin(a)),
+                       (sx + sr * 0.53 * math.cos(a), sz + sr * 0.53 * math.sin(a)), 0.0012), (170, 170, 170))
+    cv.fill(cv.rect(sx - sr * 0.30, sx + sr * 0.30, sz + sr * 0.24, sz + sr * 0.40, 0.001), (196, 192, 180))    # trip window
+    cv.text("0000", sx, sz + sr * 0.32, sr * 0.10, 0.0010, (30, 30, 30))
+    cv.fill(cv.rect(sx - sr * 0.40, sx + sr * 0.40, sz - sr * 0.42, sz - sr * 0.26, 0.001), (10, 10, 10))      # odometer
+    cv.text("329532", sx, sz - sr * 0.34, sr * 0.10, 0.0010, (210, 210, 205))
+    cv.text("KM/H", sx, sz - sr * 0.58, sr * 0.085, 0.0011, WHITE)
+    cv.text("MAINTENANCE", sx, sz - sr * 0.72, sr * 0.045, 0.0007, (150, 150, 150))
+    cv.text("REQUIRED", sx, sz - sr * 0.80, sr * 0.045, 0.0007, (150, 150, 150))
+    _needle(cv, sx, sz, sr, 230.0)
+    _hubcap(cv, sx, sz, sr * 0.11)
+    # combined gauge: fuel left, temperature right, the gear strip between
+    cv.fill(cv.disc(cx, cz, cr * 1.06), DIAL_RING)
+    cv.fill(cv.disc(cx, cz, cr), DIAL_FACE)
+    rho = cr * 0.42
+    _half_gauge(cv, cx - cr * 0.58, cz, rho, -52.0, 52.0, "E", "F", -1.0, 0.85)
+    _half_gauge(cv, cx + cr * 0.58, cz, rho, 232.0, 128.0, "C", "H", 1.0, 0.0, hot=True)
+    cv.fill(cv.rect(cx - cr * 0.47, cx - cr * 0.37, cz - cr * 0.10, cz + cr * 0.02), (200, 200, 200))           # pump icon
+    cv.fill(cv.rect(cx + cr * 0.40, cx + cr * 0.44, cz - cr * 0.10, cz + cr * 0.12), (200, 200, 200))           # thermometer
+    cv.fill(cv.disc(cx + cr * 0.42, cz - cr * 0.12, cr * 0.045), (200, 200, 200))
+    gx0, gx1 = cx - cr * 0.12, cx + cr * 0.12
+    cv.fill(cv.rect(gx0, gx1, cz - cr * 0.58, cz + cr * 0.44, 0.001), (12, 12, 13))
+    for i, ch in enumerate("PRND21"):
+        zz = cz + cr * 0.36 - i * cr * 0.168
+        cv.fill(cv.rect(gx0 + 0.0008, gx1 - 0.0008, zz - cr * 0.075, zz + cr * 0.075), (34, 34, 36))
+        cv.text(ch, cx, zz, cr * 0.11, 0.0011, (170, 170, 170))
+    cv.fill(cv.rect(cx - cr * 0.16, cx + cr * 0.16, cz - cr * 0.80, cz - cr * 0.64, 0.001), (30, 30, 32))
+    cv.text("OD", cx, cz - cr * 0.72, cr * 0.09, 0.0008, (150, 150, 150))
+    return cv.save(path)
+
+
+def _poly_mask(cv, pts):
+    """Even-odd fill of a closed polygon [(x, z)] on the canvas."""
+    inside = np.zeros(cv.XX.shape, bool)
+    n = len(pts)
+    for i in range(n):
+        (xa, za), (xb, zb) = pts[i], pts[(i + 1) % n]
+        if za == zb:
+            continue
+        cond = (cv.ZZ >= min(za, zb)) & (cv.ZZ < max(za, zb))
+        xi = xa + (cv.ZZ - za) * (xb - xa) / (zb - za)
+        inside ^= cond & (cv.XX < xi)
+    return inside
+
+
+def paint_wheel(path):
+    """The steering wheel seen face-on (2026-10-20, the owner's photos 112-114): u, v in the wheel's own plane about its
+    centre (wheel_decal_frame; bake_atlas maps it along the wheel's normal onto the driver-facing CabDark faces of
+    rim, spokes, pad and horn pads). Grained dark grey pad with its outline seam and the airbag's tear seam, the
+    Honda badge (a rounded-rectangle frame round the stylised H whose uprights flare at the top), the two horn pads,
+    the small SRS AIRBAG badge low on the pad; the black rim with a perforated-grip stipple at 3 and 9 o'clock."""
+    r = WHEEL_DECAL_R
+    cv = Canvas(1024, 1024, -r, r, -r, r, (30, 30, 32))
+    rng = np.random.default_rng(11)
+    d = np.sqrt(cv.XX ** 2 + cv.ZZ ** 2)
+    ang = np.degrees(np.arctan2(cv.ZZ, cv.XX))
+    rim = (d > R_RIM - T_RIM - 0.004) & (d < R_RIM + T_RIM + 0.004)
+    cv.fill(rim, (34, 34, 36))
+    grip = rim & ((np.abs(ang) < 38) | (np.abs(np.abs(ang) - 180) < 38))       # leather grip panels, perforated
+    dots = ((np.mod(cv.XX * 1000 / 5.0 + 0.5 * (np.mod(np.floor(cv.ZZ * 1000 / 5.0), 2)), 1.0) < 0.42)
+            & (np.mod(cv.ZZ * 1000 / 5.0, 1.0) < 0.42))
+    cv.fill(grip, (38, 38, 40))
+    cv.fill(grip & dots, (24, 24, 25))
+    for i, (deg, w0, w1) in enumerate(SPOKES):             # the spokes: the pad's grained plastic
+        t = math.radians(deg)
+        dx, dz = math.cos(t), math.sin(t)
+        along = cv.XX * dx + cv.ZZ * dz
+        across = np.abs(-cv.XX * dz + cv.ZZ * dx)
+        w = w0 + (w1 - w0) * np.clip((along - 0.07) / (R_RIM - 0.076), 0, 1)
+        cv.fill((along > 0.05) & (along < R_RIM - T_RIM) & (across < w), (46, 46, 48))
+    # the pad
+    out = [(px, py + HUB_UP) for px, py in _hub_outline(96)]
+    pad = _poly_mask(cv, out)
+    inner = _poly_mask(cv, [(px * 0.965, py * 0.965 + HUB_UP) for px, py in _hub_outline(96)])
+    cv.fill(pad, (38, 38, 40))                             # the outline seam
+    grain = (1.0 + 0.05 * rng.standard_normal(cv.XX.shape)).astype(np.float32)
+    pad_col = np.empty(cv.XX.shape + (3,), np.float32)
+    pad_col[:] = _srgb((56, 56, 58))
+    pad_col *= grain[..., None]
+    cv.fill(inner, pad_col[inner])
+    tear = cv.seg((-0.085, HUB_UP - 0.020), (0.085, HUB_UP - 0.020), 0.0016) & inner      # the airbag cover's tear seam
+    cv.fill(tear, (40, 40, 42))
+    # horn pads (their geometry stands 4 mm proud: a lit top edge, a shadowed lower one)
+    a = HUB_HALF[0]
+    for side in (-1, 1):
+        hx, hz = side * (a - 0.030), HUB_UP + 0.012
+        cv.fill(cv.rect(hx - 0.017, hx + 0.017, hz - 0.020, hz + 0.020, 0.008), (30, 30, 32))
+        cv.fill(cv.rect(hx - 0.016, hx + 0.016, hz - 0.019, hz + 0.019, 0.007), (66, 66, 68))
+        cv.fill(cv.rect(hx - 0.0135, hx + 0.0135, hz - 0.0165, hz + 0.0165, 0.006), (54, 54, 56))
+        cv.fill(cv.rect(hx - 0.004, hx + 0.004, hz - 0.002, hz + 0.002, 0.001), (40, 40, 42))   # the horn mark
+    # the Honda badge: a rounded-rectangle frame 6.2 x 5.0 cm with a lit upper edge, and the H
+    bx, bz = 0.0, HUB_UP + 0.036
+    cv.fill(cv.rect(bx - 0.031, bx + 0.031, bz - 0.025, bz + 0.025, 0.009), (30, 30, 32))
+    cv.fill(cv.rect(bx - 0.0295, bx + 0.0295, bz - 0.0235, bz + 0.0235, 0.008), (80, 80, 82))
+    cv.fill(cv.rect(bx - 0.0255, bx + 0.0255, bz - 0.0195, bz + 0.0195, 0.006), (34, 34, 36))
+    cv.fill(cv.rect(bx - 0.0240, bx + 0.0240, bz - 0.0180, bz + 0.0180, 0.005), (54, 54, 56))
+    hw, hh = 0.040, 0.030                                  # the H: 4.0 x 3.0 cm, uprights flared at the top
+    left = [(0.10, 0.0), (0.29, 0.0), (0.31, 0.84), (0.30, 0.98), (0.0, 1.0), (0.06, 0.62)]
+
+    def hpts(poly, sgn):
+        return [(bx + sgn * (u - 0.5) * hw, bz - hh / 2 + v * hh) for u, v in poly]
+    hmask = _poly_mask(cv, hpts(left, 1)) | _poly_mask(cv, hpts(left, -1)) | cv.rect(bx - 0.21 * hw, bx + 0.21 * hw,
+                                                                                    bz - hh / 2 + 0.36 * hh, bz - hh / 2 + 0.52 * hh)
+    shadow = np.roll(hmask, -3, axis=0) | np.roll(hmask, 3, axis=1)               # rows run bottom-up: -3 = 3 px lower
+    cv.fill(shadow & ~hmask & cv.rect(bx - 0.024, bx + 0.024, bz - 0.018, bz + 0.018), (30, 30, 32))
+    cv.fill(hmask, (88, 88, 90))
+    # SRS AIRBAG badge, low on the pad
+    sx, sz = 0.0, HUB_UP - 0.052
+    cv.fill(cv.rect(sx - 0.018, sx + 0.018, sz - 0.008, sz + 0.008, 0.004), (70, 70, 72))
+    cv.fill(cv.rect(sx - 0.0165, sx + 0.0165, sz - 0.0065, sz + 0.0065, 0.003), (46, 46, 48))
+    cv.text("SRS", sx, sz + 0.0022, 0.0045, 0.0010, (90, 90, 92))
+    cv.text("AIRBAG", sx, sz - 0.0035, 0.0022, 0.0006, (80, 80, 82))
     return cv.save(path)
 
 
@@ -1896,58 +2160,125 @@ def _knob(cv, x, z, r, pointer_deg=90.0):
 def paint_dash(path):
     """Dash face decal, 2048 x 1024 over x -0.72..0.72, z 0.48..1.21 (14 px/cm). On a 1024 interior
     sheet the scratch bake measured 1.2 texels/cm at weight 1; the dash face is weighted 2.0 (2.4
-    texels/cm) and the centre stack 3.0 (bake_atlas TEXEL_WEIGHT_MAT, _face_weights), so every feature
-    outside the stack is >= 1 cm (>= 2 sheet texels) and nothing is a 1 px groove. The stack (feature round
-    2026-10-19, the owner's photos): twin vents with four deep louvres, the clock and the red hazard switch
-    between them, a head unit (display, cassette slot, presets, two knobs), three round HVAC knobs with
-    their scales (fan, temperature blue to red, mode), the A/C and recirculation buttons, the tray."""
+    texels/cm) and the centre stack 3.0 -> 4 (bake_atlas TEXEL_WEIGHT_MAT, _face_weights: 4.8 texels/cm), so every
+    feature outside the stack is >= 1 cm (>= 2 sheet texels) and nothing is a 1 px groove. The stack (2026-10-20, the
+    owner's photos 116-119 of the 2000 facelift): the top strip (left vent, the red hazard switch, the clock pod with
+    its amber 11:47 and H M R buttons, right vent), the Honda head unit with its amber display in a recessed bezel over
+    the storage pocket, the HVAC panel (fan, temperature and mode knobs with their printed rings, the recirculation,
+    A/C and REAR buttons in a column at its right edge), the lighter and the coin tray. Driver side: the switch bank,
+    the ignition cylinder right of the column, the small switch under the cluster's right end."""
     cv = Canvas(2048, 1024, -0.72, 0.72, 0.48, 1.21, DASH_FACE)
     cv.noise(0.025)
     cv.fill(cv.ZZ >= 1.10, (DASH_TOPBAND,) * 3)            # the face's top band: the dash top's colour
     cv.fill(cv.ZZ <= 0.56, (44, 44, 45))                   # shadow band at the floor
-    # centre stack panel and its contents (3x texels)
+    # centre stack panel and its contents (4x texels)
     cv.fill(cv.rect(-0.13, 0.13, 0.56, 1.16, 0.01), (DASH_STACK,) * 3)
     for x0, x1 in VENTS_C:                                 # twin centre vents
         _louvres(cv, x0, x1, 1.100, 1.155, VENT_LOUVRES)
-    cv.fill(cv.rect(-0.021, 0.005, 1.114, 1.141, 0.003), (28, 28, 30))      # clock between the vents
-    cv.fill(cv.rect(-0.017, 0.001, 1.120, 1.135), (36, 50, 42))
-    cv.fill(cv.rect(0.008, 0.021, 1.113, 1.142, 0.002), (40, 40, 42))       # hazard switch: a red button in its bezel
-    cv.fill(cv.rect(0.010, 0.019, 1.116, 1.139, 0.002), (168, 34, 30))
-    # the head unit: chrome-grey bezel, black face; display, cassette door, six presets, volume and tuning knobs
-    cv.fill(cv.rect(-0.092, 0.092, 0.972, 1.068, 0.004), (70, 70, 72))
-    cv.fill(cv.rect(-0.087, 0.087, 0.977, 1.063, 0.002), (20, 20, 21))
-    cv.fill(cv.rect(-0.046, 0.046, 1.031, 1.057, 0.002), (30, 44, 40))      # display window
+    # hazard switch: a dark bezel round a red button with the white triangle
+    hx0, hx1, hz0, hz1 = HAZARD
+    cv.fill(cv.rect(hx0, hx1, hz0, hz1, 0.002), (30, 30, 32))
+    cv.fill(cv.rect(hx0 + 0.003, hx1 - 0.003, hz0 + 0.003, hz1 - 0.003, 0.0015), (176, 34, 30))
+    hcx, hcz = (hx0 + hx1) / 2, (hz0 + hz1) / 2
+    tri = [(hcx - 0.0045, hcz - 0.003), (hcx + 0.0045, hcz - 0.003), (hcx, hcz + 0.0045)]
+    for p, q in zip(tri, tri[1:] + tri[:1]):
+        cv.fill(cv.seg(p, q, 0.0011), (232, 220, 214))
+    # the clock pod (photo 116): a rounded rectangle in the strip's plastic, a smoked window over amber 7-segment
+    # digits in its upper half, three small black oval buttons H M R with white letters under it
+    cx0, cx1, cz0, cz1 = CLOCK
+    cv.fill(cv.rect(cx0, cx1, cz0, cz1, 0.005), (36, 36, 38))
+    cv.fill(cv.rect(cx0 + 0.0012, cx1 - 0.0012, cz0 + 0.0012, cz1 - 0.0012, 0.004), (54, 54, 56))
+    wz0, wz1 = cz0 + 0.019, cz1 - 0.005
+    cv.fill(cv.rect(cx0 + 0.003, cx1 - 0.003, wz0, wz1, 0.002), (14, 12, 12))            # the smoked window
+    ccx = (cx0 + cx1) / 2
+    for k, ch in enumerate("1147"):
+        cv.text(ch, ccx - 0.0135 + 0.0090 * k + (0.002 if k >= 2 else 0.0), (wz0 + wz1) / 2, 0.0115, 0.0017, (255, 136, 30))
+    cv.fill(cv.disc(ccx + 0.0005, (wz0 + wz1) / 2 + 0.0025, 0.0007), (255, 136, 30))     # the colon
+    cv.fill(cv.disc(ccx + 0.0005, (wz0 + wz1) / 2 - 0.0025, 0.0007), (255, 136, 30))
+    for k, ch in enumerate("HMR"):
+        x = cx0 + 0.0095 + k * 0.0135
+        cv.fill(cv.rect(x - 0.0048, x + 0.0048, cz0 + 0.0035, cz0 + 0.0095, 0.003), (16, 16, 17))
+        cv.text(ch, x, cz0 + 0.0135, 0.0036, 0.0009, (226, 226, 226))
+    # the head unit in its recessed bezel, the pocket under it
+    bx0, bx1, bz0, bz1 = RADIO_BEZEL
+    cv.fill(cv.rect(bx0, bx1, bz0, bz1, 0.008), (34, 34, 36))
+    cv.fill(cv.rect(bx0 + 0.005, bx1 - 0.005, bz0 + 0.005, bz1 - 0.005, 0.006), (26, 26, 27))
+    rx0, rx1, rz0, rz1 = RADIO
+    cv.fill(cv.rect(rx0, rx1, rz0, rz1, 0.003), (44, 44, 46))
+    cv.fill(cv.rect(rx0 + 0.003, rx1 - 0.003, rz0 + 0.003, rz1 - 0.003, 0.002), (22, 22, 23))
+    cv.text("HONDA", 0.040, rz1 - 0.008, 0.0045, 0.0009, (170, 170, 170))
+    cv.fill(cv.rect(-0.036, 0.040, 1.030, 1.050, 0.002), (34, 22, 12))                  # the amber display
     for k, ch in enumerate("885"):
-        cv.text(ch, -0.020 + 0.012 * k, 1.044, 0.014, 0.0022, (96, 150, 128))
-    cv.fill(cv.rect(-0.040, -0.030, 1.040, 1.048), (70, 110, 96))           # band / mode segments
-    cv.fill(cv.rect(-0.050, 0.050, 1.008, 1.022, 0.002), (34, 34, 36))      # cassette door
-    cv.fill(cv.rect(-0.044, 0.044, 1.013, 1.017), (8, 8, 9))                # its slot
+        cv.text(ch, -0.006 + 0.011 * k, 1.040, 0.012, 0.0019, (240, 150, 50))
+    cv.fill(cv.rect(-0.030, -0.018, 1.036, 1.044), (200, 120, 40))                      # band / mode segments
+    cv.fill(cv.rect(-0.050, 0.050, 1.018, 1.026, 0.002), (12, 12, 13))                  # the cassette slot
     for k in range(6):                                     # presets 1-6
         x = -0.0625 + 0.025 * k
-        cv.fill(cv.rect(x - 0.0105, x + 0.0105, 0.982, 0.997, 0.002), (66, 66, 68))
-        cv.fill(cv.rect(x - 0.0105, x + 0.0105, 0.995, 0.997), (82, 82, 84))
+        cv.fill(cv.rect(x - 0.0105, x + 0.0105, 1.004, 1.014, 0.002), (70, 70, 72))
+        cv.fill(cv.rect(x - 0.0105, x + 0.0105, 1.012, 1.014), (88, 88, 90))
+        cv.text(str(k + 1), x, 1.009, 0.0045, 0.0008, (30, 30, 30))
     for x in (-0.072, 0.072):                              # volume (left), tuning (right)
         _knob(cv, x, RADIO_KNOB_Z, RADIO_KNOB_R, 110.0 if x < 0 else 70.0)
-    for x in (-0.056, 0.056):                              # seek / band buttons beside the display
-        cv.fill(cv.rect(x - 0.006, x + 0.006, 1.034, 1.054, 0.002), (52, 52, 54))
-    # HVAC: panel, three round knobs (fan, temperature, mode) with their scales, the button row under them
-    cv.fill(cv.rect(-0.120, 0.120, 0.858, 0.962, 0.006), (40, 40, 41))
+    for x in (-0.054, 0.056):                              # seek / band buttons beside the display
+        cv.fill(cv.rect(x - 0.008, x + 0.008, 1.032, 1.048, 0.002), (56, 56, 58))
+    px0, px1, pz0, pz1 = POCKET
+    cv.fill(cv.rect(px0, px1, pz0, pz1, 0.004), (40, 40, 42))
+    cv.fill(cv.rect(px0 + 0.004, px1 - 0.004, pz0 + 0.004, pz1 - 0.004, 0.003), (10, 10, 11))
+    cv.fill(cv.rect(px0 + 0.004, px1 - 0.004, pz1 - 0.012, pz1 - 0.004), (20, 20, 21))   # its roof's shadow
+    # HVAC: panel, three round knobs with printed rings, the button column at the right edge
+    vx0, vx1, vz0, vz1 = HVAC_PANEL
+    cv.fill(cv.rect(vx0, vx1, vz0, vz1, 0.006), (30, 30, 31))
+    R = HVAC_R
     for i, x in enumerate(HVAC_X):
-        for k in range(5):                                 # scale marks round the knob's upper half
-            a = math.radians(160.0 - 35.0 * k)
-            if i == 1:
-                col = (60 + 40 * k, 70, 200 - 35 * k)       # temperature: blue to red
-            else:
-                col = (170, 170, 172)
-            cv.fill(cv.seg((x + 0.025 * math.cos(a), HVAC_Z + 0.025 * math.sin(a)),
-                           (x + 0.031 * math.cos(a), HVAC_Z + 0.031 * math.sin(a)), 0.0035 if i != 1 else 0.005), col)
-        _knob(cv, x, HVAC_Z, HVAC_R, (125.0, 90.0, 55.0)[i])
-    for k, x in enumerate((-0.090, -0.030, 0.030, 0.090)):
-        cv.fill(cv.rect(x - 0.0080, x + 0.0080, 0.865, 0.879, 0.002), (70, 70, 72))
-        if k in (1, 2):                                    # A/C and recirculation: an indicator in the button (unlit)
-            cv.fill(cv.rect(x - 0.003, x + 0.003, 0.874, 0.877), (96, 70, 30))
-    cv.fill(cv.rect(-0.110, 0.110, 0.758, 0.822, 0.006), (64, 64, 66))      # tray: lip, opening
-    cv.fill(cv.rect(-0.104, 0.104, 0.764, 0.812, 0.004), (20, 20, 21))
+        cv.fill(cv.disc(x, HVAC_Z, R * 1.62), (36, 36, 38))                             # the printed ring's ground
+        if i == 0:                                         # fan: OFF, then 1-4 as growing marks, a fan icon
+            for k in range(5):
+                a = math.radians(150.0 - 50.0 * k)
+                ln = 0.0030 + 0.0012 * k
+                cv.fill(cv.seg((x + R * 1.18 * math.cos(a), HVAC_Z + R * 1.18 * math.sin(a)),
+                               (x + (R * 1.18 + ln) * math.cos(a), HVAC_Z + (R * 1.18 + ln) * math.sin(a)), 0.0016),
+                        (210, 210, 210))
+            cv.text("OFF", x - R * 1.15, HVAC_Z + R * 1.35, 0.0035, 0.0007, (210, 210, 210))
+            for k in range(3):                             # the fan icon's blades, low on the ring
+                a = math.radians(90.0 + 120.0 * k)
+                fx, fz = x - R * 1.25, HVAC_Z - R * 0.95
+                cv.fill(cv.seg((fx, fz), (fx + 0.003 * math.cos(a), fz + 0.003 * math.sin(a)), 0.0016), (200, 200, 200))
+        elif i == 1:                                       # temperature: the blue-to-red arc over the knob
+            for k in range(24):
+                a0 = 210.0 - 240.0 * k / 24
+                t = k / 23
+                col = (int(40 + 190 * t), int(80 * (1 - abs(2 * t - 1)) + 40), int(220 - 190 * t))
+                cv.fill(cv.arc(x, HVAC_Z, R * 1.16, R * 1.36, a0 - 10.5, a0), col)
+        else:                                              # mode: five vent / feet / defrost icons round the top
+            for k in range(5):
+                a = math.radians(160.0 - 35.0 * k)
+                ix, iz = x + R * 1.32 * math.cos(a), HVAC_Z + R * 1.32 * math.sin(a)
+                cv.fill(cv.seg((ix - 0.0024, iz), (ix + 0.0024, iz + 0.0016), 0.0012), (205, 205, 205))
+                cv.fill(cv.disc(ix - 0.0018, iz + 0.0012, 0.0009), (205, 205, 205))
+        _knob(cv, x, HVAC_Z, R, (125.0, 90.0, 55.0)[i])
+    for k, z in enumerate(HVAC_BTN_Z):                    # recirculation (car icon), A/C, REAR (defrost lines)
+        x = HVAC_BTN_X
+        cv.fill(cv.rect(x - 0.015, x + 0.015, z - 0.0085, z + 0.0085, 0.002), (18, 18, 19))
+        cv.fill(cv.rect(x - 0.0138, x + 0.0138, z - 0.0073, z + 0.0073, 0.0018), (58, 58, 60))
+        cv.fill(cv.rect(x - 0.003, x + 0.003, z + 0.0045, z + 0.0062), (110, 76, 30))  # its indicator (unlit)
+        if k == 0:
+            cv.fill(cv.seg((x - 0.006, z - 0.002), (x + 0.006, z - 0.002), 0.0014), (215, 215, 215))
+            cv.fill(cv.seg((x - 0.004, z - 0.002), (x - 0.002, z + 0.002), 0.0012), (215, 215, 215))
+            cv.fill(cv.seg((x - 0.002, z + 0.002), (x + 0.003, z + 0.002), 0.0012), (215, 215, 215))
+        elif k == 1:
+            cv.text("A/C", x, z - 0.0015, 0.0050, 0.0009, (220, 220, 220))
+        else:
+            cv.text("REAR", x, z + 0.0005, 0.0030, 0.0007, (220, 220, 220))
+            for j in range(3):
+                cv.fill(cv.rect(x - 0.004, x + 0.004, z - 0.0055 + 0.0012 * j, z - 0.0050 + 0.0012 * j), (220, 220, 220))
+    # the lower stack: the lighter and the coin tray
+    lx, lz, lr = LIGHTER
+    cv.fill(cv.disc(lx, lz, lr * 1.25), (70, 70, 72))
+    cv.fill(cv.disc(lx, lz, lr), (20, 20, 21))
+    cv.fill(cv.disc(lx, lz, lr * 0.55), (52, 52, 54))
+    tx0, tx1, tz0, tz1 = COIN_TRAY
+    cv.fill(cv.rect(tx0, tx1, tz0, tz1, 0.006), (60, 60, 62))
+    cv.fill(cv.rect(tx0 + 0.005, tx1 - 0.005, tz0 + 0.005, tz1 - 0.005, 0.004), (18, 18, 19))
     # passenger side: glovebox outline (1 cm), latch with its handle
     gb = cv.rect(0.23, 0.65, 0.885, 1.065, 0.02)
     cv.fill(gb & ~cv.rect(0.24, 0.64, 0.895, 1.055, 0.015), (34, 34, 35))
@@ -1962,6 +2293,14 @@ def paint_dash(path):
         cv.fill(cv.rect(x - 0.012, x + 0.012, z - 0.012, z + 0.012, 0.003), (74, 74, 76))
     cv.fill(cv.rect(-0.560, -0.460, 0.900, 0.950, 0.004), (34, 34, 35))
     cv.fill(cv.rect(-0.550, -0.470, 0.910, 0.940, 0.003), (24, 24, 25))
+    # the ignition cylinder right of the column (photo 117: a chrome ring with the key slot) and the small square
+    # switch under the cluster's right end (photo 119)
+    cv.fill(cv.disc(-0.255, 0.930, 0.017), (34, 34, 36))
+    cv.fill(cv.disc(-0.255, 0.930, 0.013), (128, 128, 130))
+    cv.fill(cv.disc(-0.255, 0.930, 0.009), (60, 60, 62))
+    cv.fill(cv.rect(-0.2565, -0.2535, 0.923, 0.937), (14, 14, 15))
+    cv.fill(cv.rect(-0.214, -0.192, 0.995, 1.017, 0.003), (30, 30, 32))
+    cv.fill(cv.rect(-0.211, -0.195, 0.998, 1.014, 0.002), (66, 66, 68))
     return cv.save(path)
 
 
@@ -1979,6 +2318,9 @@ def paint_dash_top(path):
     cv.fill(cv.rect(ax0, ax1, ay0, ay1, r), (236, 236, 236))                  # the lid, slightly darker
     cv.fill(cv.rect(ax0, ax1, ay0, ay1, r) & ~cv.rect(ax0 + 0.006, ax1 - 0.006, ay0 + 0.006, ay1 - 0.006, r - 0.006),
             (120, 120, 120))                                                  # the seam: a 6 mm dark line
+    # the small moulded "SRS" near the lid's rear right corner (photo 117), read from the seats: x along the canvas's
+    # u, model y as its v (the letters' up points forward, away from the passenger)
+    cv.text("SRS", ax1 - 0.050, ay0 + 0.022, 0.014, 0.0028, (150, 150, 150))
     return cv.save(path)
 
 
@@ -2169,6 +2511,9 @@ def build(low=LOW):
         print("CABIN decal", paint_dash(os.path.join(BAKE, "cabin_dash.png")))
         print("CABIN decal", paint_cluster(os.path.join(BAKE, "cabin_cluster.png")))
         print("CABIN decal", paint_dash_top(os.path.join(BAKE, "cabin_dash_top.png")))
+        print("CABIN decal", paint_wheel(os.path.join(BAKE, "cabin_wheel.png")))
+        print("CABIN wheel decal frame (bake_atlas CabDark): u %s %.5f..%.5f, v %s %.5f..%.5f"
+              % tuple((tuple(round(c, 5) for c in x) if isinstance(x, tuple) else x) for x in wheel_decal_frame()))
     return ob, pieces
 
 
