@@ -15,8 +15,9 @@ Protection (Lua, server side): every armour part registers with HondaCRVGen1.Acc
 FLOOR / Init): the door plate keeps its door's condition; the arch guard (the only bodywork at its
 wheel, so zombies there thump it) absorbs its own thumps and its tyre's hits, never the tyre's driving
 wear; the mesh and the rear plate keep their glass and hold weakened glass above a burst of thumps.
-The armour wears through a fractional accumulator scaled by the ArmourStrength sandbox option (VERY
-strong at 1). Armoured windows cannot be opened (the glass must stay up for the game to keep zombies'
+The armour wears through a fractional accumulator scaled by the ArmourStrength sandbox option: at 1 a
+piece loses one point for each point it gives back, so its part lasts about twice as long, and the armour
+itself wears out and breaks (2026-10-21; it was 1 per 50 before, ~50x: "like a tank"). Armoured windows cannot be opened (the glass must stay up for the game to keep zombies'
 arms out: AttackVehicleState only bites through a missing, broken or open window or an open door), and
 a door with its plate on cannot be taken off. Everything bolts on with a wrench and a screwdriver
 (the mesh and the rear plate share the window guard parts' tables: gen_scripts gives those both tools).
@@ -397,15 +398,21 @@ def _part(gen, part, geo, item, area, parent, require, time, level, durability):
     return "\n".join(lines)
 
 
+# a part's `durability` only divides the damage a PLAYER's weapon does to it (BaseVehicle.applyDamageToPart ->
+# CombatManager.calculateDamageToVehicle: hit x 50 x doorDamage / 10 / durability); crashes and zombies ignore
+# it. Vanilla doors 5, hood 5, glass 2: the plates and arch guards are twice a door (2026-10-21; were 25 / 20)
+PLATE_DURABILITY = 10
+
+
 def VEHICLE_PARTS(gen, vehicle):
     out = []
     for t, p, area, fr in DOORS:
         # a door plate is drawn by its door's AnimationPlayer (a child part): parent = the door
         out.append(_part(gen, "CRVArmourDoor" + p, "acc_armour_door_" + t, "CRVGen1_ArmourDoor" + fr, area,
-                         "Door" + p, "Door" + p, 1500, 4, 25))
+                         "Door" + p, "Door" + p, 1500, 4, PLATE_DURABILITY))
     for t, p, _area, fr in DOORS:
         out.append(_part(gen, "CRVArmourArch" + p, "acc_armour_arch_" + t, "CRVGen1_ArmourArch" + fr, ARCH_AREA[t],
-                         None, None, 1000, 3, 20))
+                         None, None, 1000, 3, PLATE_DURABILITY))
     return out
 
 
@@ -453,8 +460,9 @@ TRANSLATIONS = {
 SANDBOX = [
     {"name": "ArmourStrength", "type": "double", "default": 1.0, "min": 0.1, "max": 10.0,
      "label": "CRV armour strength",
-     "tooltip": "How long the CRV's survival armour lasts. 1 = very strong (a door plate takes hundreds of "
-                "zombie hits); 2 = twice as long; 0.5 = half."},
+     "tooltip": "How long the CRV's survival armour lasts. 1 = a plate or mesh takes as much damage as the door "
+                "or window under it, so that part lasts about twice as long; 2 = the armour lasts twice as long; "
+                "0.5 = half."},
 ]
 
 DISTRIBUTIONS = []

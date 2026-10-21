@@ -1,7 +1,7 @@
 {
     "Sandbox_HondaCRVGen1": "Honda CRV (RD1)",
     "Sandbox_HondaCRVGen1_ArmourStrength": "CRV armour strength",
-    "Sandbox_HondaCRVGen1_ArmourStrength_tooltip": "How long the CRV's survival armour lasts. 1 = very strong (a door plate takes hundreds of zombie hits); 2 = twice as long; 0.5 = half.",
+    "Sandbox_HondaCRVGen1_ArmourStrength_tooltip": "How long the CRV's survival armour lasts. 1 = a plate or mesh takes as much damage as the door or window under it, so that part lasts about twice as long; 2 = the armour lasts twice as long; 0.5 = half.",
     "Sandbox_HondaCRVGen1_FunctionSpawnRate": "CRV spawn rate (percent)",
     "Sandbox_HondaCRVGen1_FunctionSpawnRate_tooltip": "How often the CRV turns up in driveways, suburbs, farms, parking lots and traffic jams. 100 is the mod's normal rate, 0 none at all.",
     "Sandbox_HondaCRVGen1_FunctionAccessoryChance": "CRV accessory chance (percent)",

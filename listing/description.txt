@@ -61,7 +61,7 @@ I really like the first-gen CRV and I really wanted one in Zomboid, so I made it
 
 [h2]Known issues[/h2]
 [list]
-[*] Version 0.4.2, still early. If you hit a bug, please post it with your console log
+[*] Version 0.4.3, still early. If you hit a bug, please post it with your console log
 [*] Still being tested on dedicated servers
 [*] I just changed how the lifted version handles hard braking and turns, so tell me how it feels
 [*] Damage dents are still soft blotches for now
@@ -69,3 +69,6 @@ I really like the first-gen CRV and I really wanted one in Zomboid, so I made it
 
 [h2]Credits[/h2]
 Vehicle mesh based on [url=https://sketchfab.com/3d-models/3565e8277a484f14b45c6888ca61a2b2]"Honda CR-V 2001"[/url] by kotris666 on Sketchfab, licensed [url=https://creativecommons.org/licenses/by/4.0/]CC BY 4.0[/url]. Changes: split into game parts, decimated, re-unwrapped and retextured; the engine bay and all textures are original. Surface grain from PolyHaven (CC0). Honda, CR-V and the H emblem are Honda Motor Co. trademarks, used in a free fan mod.
+
+Workshop ID: 3822496833
+Mod ID: HondaCRVGen1

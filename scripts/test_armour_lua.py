@@ -8,7 +8,8 @@ Checks: the guard part shows only the installed item's model (bars / mesh / rear
 an install and, on a multiplayer client, once the State poll sees the item change; an armoured window
 is shut on install and cannot be opened (client and server), closing still works; the door plate keeps
 its door's condition and wears through the fractional accumulator scaled by ArmourStrength; a plate
-at 0 protects nothing; the mesh variant wears like armour and the bars like bars; a door with its plate
+at 0 protects nothing; a plated door lasts ~2x; the mesh variant wears like armour and the bars like the
+core bars; worn-out armour holds nothing; a door with its plate
 cannot be uninstalled; protection runs only where the game is authoritative.
 """
 import sys
@@ -146,7 +147,9 @@ def single_player():
     sp.run("install(v, 'CRVGuardWindshieldRear', 'Base.CRVGen1_ArmourRearPlate', %s.InstallComplete)" % ACC)
     check(sp.eval("visibleList(v.parts.CRVGuardWindshieldRear)") == "ArmourPlate", "rear plate shows the plate only")
 
-    # protection: the door plate keeps the door; 0.02 per absorbed point at strength 1
+    # protection: the door plate keeps the door; one point per absorbed point at strength 1 (2026-10-21:
+    # 0.02 before, ~50x the door's life: "like a tank")
+    check(sp.eval("HondaCRVGen1.Armour.WEAR_RATE") == 1.0, "armour wears one for one at strength 1")
     sp.run("install(v, 'CRVArmourDoorFrontLeft', 'Base.CRVGen1_ArmourDoorFront', %s.InstallComplete)" % A)
     check(sp.eval("%s.watch[1] ~= nil" % ACC), "the car is watched")
     sp.run("TICK(3)")                                         # the snapshot
@@ -154,17 +157,23 @@ def single_player():
     for hit in range(7):
         sp.run("%s:setCondition(%s:getCondition() - 7); TICK(3)" % (d, d))
         check(sp.eval("%s:getCondition()" % d) == 100, "door restored after hit %d" % hit)
-    check(sp.eval("%s:getCondition()" % p) == 100, "7 hits x 7 x 0.02 = 0.98: no whole point yet")
+    check(sp.eval("%s:getCondition()" % p) == 51, "7 hits x 7 = 49 points off the plate (got %s)" % sp.eval("%s:getCondition()" % p))
+    # ArmourStrength 2: half the wear, the fraction stays in the plate's mod data
+    sp.run("SandboxVars.HondaCRVGen1.ArmourStrength = 2.0; %s:setCondition(100); %s.md.crvArmourWear = 0" % (p, p))
     sp.run("%s:setCondition(93); TICK(3)" % d)
-    check(sp.eval("%s:getCondition()" % p) == 99, "8th hit: one point off the plate")
-    check(abs(sp.eval("%s.md.crvArmourWear" % p) - 0.12) < 1e-6, "the fraction stays in the plate's mod data")
-    # ArmourStrength 2: half the wear
-    sp.run("SandboxVars.HondaCRVGen1.ArmourStrength = 2.0; %s.md.crvArmourWear = 0" % p)
-    for _ in range(14):
-        sp.run("%s:setCondition(93); TICK(3)" % d)
-    check(sp.eval("%s:getCondition()" % p) == 99, "strength 2: 14 hits still under one point (0.98)")
+    check(sp.eval("%s:getCondition()" % p) == 97, "strength 2: 7 x 0.5 = 3.5 -> 3 points")
+    check(abs(sp.eval("%s.md.crvArmourWear" % p) - 0.5) < 1e-6, "the half point stays in the plate's mod data")
     sp.run("%s:setCondition(93); TICK(3)" % d)
-    check(sp.eval("%s:getCondition()" % p) == 98, "strength 2: the 15th makes it")
+    check(sp.eval("%s:getCondition()" % p) == 93, "strength 2: the second hit makes 7")
+    # the door's life against hits of 7: alone 15 hits, plated ~29 (twice) at strength 1
+    sp.run("SandboxVars.HondaCRVGen1.ArmourStrength = 1.0; %s:setCondition(100); %s.md.crvArmourWear = 0; TICK(3)" % (p, p))
+    hits = 0
+    while sp.eval("%s:getCondition()" % d) > 0 and hits < 1000:
+        sp.run("%s:setCondition(math.max(0, %s:getCondition() - 7)); TICK(3)" % (d, d))
+        hits += 1
+    check(28 <= hits <= 30, "a plated door lasts ~2x a bare one's 15 hits of 7 (got %d)" % hits)
+    check(sp.eval("%s:getCondition()" % p) <= 0, "the plate wore out on the way")
+    sp.run("%s:setCondition(100); TICK(3)" % d)
     # a plate at 0 protects nothing
     sp.run("%s:setCondition(0); TICK(3); %s:setCondition(80); TICK(3)" % (p, d))
     check(sp.eval("%s:getCondition()" % d) == 80, "a worn-out plate lets the door take the damage")
@@ -172,16 +181,16 @@ def single_player():
     # the mesh wears like armour, the bars like bars
     sp.run("SandboxVars.HondaCRVGen1.ArmourStrength = 1.0")
     w = "v.parts.WindowFrontLeft"
-    for _ in range(20):
+    for _ in range(10):
         sp.run("%s:setCondition(%s:getCondition() - 7); TICK(3)" % (w, w))
-    check(sp.eval("%s:getCondition()" % w) == 100, "mesh keeps the glass")
-    check(sp.eval("%s:getCondition()" % g) == 98, "mesh: 20 x 7 x 0.02 = 2.8 -> 2 points (got %s)" % sp.eval("%s:getCondition()" % g))
+    check(sp.eval("%s:getCondition()" % g) == 100 - 70 and sp.eval("%s:getCondition()" % w) == 100,
+          "mesh: 10 x 7 = 70 points off, the glass kept (got %s)" % sp.eval("%s:getCondition()" % g))
     sp.run("%s:setInventoryItem(nil); install(v, 'CRVGuardFrontLeft', 'Base.CRVGen1_GuardWindowFront', %s.InstallComplete)" % (g, ACC))
-    sp.run("%s:setCondition(100)" % g)
-    for _ in range(40):
+    sp.run("%s:setCondition(100); %s.md.crvWear = 0" % (g, g))
+    for _ in range(5):
         sp.run("%s:setCondition(%s:getCondition() - 7); TICK(3)" % (w, w))
     bars = sp.eval("%s:getCondition()" % g)
-    check(70 <= bars <= 92, "bars keep their 0-1 a thump (40 thumps -> %s)" % bars)
+    check(bars == 30, "bars: 2 a point, as the core bars (5 x 7 x 2 = 70 -> %s)" % bars)
     # the door cannot come off under its plate; without it the vanilla test decides
     check(sp.eval("Vehicles.UninstallTest.Default(v, v.parts.DoorFrontLeft, PLAYER)") is False, "door locked by its plate")
     check(sp.eval("Vehicles.UninstallTest.Default(v, v.parts.DoorRearLeft, PLAYER)") is True, "a bare door comes off")
@@ -363,15 +372,21 @@ def arches_and_glass():
     sp.run("install(v, 'CRVArmourArchFrontLeft', 'Base.CRVGen1_ArmourArchFront', %s.InstallComplete)" % A)
     check(sp.eval("%s.watch[51] ~= nil" % ACC), "an arch guard is watched")
     sp.run("TICK(3)")
-    # 50 zombie thumps of strength 3 on the guard itself (AttackVehicleState: setCondition(cond - strength))
-    for _ in range(50):
+    # 20 zombie thumps of strength 3 on the guard itself (AttackVehicleState: setCondition(cond - strength)):
+    # at strength 1 it takes them as any part would; at 2 half
+    for _ in range(20):
         sp.run("%s:setCondition(%s:getCondition() - 3); TICK(3)" % (a, a))
     arch = sp.eval("%s:getCondition()" % a)
-    check(arch == 97, "50 thumps x 3 x 0.02 = 3 points off the guard, not 150 (got %s)" % arch)
+    check(arch == 40, "20 thumps x 3 = 60 points off the guard (got %s)" % arch)
+    sp.run("SandboxVars.HondaCRVGen1.ArmourStrength = 2.0")
+    for _ in range(4):
+        sp.run("%s:setCondition(%s:getCondition() - 3); TICK(3)" % (a, a))
+    check(sp.eval("%s:getCondition()" % a) == 34, "strength 2: 4 x 3 x 0.5 = 6 (got %s)" % sp.eval("%s:getCondition()" % a))
+    sp.run("SandboxVars.HondaCRVGen1.ArmourStrength = 1.0")
     # a roadkill chip on the tyre (addDamageFrontHitAChr: 1-2) is restored and charged to the guard
     sp.run("%s.md.crvArmourWear = 0; %s:setCondition(%s:getCondition() - 2); TICK(3)" % (a, t, t))
     check(sp.eval("%s:getCondition()" % t) == 100, "the guard keeps its tyre's hits")
-    check(abs(sp.eval("%s.md.crvArmourWear" % a) - 0.04) < 1e-6, "2 points x 0.02 on the guard's accumulator")
+    check(sp.eval("%s:getCondition()" % a) == 32, "2 points off the guard for its tyre's 2 (got %s)" % sp.eval("%s:getCondition()" % a))
     # driving wear goes on: 30 wear events through Vehicles.Update.Tire -> Vehicles.LowerCondition
     for _ in range(30):
         sp.run("Vehicles.Update.Tire(v, %s, 1); TICK(3)" % t)
@@ -380,9 +395,11 @@ def arches_and_glass():
     sp.run("Vehicles.Update.Tire(v, %s, 1); %s:setCondition(%s:getCondition() - 2); TICK(3)" % (t, t, t))
     check(sp.eval("%s:getCondition()" % t) == 69, "wear stays, the chip is restored (got %s)" % sp.eval("%s:getCondition()" % t))
     # a guard that a hit took to 0 since the last pass still absorbed it; a worn-out one protects nothing
+    sp.run("SandboxVars.HondaCRVGen1.ArmourStrength = 4.0; %s.md.crvArmourWear = 0" % a)                # a quarter point a point
     sp.run("%s:setCondition(2); %s.watch[51].snap.CRVArmourArchFrontLeft = 2; TICK(3)" % (a, ACC))   # worn down to 2
     sp.run("%s:setCondition(0); TICK(3)" % a)                                                          # a thump of 3
     check(sp.eval("%s:getCondition()" % a) == 2, "a hit to 0 is absorbed like any other (got %s)" % sp.eval("%s:getCondition()" % a))
+    sp.run("SandboxVars.HondaCRVGen1.ArmourStrength = 1.0")
     sp.run("%s:setCondition(0); %s.watch[51].snap.CRVArmourArchFrontLeft = 0; TICK(3)" % (a, ACC))
     sp.run("%s:setCondition(60); TICK(3); %s:setCondition(55); TICK(3)" % (t, t))
     check(sp.eval("%s:getCondition()" % t) == 55, "a worn-out guard lets the tyre take it")
@@ -393,10 +410,17 @@ def arches_and_glass():
     sp.run("%s:setCondition(3)" % w)
     sp.run("install(v, 'CRVGuardFrontLeft', 'Base.CRVGen1_ArmourMeshFront', %s.InstallComplete)" % ACC)
     check(sp.eval("%s:getCondition()" % w) == floor, "the glass is held at the floor on install")
-    for _ in range(40):                         # three superhuman thumps (5) between every two passes
+    check(sp.eval("%s:getCondition()" % g) == 100 - (floor - 3), "the mesh paid for the raise")
+    for _ in range(5):                          # three superhuman thumps (5) between every two passes
         sp.run("%s:setCondition(%s:getCondition() - 15); TICK(3)" % (w, w))
         check(sp.eval("%s:getCondition()" % w) >= floor, "glass held")
-    check(sp.eval("%s:getCondition()" % g) < 100, "the mesh paid for it (%s)" % sp.eval("%s:getCondition()" % g))
+    check(sp.eval("%s:getCondition()" % g) == 100 - (floor - 3) - 75, "the mesh paid for it (%s)" % sp.eval("%s:getCondition()" % g))
+    # the mesh wears out: from then on the glass takes the thumps and breaks (the armour is not forever)
+    for _ in range(3):
+        sp.run("%s:setCondition(math.max(0, %s:getCondition() - 15)); TICK(3)" % (w, w))
+    check(sp.eval("%s:getCondition()" % g) <= 0 and sp.eval("%s:getCondition()" % w) < floor,
+          "a worn-out mesh holds nothing (mesh %s, glass %s)" % (sp.eval("%s:getCondition()" % g), sp.eval("%s:getCondition()" % w)))
+    sp.run("%s:setCondition(100)" % w)
     # the bars keep the core rule: no floor (they are not the armour)
     sp.run("%s:setInventoryItem(nil); %s:setCondition(4); TICK(3)" % (g, w))
     sp.run("install(v, 'CRVGuardFrontLeft', 'Base.CRVGen1_GuardWindowFront', %s.InstallComplete); TICK(3)" % ACC)

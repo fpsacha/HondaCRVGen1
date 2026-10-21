@@ -4,7 +4,8 @@ Game-data checks on the generated mod files (system Python), each one a defect t
   1. tuning keys: every top-level key of every CR-V vehicle script is one VehicleScript.Load reads in
      42.21 (gen_scripts.PARSED_KEYS), so no tuning value is silently dead
      (brakingForce was never parsed; frontEndHealth / rearEndHealth are not the parser's names, which are
-     frontEndDurability / rearEndDurability), and the crash durability is the tuned 300;
+     frontEndDurability / rearEndDurability), and the end durability is the vanilla SUV's 150 (2026-10-21:
+     it only feeds a debug counter in 42.21, but 300 read as "twice a vanilla car" to players);
   2. translation routing: the game looks a prefixed key up in ONE file (Translator.getTextInternal:
      Tooltip_ -> Tooltip.json, ContextMenu_ -> ContextMenu.json, IGUI_ -> IG_UI.json, Sandbox_ -> Sandbox.json)
      and shows the raw key on a miss: every key the mod's Lua names that a translation file defines sits
@@ -47,9 +48,9 @@ def check_tuning(mod42):
             if dead:
                 fail("%s: vehicle %s has keys the 42.21 parser never reads: %s" % (fn, v.name, ", ".join(dead)))
             for k in ("frontEndDurability", "rearEndDurability"):
-                if v.get(k) != "300":
-                    fail("%s: %s = %s, want the tuned 300" % (fn, k, v.get(k)))
-    print("GAMEDATA tuning: %d vehicle scripts, every key read by VehicleScript.Load, durability 300 front and rear"
+                if v.get(k) != "150":
+                    fail("%s: %s = %s, want the vanilla SUV's 150" % (fn, k, v.get(k)))
+    print("GAMEDATA tuning: %d vehicle scripts, every key read by VehicleScript.Load, durability 150 front and rear"
           % len(names))
 
 
@@ -191,10 +192,41 @@ def check_cabin(mod42):
           % (len(names), gen.CABIN_PART, gen.CABIN_LUA))
 
 
+# toughness (2026-10-21, a player: "the durability is crazy, it's like a tank"): a part's `durability` only
+# divides a player's weapon damage (CombatManager.calculateDamageToVehicle), vanilla doors / hoods 5, glass 2;
+# none of ours may stand out (the armour plates and arch guards were 25 / 20); and the armour-strength
+# sandbox option defaults to 1 (the armour soaks as much as the part it covers: ~2x its life)
+MAX_PART_DURABILITY = 10
+
+
+def check_toughness(mod42):
+    vdir = os.path.join(mod42, "media", "scripts", "vehicles")
+    worst = 0
+    for fn in sorted(f for f in os.listdir(vdir) if f.startswith(gen.VEHICLE) and f.endswith(".txt")):
+        root = audit_mod.parse(open(os.path.join(vdir, fn), encoding="utf-8").read())
+        for v in root.children[0].all("vehicle"):
+            for p in v.all("part"):
+                d = p.get("durability")
+                if d is None:
+                    continue
+                worst = max(worst, float(d))
+                if float(d) > MAX_PART_DURABILITY:
+                    fail("%s: part %s durability %s, over %d (vanilla doors 5)" % (fn, p.name, d, MAX_PART_DURABILITY))
+                if p.name.startswith("CRVArmour") and float(d) != MAX_PART_DURABILITY:
+                    fail("%s: armour part %s durability %s, want %d" % (fn, p.name, d, MAX_PART_DURABILITY))
+    sand = open(os.path.join(mod42, "media", "sandbox-options.txt"), encoding="utf-8").read()
+    m = re.search(r"option HondaCRVGen1\.ArmourStrength\s*\{(.*?)\}", sand, re.S)
+    if not m or not re.search(r"default\s*=\s*1\.0\s*,", m.group(1)):
+        fail("sandbox ArmourStrength: want default = 1.0")
+    print("GAMEDATA toughness: part durability <= %d (highest %g), armour plates and arch guards %d, ArmourStrength default 1.0"
+          % (MAX_PART_DURABILITY, worst, MAX_PART_DURABILITY))
+
+
 def main():
     a = sys.argv[1:]
     mod42 = a[a.index("--mod42") + 1] if "--mod42" in a else gen.CHECKOUT_MOD42
     check_tuning(mod42)
+    check_toughness(mod42)
     check_suspension(mod42)
     check_cabin(mod42)
     check_routes(mod42)

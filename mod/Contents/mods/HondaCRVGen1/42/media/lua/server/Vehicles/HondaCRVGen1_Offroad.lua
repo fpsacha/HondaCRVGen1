@@ -22,7 +22,13 @@ clients included, at game load):
   * the gate cannot come off while the tailgate can rides it (HondaCRVGen1.Acc.GATE_FIRST);
   * drawing side: the roof can's model shows only while the rack is there too (a save edited by
     other means, a debug removal), recomputed on init and whenever either part's item changes
-    under a client (State.watchPart), since model visibility is neither saved nor synced.
+    under a client (State.watchPart), since model visibility is neither saved nor synced;
+  * the rear steel bumper takes the rear knocks for the gate (2026-10-21): it registers with the core
+    accessories' protection loop (HondaCRVGen1.Acc.COVERS / RATE, watched through Acc.Init) at the bull
+    bar's rate, so the gate lasts ~1.7x. A rear crash takes the vanilla rear damage
+    (BaseVehicle.addDamageRear: the gate, the rear glass, sometimes a rear door) and zombies at the back
+    thump the gate (getNearestBodyworkPart). The skid plate and the snorkel protect nothing: the game
+    deals no damage from underneath.
 ]]
 
 require "HondaCRVGen1_State"
@@ -119,10 +125,23 @@ function Offroad.showRoofCan(vehicle)
     State.sawPart(vehicle, part)
 end
 
+-- the rear bumper's protection: the gate (HondaCRVGen1.Acc's loop restores it, the bumper wears at RATE)
+Offroad.BUMPER_COVERS = { "TrunkDoor" }
+Offroad.BUMPER_RATE = 1.5
+local Acc = HondaCRVGen1.Acc
+if Acc and Acc.COVERS then
+    Acc.COVERS[Offroad.BUMPER] = Offroad.BUMPER_COVERS
+    if Acc.RATE then Acc.RATE[Offroad.BUMPER] = Offroad.BUMPER_RATE end
+end
+
 -- runs on every side (createPhysics -> VehicleParts.initParts)
 function Offroad.Init(vehicle, part)
     if part:getId() == Offroad.ROOF_CAN then
         Offroad.showRoofCan(vehicle)
+    end
+    -- the bumper: watched by the protection loop (Acc.Init does nothing on a multiplayer client)
+    if part:getId() == Offroad.BUMPER and Acc and Acc.Init then
+        Acc.Init(vehicle, part)
     end
     -- cars saved before this fix: only the authoritative side changes the condition
     if Offroad.CANS[part:getId()] and (isServer() or not isClient()) then
@@ -138,6 +157,9 @@ function Offroad.InstallComplete(vehicle, part)
     end
     if part:getId() == Offroad.ROOF_CAN then
         Offroad.showRoofCan(vehicle)
+    end
+    if part:getId() == Offroad.BUMPER and Acc and Acc.Init then
+        Acc.Init(vehicle, part)                      -- protect the gate from now on
     end
 end
 

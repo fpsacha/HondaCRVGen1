@@ -105,7 +105,8 @@ for i = 1, n do
 end
 print(string.format("SPAWN bull bar %.1f%%, rack %.1f%%, full guard sets %.1f%%, partial %d", 100 * bull / n, 100 * rack / n, 100 * sets / n, partial))
 
--- protection: guard on the front-left window, zombie thumps of 7 between checks
+-- protection: guard on the front-left window, zombie thumps of 7 between checks; the bars lose
+-- Acc.BAR_RATE (2) per point they give back (2026-10-21: they lost 0 or 1 a thump, ~7x the window's life)
 local v = newVehicle(9001)
 local g = v.parts.CRVGuardFrontLeft
 VehicleUtils.createPartInventoryItem(g)
@@ -113,7 +114,7 @@ Acc.Init(v, g)
 assert(Acc.watch[9001], "not watched")
 local w = v.parts.WindowFrontLeft
 local unguarded = v.parts.WindowFrontRight
-for t = 1, 3000 do -- 100 thumps
+for t = 1, 180 do -- 6 thumps
     if t % 30 == 0 then
         w.cond = w.cond - 7
         unguarded.cond = math.max(0, unguarded.cond - 7)
@@ -121,10 +122,29 @@ for t = 1, 3000 do -- 100 thumps
     end
     TICK()
 end
-print(string.format("GUARD after 100 thumps: guarded window %d (item %s), unguarded %d, guard %d, transmits %d",
+print(string.format("GUARD after 6 thumps: guarded window %d (item %s), unguarded %d, guard %d, transmits %d",
     w.cond, tostring(w.item ~= nil), unguarded.cond, g.cond, v.sent))
 assert(w.item ~= nil and w.cond == 100, "guarded window lost condition")
-assert(g.cond < 100 and g.cond > 0, "guard did not wear")
+assert(g.cond == 100 - 6 * 7 * 2, "guard wears 2 per absorbed point (got " .. tostring(g.cond) .. ")")
+assert(g.md.crvWear == 0, "no fraction left over")
+
+-- how long a window lasts under thumps of 3 (Normal zombies), bare and behind the bars: ~1.5x, not ~7x
+local function thumpsToBreak(withGuard, id)
+    local c = newVehicle(id)
+    local gp = c.parts.CRVGuardRearLeft
+    if withGuard then VehicleUtils.createPartInventoryItem(gp); Acc.Init(c, gp); TICK(); TICK(); TICK() end
+    local win, n = c.parts.WindowRearLeft, 0
+    while win.item and n < 10000 do
+        win.cond = win.cond - 3
+        if win.cond <= 0 then win.cond = 0; win.item = nil end
+        n = n + 1
+        TICK(); TICK(); TICK()
+    end
+    return n
+end
+local bare, barred = thumpsToBreak(false, 9010), thumpsToBreak(true, 9011)
+print(string.format("WINDOW LIFE thumps of 3: bare %d, behind the bars %d (%.2fx)", bare, barred, barred / bare))
+assert(bare == 34 and barred >= 49 and barred <= 52, "bars: the window lasts ~1.5x")
 -- wear the guard out: the window takes damage again once it is at 0
 g.cond = 1
 for t = 1, 600 do
@@ -140,17 +160,30 @@ TICK(); TICK(); TICK()
 print("WATCH after uninstall:", Acc.watch[9001] == nil and "dropped" or "still watched")
 assert(Acc.watch[9001] == nil)
 
--- bull bar: a crash takes 30 off the hood
+-- bull bar: a crash takes 10 off the hood and 20 off a headlight; the bar pays 1.5 a point (Acc.RATE)
 local v2 = newVehicle(9002)
 local bb = v2.parts.CRVBullbar
 VehicleUtils.createPartInventoryItem(bb)
 Acc.InstallComplete(v2, bb)
 TICK(); TICK(); TICK()
-v2.parts.EngineDoor.cond = 70
-v2.parts.HeadlightLeft.cond = 40
+v2.parts.EngineDoor.cond = 90
+v2.parts.HeadlightLeft.cond = 80
 TICK(); TICK(); TICK()
 print(string.format("BULLBAR hood %d, headlight %d, bar %d", v2.parts.EngineDoor.cond, v2.parts.HeadlightLeft.cond, bb.cond))
-assert(v2.parts.EngineDoor.cond == 100 and v2.parts.HeadlightLeft.cond == 100 and bb.cond == 100 - 10 - 20)
+assert(v2.parts.EngineDoor.cond == 100 and v2.parts.HeadlightLeft.cond == 100 and bb.cond == 100 - 15 - 30)
+-- an odd hit leaves the half point in the bar's mod data
+v2.parts.EngineDoor.cond = 99
+TICK(); TICK(); TICK()
+assert(bb.cond == 54 and math.abs(bb.md.crvWear - 0.5) < 1e-9, "1 x 1.5: one point off, the half kept")
+-- worn out: the hood takes the next crash itself
+bb.cond = 0
+v2.parts.EngineDoor.cond = 80
+TICK(); TICK(); TICK()
+assert(v2.parts.EngineDoor.cond == 80, "a worn-out bull bar protects nothing")
+-- the default wear without the part (a feature's caller passing none): the same on average
+local sum = 0
+for i = 1, 2000 do sum = sum + Acc.wearAt(1.5, 3, nil) end
+assert(math.abs(sum / 2000 - 4.5) < 0.1, "wearAt without a part averages lost x rate")
 
 -- roof rack access
 local v3 = newVehicle(9003)

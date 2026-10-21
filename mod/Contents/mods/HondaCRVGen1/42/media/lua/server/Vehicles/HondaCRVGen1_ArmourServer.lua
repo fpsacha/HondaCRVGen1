@@ -14,11 +14,14 @@ protector wears instead (spec/feature-plugins.md section 4):
                     and the hits its tyre takes (roadkill chips, gunshots). Driving wear is not a hit:
                     the tyre's snapshot follows Vehicles.LowerCondition down (Armour.lowerCondition).
                     Suspension and brakes only wear by driving: nothing to protect there.
-Wear: armour is VERY strong. Each absorbed point of condition adds WEAR_RATE / ArmourStrength (the
-sandbox option, default 1) to an accumulator in the protector's mod data (server side only, saved
-with the car); whole points come off its condition. At 1 and Normal zombies (strength 3): 0.06 per
-thump, a plate or an arch guard lasts ~1,600 thumps where the bar guards last ~200.
-The bar guards (the same parts with the bar item) keep their 0-1 per thump.
+Wear: each absorbed point of condition adds WEAR_RATE / ArmourStrength (the sandbox option, default 1)
+to an accumulator in the protector's mod data (server side only, saved with the car); whole points come
+off its condition. At 1 the armour takes one point for every point it gives back: a piece of condition
+100 soaks up as much as its part holds, so the door / the glass under it lasts about twice as long
+(Normal zombies, strength 3: a bare window breaks after ~34 thumps, a meshed one after ~67), and the
+armour wears out and stops protecting like any part. ArmourStrength 2 = it soaks twice as much (~3x).
+(Before 2026-10-21 the rate was 0.02: 50 points soaked per point lost, a window ~50x, "like a tank".)
+The bar guards (the same parts with the bar item) wear at the core bars' rate (HondaCRVGen1.Acc.BAR_RATE).
 Every vanilla function this file and the shared one wrap is wrapped once per table (Armour.wrapOnce).
 
 media/lua/server loads on every side (multiplayer clients too, GameLoadingState): the registrations
@@ -34,7 +37,7 @@ local Armour = HondaCRVGen1.Armour
 local Acc = HondaCRVGen1.Acc
 local State = HondaCRVGen1.State
 
-Armour.WEAR_RATE = 0.02                 -- protector condition per absorbed condition at ArmourStrength 1
+Armour.WEAR_RATE = 1.0                  -- protector condition per absorbed condition at ArmourStrength 1
 
 function Armour.strength()
     local vars = SandboxVars and SandboxVars.HondaCRVGen1
@@ -55,12 +58,12 @@ function Armour.wearArmour(lost, vehicle, acc)
     return n
 end
 
--- a guard part wears like the bars (0-1 a thump) with the bar item, like armour with the mesh / plate
+-- a guard part wears like the core bars with the bar item (Acc.BAR_RATE), like armour with the mesh / plate
 function Armour.wearGuard(lost, vehicle, acc)
     if acc and Armour.isArmourItem(acc) then
         return Armour.wearArmour(lost, vehicle, acc)
     end
-    return ZombRand(0, 2)
+    return Acc.wearAt(Acc.BAR_RATE, lost, acc)
 end
 
 -- armour over weakened glass holds it: the game smashes a window in the same call that takes its

@@ -593,9 +593,15 @@ ATTACHMENTS = [("trailer", "0.0 -0.4500 -2.4200", "-1.0"), ("trailerfront", "0.0
 # MASS 700 (KI5's scale: ~half the real curb weight, as their Bronco 900 / Defender 750 / Hilux 700) keeps
 # that wheel under 6000 N for 1.7 x with ~680 kg of parts and cargo aboard; engineForce follows it so
 # acceleration with the usual parts (~310 kg) is what it was: 4800 / 1260 = 3850 / 1010.
-# Keys are the ones VehicleScript.Load reads in 42.21 (its string constants, PARSED_KEYS below): the
-# crash durability is `frontEndDurability` / `rearEndDurability` (read into the script's frontEndHealth
-# field, default 100; vanilla's generated scripts write the dead `frontEndHealth`). There is no
+# Keys are the ones VehicleScript.Load reads in 42.21 (its string constants, PARSED_KEYS below):
+# `frontEndDurability` / `rearEndDurability` go into the script's frontEndHealth field (default 100; vanilla's
+# generated scripts write the dead `frontEndHealth`, so the vanilla SUV's 150 is never read and it runs on
+# 100). They do NOT make a car tougher (42.21 bytecode, 2026-10-21): BaseVehicle.setScript copies them into
+# currentFront/RearEndDurability, addDamageFront/Rear subtract each crash from those, and nothing ever reads
+# them back except the save and the debug getVehicleInfo table. Crash damage is |speed change| (m/s, capped
+# at 6) x 3 / the sandbox CarDamageOnImpact divisor (1.3 at Normal), dealt straight to the parts' conditions
+# (hood, windshield, a front door / window 1 in 4, headlights; the engine only under a hood below 25), so
+# it is the same for every car whatever its mass. 150 = the vanilla SUV's written value (was 300). There is no
 # `brakingForce` key: BaseVehicle.updatePartStats sums the brake parts' items (getBrakeForce), so
 # braking follows the brakes fitted, as on every vanilla car.
 TUNING = [
@@ -603,7 +609,7 @@ TUNING = [
     ("stoppingMovementForce", "3.4"), ("rollInfluence", "0.95"),
     ("suspensionStiffness", "38.0"), ("suspensionCompression", "3.83"), ("suspensionDamping", "2.88"),
     ("suspensionRestLength", "0.35"), ("maxSuspensionTravelCm", "11.0"), ("wheelFriction", "1.7"),
-    ("frontEndDurability", "300"), ("rearEndDurability", "300"),
+    ("frontEndDurability", "150"), ("rearEndDurability", "150"),
 ]
 # every string VehicleScript.Load compares a key or block name with (42.21 bytecode, javap of
 # zombie.scripting.objects.VehicleScript.Load): a vehicle-block key outside it is silently ignored by the

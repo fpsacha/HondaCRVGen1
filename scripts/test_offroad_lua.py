@@ -211,10 +211,45 @@ def multiplayer():
     check(server.eval("can.fc:getAmount()") == 9.0, "the server's can keeps its 9 l")
 
 
+def rear_bumper():
+    """The rear steel bumper takes rear knocks for the gate at the bull bar's rate (1.5 a point: the gate
+    lasts ~1.7x), where the game is authoritative only; worn out it protects nothing; the skid plate and the
+    snorkel protect nothing (2026-10-21)."""
+    sp = side("sp", player="tester")
+    check(sp.eval("HondaCRVGen1.Acc.COVERS.CRVOffroadRearBumper[1]") == "TrunkDoor", "the bumper covers the gate")
+    check(sp.eval("HondaCRVGen1.Acc.RATE.CRVOffroadRearBumper") == 1.5, "at the bull bar's rate")
+    check(sp.eval("HondaCRVGen1.Acc.COVERS.CRVOffroadSkidPlate == nil and HondaCRVGen1.Acc.COVERS.CRVOffroadSnorkel == nil"),
+          "the skid plate and the snorkel cover nothing")
+    sp.run("v = car(30); b = v.parts.CRVOffroadRearBumper; b:setInventoryItem(newItem('CRVGen1_OffroadRearBumper')); "
+           "O.InstallComplete(v, b); TICK(3)")
+    check(sp.eval("HondaCRVGen1.Acc.watch[30] ~= nil"), "an installed bumper is watched")
+    sp.run("g = v.parts.TrunkDoor; g:setCondition(90); TICK(3)")       # a rear crash: 10 off the gate
+    check(sp.eval("g:getCondition()") == 100 and sp.eval("b:getCondition()") == 85, "gate kept, bumper -15")
+    # the gate's life against rear knocks of 6: alone 17, bumpered ~28 (1.67x)
+    sp.run("b:setCondition(100); b.md.crvWear = 0")
+    hits = 0
+    while sp.eval("g:getCondition()") > 0 and hits < 1000:
+        sp.run("g:setCondition(math.max(0, g:getCondition() - 6)); TICK(3)")
+        hits += 1
+    check(26 <= hits <= 29, "a bumpered gate lasts ~1.7x a bare one's 17 knocks of 6 (got %d)" % hits)
+    check(sp.eval("b:getCondition()") == 0, "the bumper wore out on the way")
+    # loaded on a car (init): watched again after a save / load
+    sp.run("w = car(31); w.parts.CRVOffroadRearBumper:setInventoryItem(newItem('CRVGen1_OffroadRearBumper')); "
+           "O.Init(w, w.parts.CRVOffroadRearBumper)")
+    check(sp.eval("HondaCRVGen1.Acc.watch[31] ~= nil"), "init watches a fitted bumper")
+    # a multiplayer client never restores anything (the server does; the condition reaches the client)
+    c = side("client", Net(), player="alice")
+    c.run("v = car(32); b = v.parts.CRVOffroadRearBumper; b:setInventoryItem(newItem('CRVGen1_OffroadRearBumper')); "
+          "O.Init(v, b); TICK(3); v.parts.TrunkDoor:setCondition(90); TICK(3)")
+    check(c.eval("v.parts.TrunkDoor:getCondition()") == 90 and c.eval("HondaCRVGen1.Acc.watch[32] == nil"),
+          "a client does not protect")
+
+
 def main():
     single_player()
     sandbox_chance()
     multiplayer()
+    rear_bumper()
     print("OFFROAD LUA TESTS OK")
 
 

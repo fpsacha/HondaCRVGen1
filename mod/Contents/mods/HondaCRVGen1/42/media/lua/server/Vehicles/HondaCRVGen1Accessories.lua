@@ -28,6 +28,12 @@ game smashes the glass and removes it (zombie.vehicles.VehicleWindow.damage). Wh
 installed and has condition left, the glass it covers gets back what it lost within a few ticks
 and the guard wears instead. The bull bar does the same for the hood and the headlights. This runs
 where the game is authoritative: single player and the server.
+
+Wear (2026-10-21, a player: "the durability is crazy, it's like a tank"): a protector loses condition
+in PROPORTION to what it absorbs, Acc.RATE points per absorbed point (fractions kept in its mod data),
+so it buys its part a fixed extra share of life. Before, the bars lost 0 or 1 a hit whatever the hit
+(a window lasted ~7x as long, far more in a crowd or a crash) and the bull bar a third of it (~4x).
+Now: the bars 2 per point (the window lasts ~1.5x), the bull bar 1.5 (hood and headlights ~1.7x).
 ]]
 
 require "HondaCRVGen1_State"
@@ -70,9 +76,15 @@ Acc.RACK_KEY = "acc_rackLoad"            -- HondaCRVGen1.State key: derived on t
 State.define(Acc.RACK_KEY, { part = Acc.RACK_PART, kind = "number", default = 0,
                              min = 0, max = #Acc.RACK_MODELS, integer = true })
 
+-- protector condition lost per point of condition it gives back (Acc.wearAt): a protector of condition 100
+-- absorbs 100 / rate, so its part lasts 1 + 1 / rate times as long. Acc.BAR_RATE for a protector not listed
+Acc.BAR_RATE = 2.0                 -- the steel window bars: the glass lasts ~1.5x
+Acc.RATE = { CRVBullbar = 1.5 }    -- the bull bar: hood and headlights ~1.7x (a feature may add its parts)
+
 -- feature plugins (spec/feature-plugins.md) register protective parts the same way: Acc.COVERS[partId] =
--- { protected part ids }, Acc.WEAR[partId] = function(lost) -> condition the part loses (default: the guards'
--- 0 or 1 per thump), and their part's init hook calls HondaCRVGen1.Acc.Init(vehicle, part) to be watched
+-- { protected part ids }, Acc.WEAR[partId] = function(lost) -> condition the part loses (default: Acc.wearAt
+-- at Acc.RATE[partId] or Acc.BAR_RATE), and their part's init hook calls HondaCRVGen1.Acc.Init(vehicle, part)
+-- to be watched
 Acc.WEAR = {}
 -- (armour feature) Acc.WEAR functions also get the vehicle and the protector part: wear(lost, vehicle, acc),
 -- so a protector can keep its own wear accumulator in its mod data
@@ -85,15 +97,33 @@ Acc.PART_HOOKS = {}
 -- and only its Acc.WEAR comes off it
 Acc.FLOOR = {}
 
+-- whole points a protector loses for absorbing `lost` at `rate` points per point; the fraction stays in its
+-- mod data under `key` (saved with the car, server side only). Without the part: the same on average
+function Acc.wearAt(rate, lost, acc, key)
+    if not acc then
+        local w = lost * rate
+        local n = math.floor(w)
+        return n + ((ZombRand(100) < 100 * (w - n)) and 1 or 0)
+    end
+    key = key or "crvWear"
+    local md = acc:getModData()
+    local w = (tonumber(md[key]) or 0) + lost * rate
+    local n = math.floor(w)
+    md[key] = w - n
+    return n
+end
+
+-- the default wear of a protector part (the bars, the bull bar, a feature part without its own Acc.WEAR)
+function Acc.wearDefault(accId, lost, vehicle, acc)
+    return Acc.wearAt(Acc.RATE[accId] or Acc.BAR_RATE, lost, acc)
+end
+
 -- condition the accessory loses for absorbing `lost` condition of a protected part
 local function wear(accId, lost, vehicle, acc)
     if Acc.WEAR[accId] then
         return Acc.WEAR[accId](lost, vehicle, acc)
     end
-    if accId == "CRVBullbar" then
-        return math.max(1, math.floor(lost / 3))       -- a crash bends the bar
-    end
-    return ZombRand(0, 2)                               -- 0 or 1 per thump: ~200 thumps per guard (a bare window takes ~15)
+    return Acc.wearDefault(accId, lost, vehicle, acc)
 end
 
 -- function feature: sandbox option HondaCRVGen1.FunctionAccessoryChance (percent, 100 = the chances
