@@ -144,12 +144,12 @@ function Part:setInventoryItem(item, skill)
         self.amount = 0
     end
 end
-MAXCAP = { NormalTrunk1 = 55, GloveBox1 = 7, NormalCarSeat1 = 15, CRVGen1_RoofRack = 50 }
+MAXCAP = { BigTrunk1 = 70, GloveBox1 = 7, NormalCarSeat1 = 15, CRVGen1_RoofRack = 50 }
 function capItem(t, cond) local it = newItem(t); it.maxCap = MAXCAP[t]; it.cond = cond or 100; return it end
 PARTS = {
     { "TireFrontLeft", { cont = "air", item = "NormalTire1" } }, { "GasTank", { cont = "fuel", item = "NormalGasTank1" } },
     { "Engine", {} }, { "GloveBox", { inv = true, item = "GloveBox1" } }, { "SeatRearLeft", { inv = true, item = "NormalCarSeat1" } },
-    { "TruckBed", { inv = true, item = "NormalTrunk1", condCap = true } }, { "DoorFrontLeft", { door = true, item = "FrontCarDoor1" } },
+    { "TruckBed", { inv = true, item = "BigTrunk1", condCap = true } }, { "DoorFrontLeft", { door = true, item = "FrontCarDoor1" } },
     { "WindowFrontLeft", { win = true, item = "FrontWindow1" } }, { "CRVRoofRack", { inv = true, acc = true } },
     { "CRVBullbar", { acc = true } }, { "CRVFunctionUnderfloor", { inv = true, scriptCap = 10 } },
 }
@@ -295,7 +295,7 @@ function addVehicleDebug(script, dir, skin, sq)
     v.parts.CRVBullbar.item = newItem("CRVGen1_Bullbar")           -- create hooks: a random accessory,
     v.parts.GloveBox:setInventoryItem(capItem("GloveBox1"))         -- random loot, new tyres, the trunk,
     v.parts.GloveBox.cont:AddItem("Base.Cigarettes")               -- seats and glove box
-    v.parts.TruckBed:setInventoryItem(capItem("NormalTrunk1", 80))
+    v.parts.TruckBed:setInventoryItem(capItem("BigTrunk1", 80))
     v.parts.SeatRearLeft:setInventoryItem(capItem("NormalCarSeat1"))
     v.parts.TireFrontLeft.item = newItem("ModernTire1")
     v.parts.SeatRearLeft.md.junk = true
@@ -341,7 +341,7 @@ function scenario(id)
     -- the containers' capacities come from their items, as the game sets them (setInventoryItem)
     P.GloveBox:setInventoryItem(capItem("GloveBox1"), 2); P.GloveBox.cont:AddItem("Base.Map")
     P.SeatRearLeft:setInventoryItem(capItem("NormalCarSeat1"), 3); P.SeatRearLeft.md.crvBed = true
-    P.TruckBed:setInventoryItem(capItem("NormalTrunk1", 90), 4)       -- conditionAffectsCapacity: 55 x 90 % = 49
+    P.TruckBed:setInventoryItem(capItem("BigTrunk1", 90), 4)         -- conditionAffectsCapacity: 70 x 90 % = 63
     P.TruckBed.cont:AddItem("Base.WaterBottle").fluid = 0.8
     P.CRVFunctionUnderfloor.cont:AddItem("Base.Pistol")             -- no item: the script's capacity (10)
     P.DoorFrontLeft.item = newItem("FrontCarDoor1"); P.DoorFrontLeft.door.locked = true; P.DoorFrontLeft.cond = 55
@@ -475,7 +475,7 @@ def single_player():
     check(abs(sp.eval("n.phys.x") - 100.73) < 1e-9 and abs(sp.eval("n.phys.y") - 100.41) < 1e-9, "physics body moved there too")
     # every container keeps its item's capacity (or the script's), its contents and room to put more in
     caps = sp.eval("capacities(n)")
-    for pid, cap, cnt in (("GloveBox", 7, 1), ("SeatRearLeft", 15, 0), ("TruckBed", 49, 1), ("CRVRoofRack", 50, 0),
+    for pid, cap, cnt in (("GloveBox", 7, 1), ("SeatRearLeft", 15, 0), ("TruckBed", 63, 1), ("CRVRoofRack", 50, 0),
                           ("CRVFunctionUnderfloor", 10, 1)):
         c = caps[pid]
         check(c["cap"] == cap and c["n"] == cnt and c["room"] is True,
@@ -506,7 +506,7 @@ def single_player():
           "the kit comes back")
     check(sp.eval("n3.parts.GasTank.amount") == 37.5 and sp.eval("HondaCRVGen1.State.get(n3, 'acc_rackLoad')") == 2, "kept through three conversions")
     caps = sp.eval("capacities(n3)")
-    check(all(caps[p]["room"] for p in caps) and caps["TruckBed"]["cap"] == 49 and caps["CRVRoofRack"]["cap"] == 50,
+    check(all(caps[p]["room"] for p in caps) and caps["TruckBed"]["cap"] == 63 and caps["CRVRoofRack"]["cap"] == 50,
           "capacities kept through three conversions (%r)" % {p: caps[p]["cap"] for p in caps})
     check(sp.eval("n3.power") == 4320 and abs(sp.eval("n3.x") - 100.73) < 1e-9, "power and position back where they were")
     print("LIFT single player: wheel swap without the kit, removal gives the kit back")
@@ -699,7 +699,7 @@ def multiplayer():
     check(server.eval("NET_INV.removed") == 1, "kit removal sent to the client")
     check(server.eval("n:isKeysInIgnition()") is False, "server: no spawn key in the new car's ignition")
     caps = server.eval("capacities(n)")
-    check(all(caps[p]["room"] for p in caps) and caps["TruckBed"]["cap"] == 49 and caps["GloveBox"]["n"] == 1,
+    check(all(caps[p]["room"] for p in caps) and caps["TruckBed"]["cap"] == 63 and caps["GloveBox"]["n"] == 1,
           "server: every container keeps its capacity and contents (%r)" % {p: caps[p]["cap"] for p in caps})
     check(server.eval("n.parts.GasTank.amount") == 37.5 and server.eval("n.parts.TruckBed.cont.list[1].fluid") == 0.8,
           "server: fuel and the bottle's water kept")

@@ -17,7 +17,9 @@ Game-data checks on the generated mod files (system Python), each one a defect t
   5. the cabin (2026-10-19): the interior models sit on part CRVCabin (no item, shown by its Lua init), never on
      an item part such as GloveBox, whose removal hid the whole interior;
   6. suspension (2026-10-20): each wheel can carry enough of the car's weight on the spring (travel) and under
-     Bullet's 6000 N limit with a fitted, loaded car, or a hard stop in a corner lands the body on the road.
+     Bullet's 6000 N limit with a fitted, loaded car, or a hard stop in a corner lands the body on the road;
+  7. the trunk (2026-10-22): part TruckBed takes the Base.BigTrunk family (70 instead of 55);
+  8. interaction sounds (2026-10-22): doors, tailgate and hood play the vanilla sounds, no CRVGen1 door clips ship.
 
     python scripts\test_gamedata.py [--mod42 <path to the mod's 42 folder>]
 """
@@ -222,6 +224,47 @@ def check_toughness(mod42):
           % (MAX_PART_DURABILITY, worst, MAX_PART_DURABILITY))
 
 
+# 7. the trunk (2026-10-22, feedback "increase the trunk space, it has a lot of room"): part TruckBed's item family
+# is Base.BigTrunk (BigTrunk1 = 70 at mechanicType 1; the SUV template's Base.NormalTrunk gave 55)
+# 8. interaction sounds (2026-10-22, feedback "please remove or add option to toggle the obnoxious car interaction
+# sounds"): the doors, the tailgate and the hood play the vanilla templates' sounds, as on the vanilla SUV: no such
+# part names one of our CRVGen1 sounds, and neither the sound scripts nor media/sound ship the old door clips
+SOUND_PARTS = {"TrunkDoor", "EngineDoor"} | {"Door%s" % s for s in ("FrontLeft", "FrontRight", "RearLeft", "RearRight")}
+
+
+def _sounds_in(node):
+    out = [v for k, v in node.kv if k.lower().startswith("sound")]
+    for child in node.children:
+        out += _sounds_in(child)
+    return out
+
+
+def check_trunk_and_sounds(mod42):
+    vdir = os.path.join(mod42, "media", "scripts", "vehicles")
+    names = sorted(f for f in os.listdir(vdir) if f.startswith(gen.VEHICLE) and f.endswith(".txt"))
+    for fn in names:
+        root = audit_mod.parse(open(os.path.join(vdir, fn), encoding="utf-8").read())
+        for v in root.children[0].all("vehicle"):
+            trunk = [p.get("itemType") for p in v.all("part") if p.name == "TruckBed" and p.get("itemType")]
+            if trunk[-1:] != ["Base.BigTrunk"]:
+                fail("%s: vehicle %s part TruckBed itemType %s, want Base.BigTrunk" % (fn, v.name, trunk))
+            for p in v.all("part"):
+                if p.name in SOUND_PARTS:
+                    ours = [s for s in _sounds_in(p) if "CRVGen1" in s]
+                    if ours:
+                        fail("%s: part %s plays our own sounds %s: the vanilla ones are wanted" % (fn, p.name, ours))
+    sdir = os.path.join(mod42, "media", "scripts", "sounds")
+    for fn in os.listdir(sdir) if os.path.isdir(sdir) else []:
+        if re.search(r"\bsound\s+CRVGen1Door", open(os.path.join(sdir, fn), encoding="utf-8").read()):
+            fail("%s still defines a CRVGen1Door sound" % fn)
+    snd = os.path.join(mod42, "media", "sound")
+    old = sorted(f for f in os.listdir(snd) if f.startswith("CRVGen1_Door")) if os.path.isdir(snd) else []
+    if old:
+        fail("media/sound still ships %s" % ", ".join(old))
+    print("GAMEDATA trunk + sounds: %d vehicle scripts: TruckBed is Base.BigTrunk; doors, gate and hood play vanilla "
+          "sounds (no CRVGen1 sound, no door clips shipped)" % len(names))
+
+
 def main():
     a = sys.argv[1:]
     mod42 = a[a.index("--mod42") + 1] if "--mod42" in a else gen.CHECKOUT_MOD42
@@ -232,6 +275,7 @@ def main():
     check_routes(mod42)
     check_literature(mod42)
     check_manual(mod42)
+    check_trunk_and_sounds(mod42)
     print("GAMEDATA TESTS OK")
 
 

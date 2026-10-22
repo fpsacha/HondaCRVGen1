@@ -81,6 +81,16 @@ function Veh:isEngineRunning() return self.engine == true end
 function Veh:getEngineSpeed() return self.rpm or 0 end
 function Veh:getCurrentSpeedKmHour() return self.kmh or 0 end
 function Veh:getSkinIndex() return self.skin or 0 end
+-- the game's skin list: `template! = SUV` loads the vanilla SUV template's skin first, then our 8
+-- (VehicleScript.Load reads elements in order, 42.21), so 9 skins and skin 0 = vehicle_suvshell
+SKIN_COUNT = 9
+function Veh:getScript()
+    return { getSkinCount = function() return SKIN_COUNT end }
+end
+-- BaseVehicle.setSkinIndex: ignored below 0 or above the count
+function Veh:setSkinIndex(i) if i >= 0 and i <= SKIN_COUNT then self.skin = i; self.skinSets = (self.skinSets or 0) + 1 end end
+function Veh:updateSkin() self.skinUpdates = (self.skinUpdates or 0) + 1 end
+function Veh:transmitSkinIndex() SENT.skin = (SENT.skin or 0) + 1 end
 function Veh:getColorHue() return self.h end
 function Veh:getColorSaturation() return self.s end
 function Veh:getColorValue() return self.v end
@@ -149,11 +159,12 @@ def layer(s, name):
 
 def sp_tests():
     s = side("sp")
-    s.run("car = spawnCar(1, 3)")                        # Milano Red
+    s.run("car = spawnCar(1, 4)")                        # Milano Red (game skin 4: the SUV template's is 0)
     h, sat, v = s.eval("car.h"), s.eval("car.s"), s.eval("car.v")
     check(abs(h - 0.982) < 1e-6 and abs(sat - 0.776) < 1e-6 and abs(v - 0.478) < 1e-6, "red skin paint HSV at spawn (got %s %s %s)" % (h, sat, v))
     s.run("TICK(60); triggerEvent('OnSpawnVehicleEnd', car)")   # a reload: createPhysics again
     check(s.eval("car.colourSets") == 1, "paint set once, not again on a reload or by the client half")
+    check(s.eval("car.skinSets") is None, "one of our skins: the skin is left alone")
     check(playing(s) == [], "engine off: no layer")
     # engine on at idle
     s.run("car.engine = true; car.rpm = 820; TICK(30)")
@@ -201,9 +212,39 @@ def sp_tests():
     # not a CR-V: untouched
     s.run("other = spawnCar(3, 0, 'Base.SmallCar'); other.x = 150; other.engine = true; TICK(30)")
     check(s.eval("other.colourSets") is None and len(playing(s)) == 2, "another car (50 tiles off): no paint, no layer")
-    # a skin index out of the table: left alone, no error
+    # a skin index that is not ours (out of the table): moved to one of ours and painted, no error
     s.run("odd = spawnCar(4, 12); TICK(30)")
-    check(s.eval("odd.colourSets") is None, "unknown skin: paint left alone")
+    check(1 <= s.eval("odd.skin") <= 8 and s.eval("odd.colourSets") == 1, "unknown skin: one of ours, painted")
+    print("POLISH SP: paint HSV per skin at spawn, engine layer start / pitch / cross-fade / fallback / stop, range, "
+          "volume option, other cars: ok")
+    skin_tests(s)
+
+
+def skin_tests(s):
+    """The first-spawn texture report (2026-10-22): skin 0 is the vanilla SUV template's sheet, which
+    Rand.Next(9) gave one new CR-V in nine. Every such car moves to one of our 8 skins, at random, on the
+    authoritative side, and is painted as that skin."""
+    s.run("SENT.skin = 0; seen = {}; for i = 1, 400 do local c = spawnCar(100 + i, 0); seen[c.skin] = (seen[c.skin] or 0) + 1 end")
+    hist = {int(k): int(v) for k, v in s.eval("seen").items()}
+    check(set(hist) == set(range(1, 9)), "skin 0 is replaced by each of our 8 skins (got %s)" % hist)
+    check(s.eval("SENT.skin") == 400, "each replacement is transmitted")
+    s.run("c0 = spawnCar(600, 0)")
+    check(s.eval("c0.skinUpdates") == 1, "the model is rebound to the new skin (updateSkin)")
+    k = s.eval("c0.skin")
+    hsv = [s.eval("HondaCRVGen1.Polish.SKIN_HSV[%d][%d]" % (k, j)) for j in (1, 2, 3)]
+    check(all(abs(a - b) < 1e-6 for a, b in zip(hsv, (s.eval("c0.h"), s.eval("c0.s"), s.eval("c0.v"))))
+          and s.eval("c0.colourSets") == 1, "painted as the skin it was moved to")
+    s.run("triggerEvent('OnSpawnVehicleEnd', c0)")      # loaded again: kept
+    check(s.eval("c0.skin") == k and s.eval("c0.skinSets") == 1, "a car on one of ours keeps it on every later load")
+    # without the template's skin (8 skins, a future script): skin 0 is ours (Electron Blue) and kept
+    s.run("SKIN_COUNT = 8; c8 = spawnCar(700, 0); SKIN_COUNT = 9")
+    check(s.eval("c8.skin") == 0 and s.eval("c8.skinSets") is None and abs(s.eval("c8.h") - 0.657) < 1e-6,
+          "8 skins: skin 0 is ours, kept and painted Electron Blue")
+    print("POLISH skins: the SUV template's skin is never drawn (moved to ours, transmitted, rebound): ok")
+
+
+def viewpoint_tests():
+    s = side("sp")
     # Viewpoint: nothing without it; registered once with it
     check(s.eval("HondaCRVGen1.Polish.viewpointRegistered") is False, "no Viewpoint: not registered")
     s.run("""REG = {}
@@ -213,8 +254,7 @@ def sp_tests():
           "Viewpoint pack registered once")
     s.run("HondaCRVGen1.Polish.viewpointRegistered = false; Viewpoint.ModelPacks.register = function() error('bad pack') end")
     s.run("HondaCRVGen1.Polish.registerViewpoint()")       # an error inside Viewpoint is caught
-    print("POLISH SP: paint HSV per skin at spawn, engine layer start / pitch / cross-fade / fallback / stop, range, "
-          "volume option, other cars, Viewpoint pack: ok")
+    print("POLISH Viewpoint pack: ok")
 
 
 def pitch_log_tests():
@@ -271,7 +311,7 @@ def mp_tests():
     b = side("client", net, player="bob")
     # the car is created on the server; each client streams it in (createPhysics there too), with the
     # random paint the server's doVehicleColor gave it until the server sets the skin's
-    server.run("car = spawnCar(7, 5); car.engine = true; car.rpm = 3000")
+    server.run("car = spawnCar(7, 6); car.engine = true; car.rpm = 3000")   # Clover Green: game skin 6
     check(abs(server.eval("car.h") - 0.428) < 1e-6 and server.eval("SENT.colour") == 1,
           "the server sets the green skin's paint HSV and transmits it")
 
@@ -282,7 +322,12 @@ def mp_tests():
         for c in (a, b):
             c.run("car.h, car.s, car.v = %r, %r, %r" % (h, s_, v))
     for c in (a, b):
-        c.run("car = spawnCar(7, 5); car.engine = true; car.rpm = 3000")
+        c.run("car = spawnCar(7, 6); car.engine = true; car.rpm = 3000")
+    # a car the server put on the SUV template's skin: the server moves it (and transmits), a client never
+    server.run("suv = spawnCar(8, 0); suv.x = 900")
+    check(1 <= server.eval("suv.skin") <= 8 and server.eval("SENT.skin") == 1, "the server moves skin 0 to ours and transmits it")
+    a.run("suv = spawnCar(8, 0); suv.x = 900")
+    check(a.eval("suv.skin") == 0 and a.eval("suv.skinSets") is None, "a client leaves the skin to the server's packet")
     properties_packet()                                  # the full update a client gets when the car streams in
     for _ in range(40):
         for s in (server, a, b):
@@ -305,6 +350,7 @@ def mp_tests():
 
 def main():
     sp_tests()
+    viewpoint_tests()
     pitch_log_tests()
     start_guard_tests()
     mp_tests()

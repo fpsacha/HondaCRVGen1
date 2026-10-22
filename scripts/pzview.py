@@ -5,7 +5,7 @@ and render it with the game's culling from the game's camera.
     blender -b --factory-startup --python scripts/pzview.py -- [--out DIR] [--mod DIR]
             [--poses shut,open] [--az 0,45,...] [--scale 6.5] [--close] [--eye] [--res 1400]
             [--acc [--acc-parts CRVSpareCover,...]] [--rack N] [--decal retro_blue,script_white,...]
-            [--gz 150] [--cap 512] [--script HondaCRVGen1LiftAlloy] [--folded] [--cargo N]
+            [--gz 150] [--cap 512] [--script HondaCRVGen1LiftAlloy] [--folded [--fold-mode bed|cargo]] [--cargo N]
             [--frac 0.15] [--eyes FILE.json] [--probe view,px,py [--probe-all]] [--bay full|low]
             [--awning stowed|deployed]
 Poses: shut, open, left, right, front, gate, hood, fl / fr / rl / rr (one door), win / win_fl.. (windows
@@ -99,6 +99,12 @@ DECALS = set(filter(None, _arg("--decal", "").split(",")))   # decals feature: t
 FOLDED = "--folded" in argv        # function feature: the rear bench folded flat. Part CRVFunctionSeats is the
                                    # car's own bench (no item, drawn bare or fitted); its Lua shows the upright
                                    # model (InteriorSeatsUp), or the folded one (*Folded) while folded
+FOLD_MODE = _arg("--fold-mode", "bed")   # with --folded: "bed" (the default, the bedding InteriorBedding drawn, the
+                                   # trunk's load hidden) or "cargo" (the bare load floor: no bedding, --cargo N shows)
+if FOLD_MODE not in ("bed", "cargo"):
+    raise SystemExit("pzview: --fold-mode is bed or cargo, not %r" % FOLD_MODE)
+BED = FOLDED and FOLD_MODE == "bed"
+BEDDING_MODEL = "InteriorBedding"
 SEATS_PART = "CRVFunctionSeats"
 # cargo clutter (scripts/features/clutter.py): part CRVClutterCargo is the car's own (no item, drawn bare or fitted);
 # HondaCRVGen1_Clutter.lua shows InteriorClutter1..N for the trunk's fill state N (incremental: each adds pieces),
@@ -500,8 +506,8 @@ TIRE_WHEEL = {"TireFrontLeft": "FrontLeft", "TireFrontRight": "FrontRight",
 
 def _clutter_shown(model_id):
     """Whether HondaCRVGen1_Clutter.lua would show this model of CLUTTER_PART at --cargo N."""
-    if FOLDED or CARGO <= 0:
-        return False
+    if BED or CARGO <= 0:
+        return False                                  # nothing shows under the bed (fold mode bed)
     if model_id.endswith("Well"):
         return not (ACC and (not ACC_ONLY or "CRVPicnicTable" in ACC_ONLY))
     m = re.search(r"(\d+)$", model_id)
@@ -538,7 +544,10 @@ def build(vehicle_mod):
                 continue                                  # cargo states: the Lua shows one at a time (--rack)
             if pm.name in HIDE_MODELS:
                 continue                                  # --hide-models: a variant the Lua keeps hidden
-            if part.name == SEATS_PART and pm.name.endswith("Folded") != FOLDED:
+            if part.name == SEATS_PART and pm.name == BEDDING_MODEL:
+                if not BED:
+                    continue                              # the bedding: --folded in fold mode bed only
+            elif part.name == SEATS_PART and pm.name.endswith("Folded") != FOLDED:
                 continue                                  # the rear bench: upright, or folded with --folded
             if part.name == CLUTTER_PART and not _clutter_shown(pm.name):
                 continue                                  # the trunk's load: --cargo N

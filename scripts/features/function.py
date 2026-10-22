@@ -5,9 +5,10 @@ loot rarity), the owner's manual. Parts without an item, an item with a hand-mad
 two models, Lua, translations, loot.
 
 Parts (every CR-V vehicle script, category nodisplay so the mechanics list leaves them out, no item):
-  CRVFunctionCargo        the folded load floor, open only while the rear seats are folded
+  CRVFunctionCargo        the folded load floor, open only while the rear seats are folded as a load floor
   CRVFunctionUnderfloor   the storage well under the cargo floor, hidden until the floor is lifted
-  CRVFunctionSeats        the rear bench, drawn upright (InteriorSeatsUp) or folded (InteriorSeatsFolded)
+  CRVFunctionSeats        the rear bench, drawn upright (InteriorSeatsUp) or folded (InteriorSeatsFolded), and the
+                          bedding on it in fold mode "bed" (InteriorBedding)
 Lua: shared/HondaCRVGen1_Function.lua (namespace HondaCRVGen1.Function: container tests, Init, the
 seats' look, the manual's XP bonus), shared/TimedActions/ISCRVFunctionLiftFloor.lua,
 client/HondaCRVGen1_FunctionMenu.lua, server/HondaCRVGen1_FunctionServer.lua (the manual in the glove
@@ -30,7 +31,13 @@ The folded model is a made-up bed (2026-10-19, "make the folded bed LOOK like a 
 thin foam pad over the folded backs and the cargo deck (bridging the riser gap and the picnic table's tub, which it
 hides when the table is out), an open rectangular sleeping bag with its top turned back, and a pillow at the front
 end, ~250 coarse triangles (twin ~1,700) in materials of their own (build_cabin.BED_MATS; BAKE_TEXTURED below).
-Same switch as the folded seats: nothing extra to show or hide, nothing drawn while the seats are up.
+
+Load floor or bed (2026-10-22, the owner: "if the seats are folded, I want to have more trunk space or a bed, should
+be able to choose"): the bedding is its own model now, InteriorBedding (build_cabin.rear_bedding ->
+acc_function_bedding, the same triangles that rode the folded model), and the fold has a mode (State key
+function_foldMode, "cargo" | "bed", default "bed" = every car folded before). Cargo: the bare folded seats, the load
+floor CRVFunctionCargo open, no bed. Bed: the bedding drawn, the good-bed sleep rule, the load floor shut. pzview
+`--folded` draws the bed, `--folded --fold-mode cargo` the load floor.
 
 A pillow counts on the bed (client/HondaCRVGen1_Menu.lua, getBedQuality): in hand, in the sleeper's seat container
 (vanilla's own vehicle rule), on the folded load floor (CRVFunctionCargo) or the cargo deck (TruckBed).
@@ -68,10 +75,11 @@ def _container_part(part, capacity, test):
 # ------------------------------------------------------------------------------------- the rear seats
 SEATS_PART = "CRVFunctionSeats"                     # HondaCRVGen1.Function.SEATS_PART
 SEATS_UP, SEATS_FOLD = "acc_function_seats_up", "acc_function_seats_fold"
+SEATS_BED = "acc_function_bedding"                  # the made-up bed on the folded seats (fold mode "bed" only)
 # model ids (HondaCRVGen1.Function.SEAT_MODELS; 'Interior' in the name: pzview's cabin ID pass paints them
 # with the cabin, as the bench was) -> mesh
-SEAT_MODELS = (("InteriorSeatsUp", SEATS_UP), ("InteriorSeatsFolded", SEATS_FOLD))
-OBJECTS = {SEATS_UP: {"space": "interior"}, SEATS_FOLD: {"space": "interior"}}
+SEAT_MODELS = (("InteriorSeatsUp", SEATS_UP), ("InteriorSeatsFolded", SEATS_FOLD), ("InteriorBedding", SEATS_BED))
+OBJECTS = {SEATS_UP: {"space": "interior"}, SEATS_FOLD: {"space": "interior"}, SEATS_BED: {"space": "interior"}}
 VARIANT_SET = "rear_seats"                          # bake_atlas._bake_hilo: crv_variant / crv_variant_default
 # the made-up bed's materials (build_cabin.BED_MATS; base colours in build_cabin.MATERIALS, taken as they are): a
 # faint grain on the foam, the nylon and the cotton, a two-pitch weave on the flannel lining (5.0 / 3.2 cm: 3+
@@ -124,6 +132,19 @@ def BUILD(report):
         hi.hide_render = True
         hi.hide_set(True)
         report("FEATURE function: %s %d tris (twin %d)" % (name, sum(len(p.vertices) - 2 for p in low.data.polygons),
+                                                         sum(len(p.vertices) - 2 for p in hi.data.polygons)))
+    # 3. the bedding on the folded seats, its own model (2026-10-22: folded = a load floor or a bed). Its twin is one
+    # of the bench's variants (never shades the upright bench) that bakes WITH the folded bench under it
+    # (crv_variant_with: the contact shade where it lies on the backs); the folded bench bakes without it, as the
+    # load floor shows it
+    hi = build_cabin.rear_bedding(True, SEATS_BED + "_hi", coll)
+    low = build_cabin.rear_bedding(False, SEATS_BED, coll)
+    if hi is not None and low is not None:
+        hi["crv_variant"] = VARIANT_SET
+        hi["crv_variant_with"] = SEATS_FOLD + "_hi"
+        hi.hide_render = True
+        hi.hide_set(True)
+        report("FEATURE function: %s %d tris (twin %d)" % (SEATS_BED, sum(len(p.vertices) - 2 for p in low.data.polygons),
                                                          sum(len(p.vertices) - 2 for p in hi.data.polygons)))
 
 
@@ -213,7 +234,7 @@ _PAGES = [
     "is ruined. A full roof and armour make the car slower to stop, so brake early.",
 
     " <H2> Rear seats and a night in the car <LINE> <TEXT> Fold the seatbacks down and tumble the seats: the back of the cabin "
-    "becomes one long, flat floor, about twice the cargo area, and a far better bed than any back seat. Both rear seats "
+    "becomes one long, flat floor, about twice the cargo area, or, made up as a bed, a far better bed than any back seat. Both rear seats "
     "must be in the car and empty, and nobody can sit in the back while they are folded; clear the floor before you put "
     "them back up. For a night in the car: fold the seats before dark, lock up with the windows up, take the picnic table "
     "out for supper and put it back before you drive on, and keep a full jerry can for the morning. The full-size spare "

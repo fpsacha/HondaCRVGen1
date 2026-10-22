@@ -1,8 +1,10 @@
 --[[
 Honda CR-V (RD1): state shared by the client menus and the server rules.
 
-The fold-flat bed lives in the rear-left seat part's mod data (HondaCRVGen1.State key
-function_folded; old saves: crvBed = true), which the game saves and syncs. The picnic table is an ordinary removable part (CRVPicnicTable)
+The folded rear seats live in the rear-left seat part's mod data (HondaCRVGen1.State key
+function_folded; old saves: crvBed = true), which the game saves and syncs, with what the folded space is
+for (key function_foldMode, 2026-10-22: "cargo", the bare load floor, or "bed", the made-up bed; a car
+folded before there was a choice is a bed). The picnic table is an ordinary removable part (CRVPicnicTable)
 whose item is a moveable (Base.CRVGen1_PicnicTable): out of the car it is placed like furniture.
 ]]
 
@@ -37,7 +39,18 @@ S.LEGACY_BED_KEY = "crvBed"
 S.CARGO_PART = "CRVFunctionCargo"                    -- the folded load floor's container (function feature)
 HondaCRVGen1.State.define(S.FOLD_KEY, { part = S.BED_PART, kind = "boolean", default = false, request = false })
 
-function S.isBed(vehicle)
+-- what the folded space is for (2026-10-22, the owner: "if the seats are folded, I want to have more trunk space
+-- or a bed, should be able to choose"): "cargo" opens the load floor (Function.CargoAccess), draws no bedding and
+-- gives no bed; "bed" draws the bedding (model InteriorBedding), sleeps as a good bed and keeps the load floor shut
+-- (the bed lies on it). Same host part and rules as function_folded; the default "bed" is what a car folded before
+-- the choice existed was (its mod data has no mode)
+S.MODE_KEY = "function_foldMode"
+S.MODE_BED, S.MODE_CARGO = "bed", "cargo"
+HondaCRVGen1.State.define(S.MODE_KEY, { part = S.BED_PART, kind = "string", values = { S.MODE_BED, S.MODE_CARGO },
+                                        default = S.MODE_BED, request = false })
+
+-- are the rear seats folded flat (either mode)
+function S.isFolded(vehicle)
     if not S.isCRV(vehicle) then return false end
     local part = S.bedPart(vehicle)
     if not part then return false end
@@ -45,21 +58,54 @@ function S.isBed(vehicle)
     return part:getModData()[S.LEGACY_BED_KEY] == true
 end
 
--- authoritative side only (single player, the server): State.set saves, transmits and announces it
-function S.setBed(vehicle, on)
+-- "bed" | "cargo" while folded, nil while the seats are up
+function S.foldMode(vehicle)
+    if not S.isFolded(vehicle) then return nil end
+    if HondaCRVGen1.State.get(vehicle, S.MODE_KEY) == S.MODE_CARGO then return S.MODE_CARGO end
+    return S.MODE_BED
+end
+
+-- folded and made up as a bed (bedding drawn, good bed, load floor shut)
+function S.isBed(vehicle)
+    return S.foldMode(vehicle) == S.MODE_BED
+end
+
+-- folded as a bare load floor (the +60 load space open)
+function S.isCargo(vehicle)
+    return S.foldMode(vehicle) == S.MODE_CARGO
+end
+
+-- authoritative side only (single player, the server): State.set saves, transmits and announces it. on: fold in
+-- `mode` (default "bed"), or switch the mode of folded seats; off: seats up, the mode back to its default. The mode
+-- is set before the fold and cleared after it, so every listener sees a consistent pair
+function S.setFold(vehicle, on, mode)
     local part = S.bedPart(vehicle)
     if not part then return false, "no part " .. S.BED_PART end
     part:getModData()[S.LEGACY_BED_KEY] = nil
-    return HondaCRVGen1.State.set(vehicle, S.FOLD_KEY, on and true or false)
+    if on then
+        local ok, why = HondaCRVGen1.State.set(vehicle, S.MODE_KEY, mode or S.MODE_BED)
+        if not ok then return false, why end
+        return HondaCRVGen1.State.set(vehicle, S.FOLD_KEY, true)
+    end
+    local ok, why = HondaCRVGen1.State.set(vehicle, S.FOLD_KEY, false)
+    HondaCRVGen1.State.set(vehicle, S.MODE_KEY, nil)
+    return ok, why
 end
 
--- Putting the seats back needs the folded load floor empty (what lies there would end up under the seats)
+-- the seats folded into the bed (on) or put back (old name, kept for callers and tests)
+function S.setBed(vehicle, on)
+    return S.setFold(vehicle, on, S.MODE_BED)
+end
+
+-- Putting the seats back, or making up the bed over the load floor, needs the folded load floor empty (what lies
+-- there would end up under the seats or the bedding)
 function S.canUnfold(vehicle)
     local cargo = vehicle:getPartById(S.CARGO_PART)
     local cont = cargo and cargo:getItemContainer()
     if cont and not cont:isEmpty() then return false, "IGUI_CRV_Function_CargoNotEmpty" end
     return true
 end
+S.canMakeBed = S.canUnfold
 
 -- Folding needs both rear seats fitted, empty and unoccupied
 function S.canFold(vehicle)

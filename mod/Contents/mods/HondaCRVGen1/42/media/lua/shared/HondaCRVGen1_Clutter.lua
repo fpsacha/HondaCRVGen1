@@ -10,7 +10,8 @@ setAllModelsVisible) lists four models:
   * InteriorClutterWell: a blanket over the soft stuff filling the well under the cargo floor, shown with
     the load while the picnic table (part CRVPicnicTable, the floor panel) is out, so nothing floats over
     the open well.
-Nothing shows while the rear seats are folded into the bed (HondaCRVGen1.Shared.isBed: the bed lies there).
+Nothing shows while the rear seats are folded into the bed (HondaCRVGen1.Shared.isBed, fold mode "bed": the bed
+lies there); folded as a bare load floor (mode "cargo") the load shows as with the seats up.
 
 The fill state is HondaCRVGen1.State key "clutter_load" (0 = empty, 1..3) in this part's mod data. The
 game has no container-changed hook that reaches the server and every client (OnContainerUpdate is a
@@ -20,9 +21,9 @@ the authoritative side (single player, the server) derives it from the trunk's c
 TruckBed: weight over capacity, with a little hysteresis so a load sitting on a threshold does not
 flicker) on a throttled tick and State.set saves and syncs it. Every side that draws the car (single
 player, each multiplayer client; never a dedicated server) shows the models from the synced state, the
-synced fold state (State key function_folded) and the table part's synced item:
+synced fold state (State keys function_folded, function_foldMode) and the table part's synced item:
   * on the part's init (VehicleParts.initParts: a car created, spawned, loaded or streamed in);
-  * on every change of clutter_load or function_folded (State listeners: "set" where it changed,
+  * on every change of clutter_load, function_folded or function_foldMode (State listeners: "set" where it changed,
     "sync" on a client that the server told, or its poll found the new mod data);
   * when the table's item changes under a tracked car (State.watchPart, the client poll), so taking
     the table out or putting it back follows on every side.
@@ -115,6 +116,7 @@ local function onState(vehicle, key, value, old, how)
 end
 State.onChange(C.KEY, onState)
 State.onChange(Shared.FOLD_KEY, onState)
+State.onChange(Shared.MODE_KEY, onState)
 -- the table went in or out under a tracked car (single player or a client: the State poll)
 State.watchPart(C.TABLE, function(vehicle, part)
     C.apply(vehicle)

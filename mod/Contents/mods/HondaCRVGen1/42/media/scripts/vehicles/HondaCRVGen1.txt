@@ -517,6 +517,15 @@ module Base
 		scale = 2.0,
 	}
 
+	model HondaCRVGen1Acc_function_bedding
+	{
+		mesh = vehicles/Vehicles_HondaCRVGen1_Body|crvgen1_acc_function_bedding,
+		shader = vehiclewheel,
+		invertX = FALSE,
+		texture = Vehicles/Vehicles_HondaCRVGen1_Interior,
+		scale = 2.0,
+	}
+
 	model HondaCRVGen1LiftWheelAlloy
 	{
 		mesh = vehicles/Vehicles_HondaCRVGen1_Wheel|crvgen1_wheel_lift_alloy,
@@ -966,6 +975,11 @@ module Base
 				requireUninstalled = WindshieldRear,
 				test = HondaCRVGen1.Acc.GateUninstallTest,
 			}
+		}
+
+		part TruckBed
+		{
+			itemType = Base.BigTrunk,
 		}
 
 		part WindshieldRear
@@ -2633,6 +2647,10 @@ module Base
 			{
 				file = HondaCRVGen1Acc_function_seats_fold,
 			}
+			model InteriorBedding
+			{
+				file = HondaCRVGen1Acc_function_bedding,
+			}
 			category = nodisplay,
 			setAllModelsVisible = false,
 			lua
@@ -2929,86 +2947,6 @@ module Base
 			{
 				create = HondaCRVGen1.Offroad.Create,
 				init = HondaCRVGen1.Offroad.Init,
-			}
-		}
-
-		part DoorFrontLeft
-		{
-			anim Open
-			{
-				sound = CRVGen1DoorOpen,
-			}
-			anim Close
-			{
-				sound = CRVGen1DoorClose,
-			}
-			anim Lock
-			{
-				sound = CRVGen1DoorLock,
-			}
-			anim Unlock
-			{
-				sound = CRVGen1DoorUnlock,
-			}
-		}
-
-		part DoorFrontRight
-		{
-			anim Open
-			{
-				sound = CRVGen1DoorOpen,
-			}
-			anim Close
-			{
-				sound = CRVGen1DoorClose,
-			}
-			anim Lock
-			{
-				sound = CRVGen1DoorLock,
-			}
-			anim Unlock
-			{
-				sound = CRVGen1DoorUnlock,
-			}
-		}
-
-		part DoorRearLeft
-		{
-			anim Open
-			{
-				sound = CRVGen1DoorOpen,
-			}
-			anim Close
-			{
-				sound = CRVGen1DoorClose,
-			}
-			anim Lock
-			{
-				sound = CRVGen1DoorLock,
-			}
-			anim Unlock
-			{
-				sound = CRVGen1DoorUnlock,
-			}
-		}
-
-		part DoorRearRight
-		{
-			anim Open
-			{
-				sound = CRVGen1DoorOpen,
-			}
-			anim Close
-			{
-				sound = CRVGen1DoorClose,
-			}
-			anim Lock
-			{
-				sound = CRVGen1DoorLock,
-			}
-			anim Unlock
-			{
-				sound = CRVGen1DoorUnlock,
 			}
 		}
 

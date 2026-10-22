@@ -123,7 +123,7 @@ def net_action_fields():
         perform = re.search(r"function %s:perform\(\)(.*?)\nend" % cls, src, re.S).group(1)
         check("State.set" not in perform and "setBed" not in perform and "setFloorFound" not in perform,
               "%s:perform changes no state" % cls)
-    print("NET ACTIONS: ISCRVFoldSeats(character, vehicle, on), ISCRVFunctionLiftFloor(character, vehicle): fields named like "
+    print("NET ACTIONS: ISCRVFoldSeats(character, vehicle, on, mode), ISCRVFunctionLiftFloor(character, vehicle): fields named like "
           "new()'s parameters, state only in complete()")
 
 
@@ -133,13 +133,15 @@ def single_player():
     F, S = "HondaCRVGen1.Function", "HondaCRVGen1.Shared"
     check(not sp.eval("%s.isBed(v)" % S), "starts unfolded")
     check(sp.eval("%s.CargoAccess(v, v.parts.CRVFunctionCargo, PLAYER)" % F) is False, "cargo closed while the seats are up")
-    # fold: isValid, complete (the state), perform (feedback only)
-    sp.run("a = ISCRVFoldSeats:new(PLAYER, v, true)")
+    # fold as a load floor: isValid, complete (the state), perform (feedback only)
+    sp.run("a = ISCRVFoldSeats:new(PLAYER, v, true, 'cargo')")
     check(sp.eval("a:isValid()"), "fold valid")
     sp.run("a:perform()")
-    check(not sp.eval("%s.isBed(v)" % S), "perform() alone changes nothing")
-    check(sp.eval("a:complete()") is True and sp.eval("%s.isBed(v)" % S), "complete() folds")
+    check(not sp.eval("%s.isFolded(v)" % S), "perform() alone changes nothing")
+    check(sp.eval("a:complete()") is True and sp.eval("%s.isCargo(v)" % S) and not sp.eval("%s.isBed(v)" % S),
+          "complete() folds, as a load floor")
     check(sp.eval("v.parts.SeatRearLeft.md.crv_function_folded") is True, "stored as the State key in the seat's mod data")
+    check(sp.eval("v.parts.SeatRearLeft.md.crv_function_foldMode") == "cargo", "the mode beside it")
     check(sp.eval("HondaCRVGen1.Acc.RearSeatAccess(v, v.parts.SeatRearLeft, PLAYER)") is False, "rear seats refuse items folded")
     # folded load floor access: gate closed / open, rear door, inside the car, another car
     check(sp.eval("%s.CargoAccess(v, v.parts.CRVFunctionCargo, PLAYER)" % F) is False, "gate closed: no access")
@@ -156,11 +158,12 @@ def single_player():
     sp.run("PLAYER.vehicle = nil; PLAYER.area = 'TruckBed'")
     # unfold: blocked while the load floor holds something
     sp.run("v.parts.CRVFunctionCargo.cont.items = 3; b = ISCRVFoldSeats:new(PLAYER, v, false)")
-    check(not sp.eval("b:isValid()") and sp.eval("b:complete()") is False and sp.eval("%s.isBed(v)" % S), "loaded floor blocks unfolding")
+    check(not sp.eval("b:isValid()") and sp.eval("b:complete()") is False and sp.eval("%s.isCargo(v)" % S), "loaded floor blocks unfolding")
     check(sp.eval("select(2, %s.canUnfold(v))" % S) == "IGUI_CRV_Function_CargoNotEmpty", "the reason")
     sp.run("v.parts.CRVFunctionCargo.cont.items = 0")
-    check(sp.eval("b:isValid()") and sp.eval("b:complete()") is True and not sp.eval("%s.isBed(v)" % S), "empty floor: unfolds")
+    check(sp.eval("b:isValid()") and sp.eval("b:complete()") is True and not sp.eval("%s.isFolded(v)" % S), "empty floor: unfolds")
     check(sp.eval("v.parts.SeatRearLeft.md.crv_function_folded") is None, "unfolded = the default, stored as nil")
+    check(sp.eval("v.parts.SeatRearLeft.md.crv_function_foldMode") is None, "the mode back to its default, stored as nil")
     # folding is refused with a loaded or occupied rear seat (the existing rules)
     sp.run("v.parts.SeatRearRight.cont.items = 1")
     check(not sp.eval("ISCRVFoldSeats:new(PLAYER, v, true):isValid()"), "loaded rear seat blocks folding")
@@ -169,10 +172,11 @@ def single_player():
     sp.run("v.occupied[3] = nil")
     # old save: crvBed = true in the seat's mod data
     sp.run("w = newCRV(3); w.parts.SeatRearLeft.md.crvBed = true")
-    check(sp.eval("%s.isBed(w)" % S), "a legacy bed reads as folded before migration")
+    check(sp.eval("%s.isBed(w)" % S), "a legacy bed reads as folded into a bed before migration")
     sp.run("SENT.transmitModData = 0; %s.Init(w, w.parts.CRVFunctionCargo)" % F)
     check(sp.eval("w.parts.SeatRearLeft.md.crvBed") is None and sp.eval("w.parts.SeatRearLeft.md.crv_function_folded") is True
           and sp.eval("SENT.transmitModData") == 1, "Init migrates crvBed onto the State key and transmits")
+    check(sp.eval("%s.isBed(w)" % S) and sp.eval("%s.foldMode(w)" % S) == "bed", "a migrated legacy bed is a bed")
     print("SP FOLD: complete() folds, perform() does not; rear seats refuse items; load floor at gate / rear door / inside; "
           "unfold needs it empty; crvBed migrates")
 
@@ -355,22 +359,22 @@ def multiplayer():
         c.run("HondaCRVGen1.Function.Init(v, v.parts.CRVFunctionCargo); HondaCRVGen1.Function.Init(v, v.parts.CRVFunctionUnderfloor)")
     F, S = "HondaCRVGen1.Function", "HondaCRVGen1.Shared"
     # alice folds: her client runs the action (isValid, perform), the server its complete()
-    a.run("PLAYER.area = 'TruckBed'; act = ISCRVFoldSeats:new(PLAYER, v, true); v.parts.SeatRearRight.cont.items = 1")
+    a.run("PLAYER.area = 'TruckBed'; act = ISCRVFoldSeats:new(PLAYER, v, true, 'cargo'); v.parts.SeatRearRight.cont.items = 1")
     check(not a.eval("act:isValid()"), "client: a loaded rear seat refuses the start already")
     a.run("v.parts.SeatRearRight.cont.items = 0")
     check(a.eval("act:isValid()"), "client: valid")
     a.run("act:perform()")
-    check(not a.eval("%s.isBed(v)" % S) and a.eval("SENT.transmitModData") == 0, "client perform: no state")
+    check(not a.eval("%s.isFolded(v)" % S) and a.eval("SENT.transmitModData") == 0, "client perform: no state")
     # the server rebuilds the action from the fields named like new()'s parameters
-    server.run("sact = ISCRVFoldSeats:new(PLAYERS.alice, getVehicleById(%d), %s)" % (a.eval("act.vehicle:getId()"),
-                                                                                    "true" if a.eval("act.on") else "false"))
+    server.run("sact = ISCRVFoldSeats:new(PLAYERS.alice, getVehicleById(%d), %s, '%s')" % (
+        a.eval("act.vehicle:getId()"), "true" if a.eval("act.on") else "false", a.eval("act.mode")))
     check(server.eval("sact:isValid()") and server.eval("sact:complete()") is True, "server complete")
-    check(server.eval("%s.isBed(v)" % S), "server folded")
-    check(not a.eval("%s.isBed(v)" % S), "nothing on the clients before the network")
+    check(server.eval("%s.isCargo(v)" % S), "server folded, as a load floor")
+    check(not a.eval("%s.isFolded(v)" % S), "nothing on the clients before the network")
     check(a.eval("act:isValid()"), "client action stays valid however the state moves")
     net.pump()
     for c in (a, b):
-        check(c.eval("%s.isBed(v)" % S), "%s sees the seats folded" % c.player)
+        check(c.eval("%s.isCargo(v)" % S), "%s sees the seats folded as a load floor" % c.player)
         check(c.eval("v.parts.SeatRearLeft.md.crv_function_folded") is True, "%s has the mod data" % c.player)
         check(c.eval("HondaCRVGen1.Acc.RearSeatAccess(v, v.parts.SeatRearLeft, PLAYER)") is False, "%s: rear seats refuse items" % c.player)
     b.run("PLAYER.vehicle = v")
@@ -383,11 +387,11 @@ def multiplayer():
     server.run("u = ISCRVFoldSeats:new(PLAYERS.bob, v, false)")
     check(server.eval("u:complete()") is False, "server refuses to unfold over cargo")
     net.pump()
-    check(all(c.eval("%s.isBed(v)" % S) for c in (a, b)), "still folded everywhere")
+    check(all(c.eval("%s.isCargo(v)" % S) for c in (a, b)), "still folded everywhere")
     server.run("v.parts.CRVFunctionCargo.cont.items = 0")
     check(server.eval("u:complete()") is True, "empty: unfolds")
     net.pump()
-    check(not any(c.eval("%s.isBed(v)" % S) for c in (a, b)), "unfolded on both clients")
+    check(not any(c.eval("%s.isFolded(v)" % S) for c in (a, b)), "unfolded on both clients")
     # the mod data packet alone (command lost) reaches the clients through the poll
     net.drop_commands = True
     server.run("HondaCRVGen1.Shared.setBed(v, true)")
@@ -441,9 +445,10 @@ def multiplayer():
 
 
 def shown(s, var="v"):
-    """(upright bench drawn, folded bench drawn) on side s for the car in Lua variable `var`."""
+    """(upright bench drawn, folded bench drawn, bedding drawn) on side s for the car in Lua variable `var`."""
     p = "%s.parts.CRVFunctionSeats.visible" % var
-    return (s.eval("%s.InteriorSeatsUp == true" % p), s.eval("%s.InteriorSeatsFolded == true" % p))
+    return (s.eval("%s.InteriorSeatsUp == true" % p), s.eval("%s.InteriorSeatsFolded == true" % p),
+            s.eval("%s.InteriorBedding == true" % p))
 
 
 def seats_look():
@@ -452,28 +457,28 @@ def seats_look():
     never on the dedicated server. Before this the bench was baked into the static cabin: upright always."""
     sp = side("sp", player="tester")
     sp.run("v = newCRV(1); PLAYER.area = 'TruckBed'")
-    check(shown(sp) == (False, False), "nothing drawn before the part's init (no item, setAllModelsVisible = false)")
+    check(shown(sp) == (False, False, False), "nothing drawn before the part's init (no item, setAllModelsVisible = false)")
     sp.run("HondaCRVGen1.Function.Init(v, v.parts.CRVFunctionSeats)")
-    check(shown(sp) == (True, False), "SP: upright after init, got %s" % (shown(sp),))
+    check(shown(sp) == (True, False, False), "SP: upright after init, got %s" % (shown(sp),))
     sp.run("a = ISCRVFoldSeats:new(PLAYER, v, true); a:perform()")
-    check(shown(sp) == (True, False), "SP: perform() alone changes nothing")
+    check(shown(sp) == (True, False, False), "SP: perform() alone changes nothing")
     sp.run("a:complete()")
-    check(shown(sp) == (False, True), "SP: folded once complete() ran, got %s" % (shown(sp),))
+    check(shown(sp) == (False, True, True), "SP: folded once complete() ran, got %s" % (shown(sp),))
     calls = sp.eval("v.parts.CRVFunctionSeats.calls")
     sp.run("HondaCRVGen1.State.refresh(v, 'function_folded'); TICK(120)")
-    check(sp.eval("v.parts.CRVFunctionSeats.calls") == calls and shown(sp) == (False, True), "SP: idle refreshes touch nothing")
+    check(sp.eval("v.parts.CRVFunctionSeats.calls") == calls and shown(sp) == (False, True, True), "SP: idle refreshes touch nothing")
     sp.run("b = ISCRVFoldSeats:new(PLAYER, v, false); b:complete()")
-    check(shown(sp) == (True, False), "SP: upright again")
+    check(shown(sp) == (True, False, False), "SP: upright again")
     # an old save's crvBed is drawn folded at load, whichever part inits first
     sp.run("w = newCRV(3); w.parts.SeatRearLeft.md.crvBed = true; HondaCRVGen1.Function.Init(w, w.parts.CRVFunctionSeats)")
-    check(shown(sp, "w") == (False, True), "SP: a legacy bed is drawn folded")
+    check(shown(sp, "w") == (False, True, True), "SP: a legacy bed is drawn folded")
     sp.run("HondaCRVGen1.Function.Init(w, w.parts.CRVFunctionCargo)")
-    check(shown(sp, "w") == (False, True) and sp.eval("w.parts.SeatRearLeft.md.crv_function_folded") is True,
+    check(shown(sp, "w") == (False, True, True) and sp.eval("w.parts.SeatRearLeft.md.crv_function_folded") is True,
           "SP: still folded after the migration")
     # a re-created car (a fresh part shows nothing) gets its look back from init
     sp.run("a2 = ISCRVFoldSeats:new(PLAYER, v, true); a2:complete()")
     sp.run("v.parts.CRVFunctionSeats.visible = {}; HondaCRVGen1.Function.Init(v, v.parts.CRVFunctionSeats)")
-    check(shown(sp) == (False, True), "SP: a fresh part is drawn folded at init")
+    check(shown(sp) == (False, True, True), "SP: a fresh part is drawn folded at init")
     print("SP SEATS: upright at init, folded by complete() only, upright again; a legacy bed and a reloaded car "
           "drawn folded; idle refreshes call nothing")
 
@@ -487,19 +492,19 @@ def seats_look():
     for s in (server, a, b):
         s.run("v = newCRV(1); " + init % ("v", "v"))
     for c in (a, b):
-        check(shown(c) == (True, False), "%s: upright at init" % c.player)
+        check(shown(c) == (True, False, False), "%s: upright at init" % c.player)
     check(server.eval("v.parts.CRVFunctionSeats.calls") == 0, "the dedicated server draws nothing")
     # alice folds: her client performs, the server completes, the state rides to both clients
     a.run("PLAYER.area = 'TruckBed'; act = ISCRVFoldSeats:new(PLAYER, v, true); act:perform()")
     for c in (a, b):
-        check(shown(c) == (True, False), "%s: perform() on alice's client changes no look" % c.player)
+        check(shown(c) == (True, False, False), "%s: perform() on alice's client changes no look" % c.player)
     server.run("sact = ISCRVFoldSeats:new(PLAYERS.alice, v, true)")
     check(server.eval("sact:complete()") is True, "server completes the fold")
     for c in (a, b):
-        check(shown(c) == (True, False), "%s: nothing before the network" % c.player)
+        check(shown(c) == (True, False, False), "%s: nothing before the network" % c.player)
     net.pump()
     for c in (a, b):
-        check(shown(c) == (False, True), "%s: folded, got %s" % (c.player, shown(c)))
+        check(shown(c) == (False, True, True), "%s: folded, got %s" % (c.player, shown(c)))
     # bob puts them back up; the command is lost and the mod data packet alone arrives: the poll redraws
     net.drop_commands = True
     server.run("u = ISCRVFoldSeats:new(PLAYERS.bob, v, false)")
@@ -507,13 +512,13 @@ def seats_look():
     net.pump()
     for c in (a, b):
         c.run("TICK(60)")
-        check(shown(c) == (True, False), "%s: upright again through the poll alone" % c.player)
+        check(shown(c) == (True, False, False), "%s: upright again through the poll alone" % c.player)
     net.drop_commands = False
     # a car that streams in after the fold is drawn from its synced mod data at init
     server.run("HondaCRVGen1.Shared.setBed(v, true)")
     net.pump()
     b.run("v2 = newCRV(1); VEHICLES[1] = v2; v2.parts.SeatRearLeft.md = { crv_function_folded = true }; " + init % ("v2", "v2"))
-    check(shown(b, "v2") == (False, True), "bob: a car streamed in folded is drawn folded")
+    check(shown(b, "v2") == (False, True, True), "bob: a car streamed in folded is drawn folded")
     check(server.eval("v.parts.CRVFunctionSeats.calls") == 0, "still nothing drawn on the server")
     print("MP SEATS: the server completes, both clients redraw (by command, or by the mod data packet alone), a car "
           "streamed in later is drawn as stored; the server never draws")
@@ -563,11 +568,11 @@ def client_menus():
     c.load("client/HondaCRVGen1_Menu.lua", "client/HondaCRVGen1_FunctionMenu.lua")
     c.run("v = newCRV(1); PLAYER.area = 'TruckBed'")
     menu = "(function() local ctx = newContext(); ISVehicleMenu.FillMenuOutsideVehicle(0, ctx, v, false); return optionNames(ctx) end)()"
-    check(c.eval(menu) == "ContextMenu_CRV_FoldBed,ContextMenu_CRV_Function_LiftFloor!", "closed gate: %s" % c.eval(menu))
+    check(c.eval(menu) == "ContextMenu_CRV_FoldFlat,ContextMenu_CRV_FoldBed,ContextMenu_CRV_Function_LiftFloor!", "closed gate: %s" % c.eval(menu))
     # the outside radial, as Project Viewpoint harvests it: the same options after the game's slices, a blocked
     # one without a command and with its reason
     radial = "viewpointRadial(PLAYER, v):texts()"
-    want = "VANILLA_MECHANICS,ContextMenu_CRV_FoldBed,ContextMenu_CRV_Function_LiftFloor [Tooltip_CRV_GateClosed]!"
+    want = "VANILLA_MECHANICS,ContextMenu_CRV_FoldFlat,ContextMenu_CRV_FoldBed,ContextMenu_CRV_Function_LiftFloor [Tooltip_CRV_GateClosed]!"
     check(c.eval(radial) == want, "radial, closed gate: %s" % c.eval(radial))
     c.run("RADIAL = newRadial(); RADIAL_TARGET = v; ISVehicleMenu.showRadialMenuOutside(PLAYER)")
     check(c.eval("RADIAL:texts()") == want and c.eval("RADIAL.shown") is True, "the game's V: the same slices, shown")
@@ -576,8 +581,8 @@ def client_menus():
     check(c.eval("viewpointRadial(PLAYER, newVehicle(9, {}, 'Base.SUV')):texts()") == "VANILLA_MECHANICS",
           "radial on another car: the game's slices only")
     c.run("v.parts.TrunkDoor.door.open = true")
-    check(c.eval(menu) == "ContextMenu_CRV_FoldBed,ContextMenu_CRV_Function_LiftFloor", "open gate: %s" % c.eval(menu))
-    check(c.eval(radial) == "VANILLA_MECHANICS,ContextMenu_CRV_FoldBed,ContextMenu_CRV_Function_LiftFloor",
+    check(c.eval(menu) == "ContextMenu_CRV_FoldFlat,ContextMenu_CRV_FoldBed,ContextMenu_CRV_Function_LiftFloor", "open gate: %s" % c.eval(menu))
+    check(c.eval(radial) == "VANILLA_MECHANICS,ContextMenu_CRV_FoldFlat,ContextMenu_CRV_FoldBed,ContextMenu_CRV_Function_LiftFloor",
           "radial, open gate: %s" % c.eval(radial))
     # picking the slice queues what the option does: the walk to the cargo area, then the lift
     c.run("QUEUE = {}; local m = viewpointRadial(PLAYER, v); m:pick(m:find('ContextMenu_CRV_Function_LiftFloor')); BY_SLICE = QUEUE")
@@ -591,8 +596,8 @@ def client_menus():
     check(c.eval(same) is True, "the cargo floor slice queues the option's walk and ISCRVFunctionLiftFloor")
     c.run("QUEUE = {}")
     c.run("HondaCRVGen1.Shared.setBed(v, true); v.parts.CRVFunctionCargo.cont.items = 1")
-    check(c.eval(menu) == "ContextMenu_CRV_UnfoldBed!,ContextMenu_CRV_Function_LiftFloor", "folded, loaded: %s" % c.eval(menu))
-    check(c.eval(radial) == "VANILLA_MECHANICS,ContextMenu_CRV_UnfoldBed [IGUI_CRV_Function_CargoNotEmpty]!,"
+    check(c.eval(menu) == "ContextMenu_CRV_ClearBed,ContextMenu_CRV_UnfoldBed!,ContextMenu_CRV_Function_LiftFloor", "folded, loaded: %s" % c.eval(menu))
+    check(c.eval(radial) == "VANILLA_MECHANICS,ContextMenu_CRV_ClearBed,ContextMenu_CRV_UnfoldBed [IGUI_CRV_Function_CargoNotEmpty]!,"
           "ContextMenu_CRV_Function_LiftFloor", "radial, folded, loaded: %s" % c.eval(radial))
     c.run("PLAYER.vehicle = v")
     check(c.eval(radial) == "", "no outside radial from inside the car")
@@ -786,6 +791,151 @@ def bed_quality():
           "upright seats and other cars unchanged (single player and a multiplayer client)")
 
 
+def fold_modes():
+    """Load floor or bed (2026-10-22, the owner: "if the seats are folded, I want to have more trunk space or a bed,
+    should be able to choose"): State key function_foldMode ("cargo" | "bed", default "bed") beside function_folded,
+    set only by ISCRVFoldSeats:complete on the authoritative side. Cargo: the load floor open, no bedding, no bed.
+    Bed: the bedding drawn, a good bed, the load floor shut. Switching (the short action): to a bed needs the load
+    floor empty, to cargo always works. Old saves (folded, no mode) are beds."""
+    F, S = "HondaCRVGen1.Function", "HondaCRVGen1.Shared"
+    sp = side("sp", player="tester")
+    sp.run(UI)
+    sp.run(BED)
+    sp.load("client/HondaCRVGen1_Menu.lua", "client/HondaCRVGen1_FunctionMenu.lua")
+    sp.run("v = newCRV(1); PLAYER.area = 'TruckBed'; v.parts.TrunkDoor.door.open = true; "
+           "HondaCRVGen1.Function.Init(v, v.parts.CRVFunctionSeats); HondaCRVGen1.Function.setFloorFound(v)")
+    menu = "(function() local ctx = newContext(); ISVehicleMenu.FillMenuOutsideVehicle(0, ctx, v, false); return optionNames(ctx) end)()"
+    radial = "viewpointRadial(PLAYER, v):texts()"
+    check(sp.eval(menu) == "ContextMenu_CRV_FoldFlat,ContextMenu_CRV_FoldBed", "seats up: two folds (%s)" % sp.eval(menu))
+    check(sp.eval(radial) == "VANILLA_MECHANICS,ContextMenu_CRV_FoldFlat,ContextMenu_CRV_FoldBed", "radial: %s" % sp.eval(radial))
+    # the menu's two folds queue the same action with a mode
+    sp.run("QUEUE = {}; local m = viewpointRadial(PLAYER, v); m:pick(m:find('ContextMenu_CRV_FoldFlat')); FLAT = QUEUE[2]; "
+           "QUEUE = {}; local m2 = viewpointRadial(PLAYER, v); m2:pick(m2:find('ContextMenu_CRV_FoldBed')); BEDA = QUEUE[2]; QUEUE = {}")
+    check(sp.eval("getmetatable(FLAT) == ISCRVFoldSeats and FLAT.on == true and FLAT.mode == 'cargo' and FLAT.maxTime == 150"),
+          "fold flat: ISCRVFoldSeats on, mode cargo, the full time")
+    check(sp.eval("getmetatable(BEDA) == ISCRVFoldSeats and BEDA.on == true and BEDA.mode == 'bed'"), "fold into a bed: mode bed")
+    # fold as a load floor
+    check(sp.eval("FLAT:isValid()") and sp.eval("FLAT:complete()") is True, "fold flat completes")
+    check(sp.eval("%s.foldMode(v)" % S) == "cargo" and sp.eval("%s.isFolded(v)" % S) and not sp.eval("%s.isBed(v)" % S),
+          "folded as a load floor")
+    check(shown(sp) == (False, True, False), "cargo: the folded bench, no bedding (%s)" % (shown(sp),))
+    check(sp.eval("%s.CargoAccess(v, v.parts.CRVFunctionCargo, PLAYER)" % F) is True, "cargo: the load floor opens at the gate")
+    check(sp.eval("HondaCRVGen1.Acc.RearSeatAccess(v, v.parts.SeatRearLeft, PLAYER)") is False, "cargo: rear seats refuse items")
+    check(sp.eval("ISEnterVehicle.isValid({ seat = 2, vehicle = v })") is False, "cargo: nobody sits in the back")
+    sp.run("HALO = {}; FLAT:perform()")
+    check(sp.eval("HALO[1]") == "IGUI_CRV_SeatsFoldedFlat", "the fold-flat halo")
+    check(sp.eval(menu) == "ContextMenu_CRV_MakeBed,ContextMenu_CRV_UnfoldBed", "cargo menu: %s" % sp.eval(menu))
+    # sleeping on the load floor: no bed, vanilla's answer (the stub's badBed)
+    sp.run("v:addPart('SeatFrontLeft').cont = newContainer(50, 0); PLAYER.vehicle = v; SEAT_OF[PLAYER] = 0")
+    q = "ISWorldObjectContextMenu.getBedQuality(PLAYER, nil)"
+    check(sp.eval(q) == "badBed", "cargo: the game's bad bed (%s)" % sp.eval(q))
+    sp.run("PLAYER.vehicle = nil")
+    # the same mode again: refused
+    check(not sp.eval("ISCRVFoldSeats:new(PLAYER, v, true, 'cargo'):isValid()"), "already a load floor: nothing to do")
+    # making up the bed over a loaded floor: refused, with the unfold rule's reason
+    sp.run("v.parts.CRVFunctionCargo.cont.items = 2; mk = ISCRVFoldSeats:new(PLAYER, v, true, 'bed')")
+    check(sp.eval("mk.switching") is True and sp.eval("mk.maxTime") == 80, "switching: the short action")
+    check(not sp.eval("mk:isValid()") and sp.eval("mk:complete()") is False and sp.eval("%s.isCargo(v)" % S),
+          "a loaded load floor blocks making up the bed")
+    check(sp.eval(menu) == "ContextMenu_CRV_MakeBed!,ContextMenu_CRV_UnfoldBed!", "loaded: both blocked (%s)" % sp.eval(menu))
+    check(sp.eval(radial) == "VANILLA_MECHANICS,ContextMenu_CRV_MakeBed [IGUI_CRV_Function_CargoNotEmpty]!,"
+          "ContextMenu_CRV_UnfoldBed [IGUI_CRV_Function_CargoNotEmpty]!", "radial, loaded: %s" % sp.eval(radial))
+    sp.run("v.parts.CRVFunctionCargo.cont.items = 0")
+    check(sp.eval("mk:isValid()") and sp.eval("mk:complete()") is True and sp.eval("%s.isBed(v)" % S), "empty: the bed made up")
+    sp.run("HALO = {}; mk:perform()")
+    check(sp.eval("HALO[1]") == "IGUI_CRV_BedMade", "the make-up halo")
+    check(shown(sp) == (False, True, True), "bed: the folded bench and the bedding (%s)" % (shown(sp),))
+    check(sp.eval("%s.CargoAccess(v, v.parts.CRVFunctionCargo, PLAYER)" % F) is False, "bed: the load floor is shut")
+    check(sp.eval(menu) == "ContextMenu_CRV_ClearBed,ContextMenu_CRV_UnfoldBed", "bed menu: %s" % sp.eval(menu))
+    sp.run("PLAYER.vehicle = v")
+    check(sp.eval(q) == "goodBed", "bed: a good bed")
+    sp.run("PLAYER.secondary = newPillow()")
+    check(sp.eval(q) == "goodBedPillow", "bed: better with a pillow")
+    sp.run("PLAYER.secondary = nil; PLAYER.vehicle = nil")
+    # clearing the bed: always (the bed holds nothing)
+    sp.run("cl = ISCRVFoldSeats:new(PLAYER, v, true, 'cargo')")
+    check(sp.eval("cl.maxTime") == 80 and sp.eval("cl:isValid()") and sp.eval("cl:complete()") is True and sp.eval("%s.isCargo(v)" % S),
+          "the bed cleared for cargo")
+    sp.run("HALO = {}; cl:perform()")
+    check(sp.eval("HALO[1]") == "IGUI_CRV_BedCleared", "the clear halo")
+    check(shown(sp) == (False, True, False), "cleared: the bedding gone")
+    # back up from cargo: the mode back to the default; the next plain fold is a bed
+    sp.run("up = ISCRVFoldSeats:new(PLAYER, v, false, 'cargo')")
+    check(sp.eval("up:isValid()") and sp.eval("up:complete()") is True and sp.eval("%s.foldMode(v)" % S) is None, "seats up")
+    check(sp.eval("v.parts.SeatRearLeft.md.crv_function_foldMode") is None, "mode stored as nil once up")
+    check(shown(sp) == (True, False, False), "up: the upright bench only")
+    check(not sp.eval("ISCRVFoldSeats:new(PLAYER, v, false, 'bed'):isValid()"), "nothing to put back")
+    sp.run("ISCRVFoldSeats:new(PLAYER, v, true):complete()")
+    check(sp.eval("%s.isBed(v)" % S), "a fold without a mode is a bed (the old action)")
+    # old saves: folded before the choice existed (no mode stored), or the older crvBed flag: beds, bedding drawn
+    sp.run("w = newCRV(3); w.parts.SeatRearLeft.md.crv_function_folded = true; HondaCRVGen1.Function.Init(w, w.parts.CRVFunctionSeats)")
+    check(sp.eval("%s.foldMode(w)" % S) == "bed" and shown(sp, "w") == (False, True, True), "an old fold is a bed, drawn made up")
+    check(sp.eval("%s.CargoAccess(w, w.parts.CRVFunctionCargo, PLAYER)" % F) is False, "old fold: the load floor shut (a bed)")
+    sp.run("x = newCRV(4); x.parts.SeatRearLeft.md.crvBed = true; HondaCRVGen1.Function.Init(x, x.parts.CRVFunctionSeats)")
+    check(sp.eval("%s.foldMode(x)" % S) == "bed" and shown(sp, "x") == (False, True, True), "a crvBed save: a bed")
+    # what an old save may have left on the load floor stays reachable: clearing the bed is always allowed
+    sp.run("w.parts.CRVFunctionCargo.cont.items = 4")
+    check(sp.eval("ISCRVFoldSeats:new(PLAYER, w, true, 'cargo'):isValid()"), "old fold with things on the floor: the bed can be cleared")
+    # a mode value nobody writes reads as a bed; State refuses to store one
+    sp.run("w.parts.SeatRearLeft.md.crv_function_foldMode = 'junk'")
+    check(sp.eval("%s.foldMode(w)" % S) == "bed", "an unknown stored mode reads as a bed")
+    check(sp.eval("HondaCRVGen1.State.set(w, 'function_foldMode', 'junk')")[0] is False, "State refuses an unknown mode")
+    print("SP FOLD MODES: fold flat or into a bed from the menus (same action, a mode); cargo opens the load floor, no "
+          "bedding, vanilla sleep; bed draws the bedding, good bed (+ pillow), floor shut; making up the bed needs the "
+          "floor empty, clearing it always works (short action); old folds are beds")
+
+    # multiplayer: alice folds flat, the server completes, both clients see it; bob makes up the bed
+    net = Net()
+    server = side("server", net, seed=31)
+    a = side("client", net, player="alice", seed=32)
+    b = side("client", net, player="bob", seed=33)
+    server.run("newPlayer('alice'); newPlayer('bob')")
+    init = ("for _, p in ipairs({ 'CRVFunctionCargo', 'CRVFunctionUnderfloor', 'CRVFunctionSeats' }) do "
+            "HondaCRVGen1.Function.Init(v, v.parts[p]) end")
+    for s in (server, a, b):
+        s.run("v = newCRV(1); v.parts.TrunkDoor.door.open = true; " + init)
+    a.run("PLAYER.area = 'TruckBed'; act = ISCRVFoldSeats:new(PLAYER, v, true, 'cargo'); act:perform()")
+    server.run("sact = ISCRVFoldSeats:new(PLAYERS.alice, v, %s, '%s')" % ("true" if a.eval("act.on") else "false", a.eval("act.mode")))
+    check(server.eval("sact:complete()") is True and server.eval("%s.isCargo(v)" % S), "server: folded flat")
+    net.pump()
+    for c in (a, b):
+        check(c.eval("%s.isCargo(v)" % S) and shown(c) == (False, True, False), "%s: a load floor, no bedding" % c.player)
+        check(c.eval("v.parts.SeatRearLeft.md.crv_function_foldMode") == "cargo", "%s has the mode" % c.player)
+    b.run("PLAYER.vehicle = v")
+    check(b.eval("%s.CargoAccess(v, v.parts.CRVFunctionCargo, PLAYER)" % F) is True, "bob reaches the load floor")
+    check(a.eval("HondaCRVGen1.State.set(v, 'function_foldMode', 'bed')")[0] is False, "client State.set of the mode refused")
+    check(a.eval("HondaCRVGen1.State.request(PLAYER, v, 'function_foldMode', 'bed')")[0] is False, "the mode is not requestable")
+    # bob makes up the bed over a loaded floor: his client already refuses, so does the server
+    server.run("v.parts.CRVFunctionCargo.cont.items = 1")
+    b.run("v.parts.CRVFunctionCargo.cont.items = 1; mk = ISCRVFoldSeats:new(PLAYER, v, true, 'bed')")
+    check(not b.eval("mk:isValid()"), "bob's client: loaded floor, refused")
+    server.run("smk = ISCRVFoldSeats:new(PLAYERS.bob, v, true, 'bed')")
+    check(server.eval("smk:complete()") is False, "server refuses the bed over cargo")
+    net.pump()
+    check(all(c.eval("%s.isCargo(v)" % S) for c in (a, b)), "still a load floor everywhere")
+    server.run("v.parts.CRVFunctionCargo.cont.items = 0")
+    b.run("v.parts.CRVFunctionCargo.cont.items = 0")
+    check(b.eval("mk:isValid()") and b.eval("mk.switching") is True, "bob's client: valid, the short action")
+    check(server.eval("smk:complete()") is True, "server makes up the bed")
+    net.pump()
+    check(b.eval("mk:isValid()"), "bob's action survives the server's answer")
+    for c in (a, b):
+        check(c.eval("%s.isBed(v)" % S) and shown(c) == (False, True, True), "%s: the bed made up, bedding drawn" % c.player)
+        check(c.eval("%s.CargoAccess(v, v.parts.CRVFunctionCargo, PLAYER)" % F) is False, "%s: the load floor shut" % c.player)
+    # the bed cleared, the command lost: the mod data packet alone reaches the clients through the poll
+    net.drop_commands = True
+    server.run("ISCRVFoldSeats:new(PLAYERS.alice, v, true, 'cargo'):complete()")
+    net.pump()
+    for c in (a, b):
+        c.run("TICK(60)")
+        check(c.eval("%s.isCargo(v)" % S) and shown(c) == (False, True, False), "%s: cleared through the poll alone" % c.player)
+    net.drop_commands = False
+    check(server.eval("v.parts.CRVFunctionSeats.calls") == 0, "the dedicated server draws nothing")
+    print("MP FOLD MODES: alice folds flat (server completes, both clients see a load floor), bob's bed over cargo refused "
+          "by his client and the server, made up once empty (bedding on both clients, floor shut), cleared by the poll "
+          "alone; the mode is server-only")
+
+
 def main():
     net_action_fields()
     single_player()
@@ -794,6 +944,7 @@ def main():
     seats_look()
     client_menus()
     bed_quality()
+    fold_modes()
     print("FUNCTION LUA TESTS OK")
 
 

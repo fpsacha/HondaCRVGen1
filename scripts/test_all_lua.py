@@ -898,7 +898,7 @@ VANILLA_PARTS = [
     ("GasTank", {"item": "Base.NormalGasTank1", "content": True}),
     # template_glovebox: itemType = Base.GloveBox (a removable part: taking it out once hid the whole cabin)
     ("GloveBox", {"item": "Base.GloveBox1", "container": {"capacity": 5}}),
-    ("TruckBed", {"item": "Base.NormalTrunk1", "container": {"capacity": 55}, "area": "TruckBed"}),
+    ("TruckBed", {"item": "Base.BigTrunk1", "container": {"capacity": 70}, "area": "TruckBed"}),
     ("TrunkDoor", {"item": "Base.TrunkDoor1", "door": True, "area": "TruckBed"}),
     ("Windshield", {"item": "Base.Windshield1", "window": True}),
     ("WindshieldRear", {"item": "Base.RearWindshield1", "window": True, "parent": "TrunkDoor"}),

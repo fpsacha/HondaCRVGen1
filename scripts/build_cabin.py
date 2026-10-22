@@ -1346,9 +1346,11 @@ def _store_headrest(objs, hip, base, hh, t, gap, recline=8.0, tilt=8.0):
 # ------------------------------------------------------------------------------------------- the made-up bed
 # 2026-10-19 (feature round, "make the folded bed LOOK like a bed"): what people camping in a first-generation CR-V
 # lay over the folded seats and the cargo floor: a thin foam pad, an open rectangular sleeping bag with its top
-# turned back, a pillow at the front end (the head behind the front seats, the feet to the gate). Part of the
-# folded model (rear_seats "fold": acc_function_seats_fold and its _hi twin), so the one Lua switch that shows the
-# folded seats shows the bed too, and the bed costs nothing while the seats are up.
+# turned back, a pillow at the front end (the head behind the front seats, the feet to the gate). Its own model
+# since 2026-10-22 (the owner: folded seats are "more trunk space or a bed, should be able to choose"):
+# rear_bedding -> acc_function_bedding and its _hi twin, model InteriorBedding of the seats' part, shown by the Lua
+# only in fold mode "bed"; the bare folded seats (rear_seats "fold") are the load floor. Nothing drawn while the
+# seats are up.
 # Heights measured on the built car (scratch feat_bed/probe_heights.py, ray grid on crv_kotris.blend): the folded
 # backs' carpeted tops z 0.788 (y -0.50) to 0.799 (y -0.60 .. -0.65), 0.792 at y -0.90, then down into the gap at
 # the riser (0.686 at y -0.95, 0.696 at y -1.00); the cargo deck z 0.766 from y -1.05 to -2.00 for |x| <= 0.55,
@@ -1356,7 +1358,7 @@ def _store_headrest(objs, hip, base, hh, t, gap, recline=8.0, tilt=8.0):
 # With the table out its tub lies open under the deck (x +-0.39, y -1.24 .. -1.92): the pad bridges it, as a pad
 # laid over the folded floor does, and it is 1.0 m wide (x +-0.50), so the open tub stays out of sight under it
 # from every side (the alternative, a pad stopping short at y -1.24, is 0.8 m long: no bed).
-BED_MADE = True                   # build the bed into the folded model
+BED_MADE = True                   # build the bed (rear_bedding: the function feature's bedding model)
 BED_PAD_X = 0.50                  # the pad's half width: clear of the housing trims (|x| 0.60) and the folded backs'
                                   # rounded outer edges (top under 0.79 past |x| 0.55)
 BED_PAD_T = 0.025                 # pad thickness (a self-inflating foam pad)
@@ -1613,8 +1615,6 @@ def rear_seats(pose, fine, name, collection=None):
     for hname, hip in hips().items():
         if hname.startswith("Rear"):
             _rear_side(b, hip, pose)
-    if pose == "fold" and BED_MADE:                        # the made-up bed rides the folded model
-        bed_set(b)
     if pose == "up" and not fine:                         # the clearance audit the bench had in the cabin
         _audit(b.objs, Env())
     pieces = dict(b.pieces)
@@ -1622,6 +1622,28 @@ def rear_seats(pose, fine, name, collection=None):
     print("CABIN rear seats %-4s %-6s %5d tris (%s)" % (pose, "full" if fine else "coarse",
                                                         sum(len(p.vertices) - 2 for p in ob.data.polygons),
                                                         ", ".join("%s %d" % kv for kv in sorted(pieces.items()))))
+    return ob
+
+
+def rear_bedding(fine, name, collection=None):
+    """The made-up bed on the folded seats (bed_set: pad, sleeping bag, pillow) as one object `name`, full detail or
+    coarse: the function feature's bedding model (2026-10-22, split out of the folded seats so the folded seats can
+    also be a bare load floor). None when BED_MADE is off."""
+    old = bpy.data.objects.get(name)
+    if old is not None:
+        bpy.data.objects.remove(old, do_unlink=True)
+    if not BED_MADE:
+        return None
+    if collection is None:
+        ref = bpy.data.objects.get("cabin") or bpy.data.objects.get("body")
+        collection = ref.users_collection[0] if ref else bpy.context.scene.collection
+    b = Cab(collection, fine, None)
+    bed_set(b)
+    pieces = dict(b.pieces)
+    ob = b.join(name)
+    print("CABIN rear bedding %-6s %5d tris (%s)" % ("full" if fine else "coarse",
+                                                     sum(len(p.vertices) - 2 for p in ob.data.polygons),
+                                                     ", ".join("%s %d" % kv for kv in sorted(pieces.items()))))
     return ob
 
 

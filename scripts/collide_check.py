@@ -25,7 +25,8 @@ import rig_vehicle  # noqa: E402
 FRACTIONS = (0.25, 0.5, 0.75, 1.0)
 # never on the car together: the stock vs lift gate covers, the rack's cargo states, seats up vs folded
 EXCLUSIVE = [{"acc_lift_gate_alloy", "acc_lift_gate_steel"}, {"acc_rack_load1", "acc_rack_load2", "acc_rack_load3"},
-             {"acc_function_seats_up", "acc_function_seats_fold"}, {"acc_guard_rear", "acc_armour_rear_plate"}]
+             {"acc_function_seats_up", "acc_function_seats_fold"}, {"acc_function_seats_up", "acc_function_bedding"},
+             {"acc_guard_rear", "acc_armour_rear_plate"}]
 
 
 def exclusive(a, b):

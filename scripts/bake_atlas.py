@@ -1592,7 +1592,8 @@ HILO_CAGE = {"engine_block": (0.03, 0.10),          # (cage extrusion, max ray d
              # the cup wells 5 cm deep); a tight cage keeps rim rays off the hub pad
              "cabin": (0.02, 0.08),
              # the rear bench out of the cabin (function feature), upright and folded: the cabin's cage
-             "acc_function_seats_up": (0.02, 0.08), "acc_function_seats_fold": (0.02, 0.08)}
+             "acc_function_seats_up": (0.02, 0.08), "acc_function_seats_fold": (0.02, 0.08),
+             "acc_function_bedding": (0.02, 0.08)}          # the bed on the folded bench (its own model, 2026-10-22)
 HILO_DEFAULT = (0.04, 0.12)
 RAY_FLAGS = ("visible_diffuse", "visible_glossy", "visible_transmission", "visible_volume_scatter", "visible_shadow")
 GEN_SUFFIX = "__gen"
@@ -1713,14 +1714,20 @@ def _bake_hilo(pairs, kind, samples, **kw):
         h.hide_set(False)
     # variant meshes (function feature, 2026-10-14: the rear bench upright and folded, which overlap): twins
     # with the same crv_variant never shade each other. Each bakes with the car and itself; any other part
-    # sees only the set's crv_variant_default twin (the upright bench shades the car as it always did)
+    # sees only the set's crv_variant_default twin (the upright bench shades the car as it always did). A twin's
+    # crv_variant_with names the set's twins (comma-separated) that are always drawn with it and so shade it (the
+    # bedding lies on the folded bench, 2026-10-22)
     variants = [h for h in his if h.get("crv_variant")]
     vflags = {h.name: tuple(getattr(h, a) for a in RAY_FLAGS) for h in variants}
     try:
         for low, hi in pairs:
             vset = hi.get("crv_variant")
+            with_ = set(filter(None, str(hi.get("crv_variant_with", "")).split(",")))
             for h in variants:
-                on = (h is hi) if h.get("crv_variant") == vset else bool(h.get("crv_variant_default"))
+                if h.get("crv_variant") == vset:
+                    on = h is hi or h.name in with_
+                else:
+                    on = bool(h.get("crv_variant_default"))
                 h.hide_render = not on
                 for a in RAY_FLAGS:                      # acc_ twins may have left the rays: back for their turn
                     setattr(h, a, True if on else vflags[h.name][RAY_FLAGS.index(a)])

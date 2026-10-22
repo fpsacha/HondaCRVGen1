@@ -104,6 +104,11 @@ def single_player():
     sp.run("TICK(60)")
     check(sp.eval("SHOWN(v)") == "0000" and sp.eval("HondaCRVGen1.State.get(v, 'clutter_load')") == 3,
           "still hidden while folded; the state still follows the trunk")
+    # fold modes (2026-10-22): as a bare load floor the trunk's load shows; made up as a bed it hides again
+    sp.run("HondaCRVGen1.Shared.setFold(v, true, 'cargo')")
+    check(sp.eval("SHOWN(v)") == "1110", "folded as a load floor: the load shows (%s)" % sp.eval("SHOWN(v)"))
+    sp.run("HondaCRVGen1.Shared.setFold(v, true, 'bed')")
+    check(sp.eval("SHOWN(v)") == "0000", "the bed made up: hidden again")
     sp.run("HondaCRVGen1.Shared.setBed(v, false)")
     check(sp.eval("SHOWN(v)") == "1110", "unfolded: the load shows again")
     # a load saved with the car shows on load (init on a fresh part)
@@ -174,6 +179,18 @@ def multiplayer():
     net.pump()
     for c in (a, b):
         check(c.eval("SHOWN(v)") == "0000", "%s: folded seats hide the load" % c.player)
+    # the bed cleared for cargo on the server: the load shows on both clients (command, or the poll alone)
+    server.run("HondaCRVGen1.Shared.setFold(v, true, 'cargo')")
+    net.pump()
+    for c in (a, b):
+        check(c.eval("SHOWN(v)") == "1110", "%s: folded as a load floor, the load shows" % c.player)
+    net.drop_commands = True
+    server.run("HondaCRVGen1.Shared.setFold(v, true, 'bed')")
+    net.pump()
+    for c in (a, b):
+        c.run("TICK(60)")
+        check(c.eval("SHOWN(v)") == "0000", "%s: the bed made up (packet alone): hidden" % c.player)
+    net.drop_commands = False
     server.run("HondaCRVGen1.Shared.setBed(v, false)")
     net.pump()
     for c in (a, b):

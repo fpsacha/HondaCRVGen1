@@ -3,10 +3,13 @@ Honda CR-V (RD1): right-click options on the car and the rules that follow from 
 
   * Take out / put back the picnic table (with the tailgate open): the vanilla part install and
     uninstall actions on part CRVPicnicTable, no tools; the item is a moveable you place anywhere.
-  * Fold the rear seats into a bed / put them back: a timed action on the car; needs both rear seats
-    fitted, empty and unoccupied. While folded, nobody can take a rear seat (ISEnterVehicle /
-    ISSwitchVehicleSeat refuse them), the rear seat containers refuse items (server rule), and
-    sleeping in the car counts as a good bed instead of the usual bad one.
+  * Fold the rear seats flat as a load floor, or into a bed / put them back: a timed action on the car
+    (ISCRVFoldSeats with a mode); folding needs both rear seats fitted, empty and unoccupied. While
+    folded, "Make up the bed" / "Clear the bed for cargo" switches the mode (a shorter run of the same
+    action; making up the bed needs the load floor empty, as putting the seats back does). While folded,
+    nobody can take a rear seat (ISEnterVehicle / ISSwitchVehicleSeat refuse them) and the rear seat
+    containers refuse items (server rule); as a load floor the folded space is a container
+    (CRVFunctionCargo), as a bed sleeping in the car counts as a good bed instead of the usual bad one.
   * Both on the outside radial menu too (V, and Project Viewpoint's quick-interact list, which is built from it).
 ]]
 
@@ -24,6 +27,8 @@ HondaCRVGen1.Menu = Menu
 
 Menu.TABLE_ICON = "media/textures/Item_CRVGen1_PicnicTable.png"
 Menu.BED_ICON = "media/ui/vehicles/vehicle_sleep.png"             -- vanilla's "Sleep" slice in the car
+Menu.CARGO_ICON = "media/ui/vehicles/vehicle_exit.png"            -- vanilla's open-the-trunk slice (the load floor)
+Menu.SEATS_ICON = "media/ui/vehicles/vehicle_changeseats.png"     -- vanilla's change-seat slice (seats back up)
 
 local function tooltip(option, key)
     local tip = ISWorldObjectContextMenu.addToolTip()
@@ -42,9 +47,10 @@ function Menu.onPutTable(playerObj, vehicle, part, item)
     ISTimedActionQueue.add(ISInstallVehiclePart:new(playerObj, part, item, 150))
 end
 
-function Menu.onFold(playerObj, vehicle, on)
+-- mode: "cargo" | "bed" (always given, also when putting the seats back: NetTimedAction sends every field)
+function Menu.onFold(playerObj, vehicle, on, mode)
     ISTimedActionQueue.add(ISPathFindAction:pathToVehicleArea(playerObj, vehicle, "SeatRearLeft"))
-    ISTimedActionQueue.add(ISCRVFoldSeats:new(playerObj, vehicle, on))
+    ISTimedActionQueue.add(ISCRVFoldSeats:new(playerObj, vehicle, on, mode or S.MODE_BED))
 end
 
 -- what the car offers playerObj from outside, for both menus: { text = key, icon, fn, args = { ... }, why = key
@@ -66,15 +72,27 @@ function Menu.actions(playerObj, vehicle)
             end
         end
     end
-    -- fold-flat bed
-    if S.isBed(vehicle) then
+    -- fold-flat seats: a load floor or a bed (2026-10-22, the owner's choice)
+    local mode = S.foldMode(vehicle)
+    if mode then
+        if mode == S.MODE_CARGO then
+            local ok, why = S.canMakeBed(vehicle)           -- the bedding goes where the load floor's things are
+            list[#list + 1] = { text = "ContextMenu_CRV_MakeBed", icon = Menu.BED_ICON, fn = Menu.onFold,
+                                args = { vehicle, true, S.MODE_BED }, why = not ok and why or nil }
+        else
+            list[#list + 1] = { text = "ContextMenu_CRV_ClearBed", icon = Menu.CARGO_ICON, fn = Menu.onFold,
+                                args = { vehicle, true, S.MODE_CARGO } }
+        end
         local ok, why = S.canUnfold(vehicle)                -- function feature: the folded load floor must be empty
-        list[#list + 1] = { text = "ContextMenu_CRV_UnfoldBed", icon = Menu.BED_ICON, fn = Menu.onFold,
-                            args = { vehicle, false }, why = not ok and why or nil }
+        list[#list + 1] = { text = "ContextMenu_CRV_UnfoldBed", icon = Menu.SEATS_ICON, fn = Menu.onFold,
+                            args = { vehicle, false, mode }, why = not ok and why or nil }
     else
         local ok, why = S.canFold(vehicle)
+        why = not ok and why or nil
+        list[#list + 1] = { text = "ContextMenu_CRV_FoldFlat", icon = Menu.CARGO_ICON, fn = Menu.onFold,
+                            args = { vehicle, true, S.MODE_CARGO }, why = why }
         list[#list + 1] = { text = "ContextMenu_CRV_FoldBed", icon = Menu.BED_ICON, fn = Menu.onFold,
-                            args = { vehicle, true }, why = not ok and why or nil }
+                            args = { vehicle, true, S.MODE_BED }, why = why }
     end
     return list
 end
@@ -125,7 +143,9 @@ function ISVehicleMenu.showRadialMenuOutside(playerObj)
     return result
 end
 
--- a folded bed is a good bed; the game treats every vehicle as a bad one
+-- a folded bed is a good bed; the game treats every vehicle as a bad one. Folded as a bare load floor (mode
+-- "cargo") there is no bed: vanilla's rule (a bad bed in the sleeper's seat, a pillow in hand or in that seat's
+-- container helps)
 local getBedQuality = ISWorldObjectContextMenu.getBedQuality
 -- the containers where a pillow counts on the folded bed: the bed itself (the folded load floor, function feature) and
 -- the cargo deck it runs onto (the trunk); vanilla's own spot, the sleeper's seat container, is checked first
@@ -161,10 +181,10 @@ ISWorldObjectContextMenu.getBedQuality = function(playerObj, bed)
     return getBedQuality(playerObj, bed)
 end
 
--- the rear bench is a mattress while folded: nobody sits there
+-- the rear bench is folded flat (a load floor or a mattress): nobody sits there
 local enterValid = ISEnterVehicle.isValid
 function ISEnterVehicle:isValid()
-    if S.REAR_SEAT_INDEX[self.seat] and S.isBed(self.vehicle) then return false end
+    if S.REAR_SEAT_INDEX[self.seat] and S.isFolded(self.vehicle) then return false end
     return enterValid(self)
 end
 
@@ -172,7 +192,7 @@ end
 -- seat buttons and the best-seat pick both end here)
 local onEnter = ISVehicleMenu.onEnter
 function ISVehicleMenu.onEnter(playerObj, vehicle, seat)
-    if S.REAR_SEAT_INDEX[seat] and S.isBed(vehicle) then
+    if S.REAR_SEAT_INDEX[seat] and S.isFolded(vehicle) then
         HaloTextHelper.addBadText(playerObj, getText("IGUI_CRV_Function_SeatsAreFolded"))
         return
     end
@@ -182,6 +202,6 @@ end
 local switchValid = ISSwitchVehicleSeat.isValid
 function ISSwitchVehicleSeat:isValid()
     local vehicle = self.character:getVehicle()
-    if S.REAR_SEAT_INDEX[self.seatTo] and vehicle and S.isBed(vehicle) then return false end
+    if S.REAR_SEAT_INDEX[self.seatTo] and vehicle and S.isFolded(vehicle) then return false end
     return switchValid(self)
 end

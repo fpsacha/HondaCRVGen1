@@ -202,9 +202,9 @@ function Acc.UninstallComplete(vehicle, part, item)
 end
 
 -- the rear seats' containers (vehicle script: part SeatRear* container test) refuse items while
--- the seats are folded into the bed (HondaCRVGen1_Shared.lua)
+-- the seats are folded, as a load floor or a bed (HondaCRVGen1_Shared.lua)
 function Acc.RearSeatAccess(vehicle, part, chr)
-    if HondaCRVGen1.Shared and HondaCRVGen1.Shared.isBed(vehicle) then return false end
+    if HondaCRVGen1.Shared and HondaCRVGen1.Shared.isFolded(vehicle) then return false end
     return Vehicles.ContainerAccess.Seat(vehicle, part, chr)
 end
 

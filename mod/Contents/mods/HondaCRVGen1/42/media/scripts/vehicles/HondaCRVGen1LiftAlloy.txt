@@ -348,6 +348,11 @@ module Base
 			}
 		}
 
+		part TruckBed
+		{
+			itemType = Base.BigTrunk,
+		}
+
 		part WindshieldRear
 		{
 			model WindshieldRear
@@ -2013,6 +2018,10 @@ module Base
 			{
 				file = HondaCRVGen1Acc_function_seats_fold,
 			}
+			model InteriorBedding
+			{
+				file = HondaCRVGen1Acc_function_bedding,
+			}
 			category = nodisplay,
 			setAllModelsVisible = false,
 			lua
@@ -2309,86 +2318,6 @@ module Base
 			{
 				create = HondaCRVGen1.Offroad.Create,
 				init = HondaCRVGen1.Offroad.Init,
-			}
-		}
-
-		part DoorFrontLeft
-		{
-			anim Open
-			{
-				sound = CRVGen1DoorOpen,
-			}
-			anim Close
-			{
-				sound = CRVGen1DoorClose,
-			}
-			anim Lock
-			{
-				sound = CRVGen1DoorLock,
-			}
-			anim Unlock
-			{
-				sound = CRVGen1DoorUnlock,
-			}
-		}
-
-		part DoorFrontRight
-		{
-			anim Open
-			{
-				sound = CRVGen1DoorOpen,
-			}
-			anim Close
-			{
-				sound = CRVGen1DoorClose,
-			}
-			anim Lock
-			{
-				sound = CRVGen1DoorLock,
-			}
-			anim Unlock
-			{
-				sound = CRVGen1DoorUnlock,
-			}
-		}
-
-		part DoorRearLeft
-		{
-			anim Open
-			{
-				sound = CRVGen1DoorOpen,
-			}
-			anim Close
-			{
-				sound = CRVGen1DoorClose,
-			}
-			anim Lock
-			{
-				sound = CRVGen1DoorLock,
-			}
-			anim Unlock
-			{
-				sound = CRVGen1DoorUnlock,
-			}
-		}
-
-		part DoorRearRight
-		{
-			anim Open
-			{
-				sound = CRVGen1DoorOpen,
-			}
-			anim Close
-			{
-				sound = CRVGen1DoorClose,
-			}
-			anim Lock
-			{
-				sound = CRVGen1DoorLock,
-			}
-			anim Unlock
-			{
-				sound = CRVGen1DoorUnlock,
 			}
 		}
 

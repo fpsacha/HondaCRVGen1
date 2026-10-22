@@ -12,8 +12,12 @@ Sound (research Q6, 42.21 bytecode):
     engine speed, stopped when the engine stops;
   * horn: a 90s Honda dual tone (two notes about a major third apart, ~415 / 520 Hz), looped while the
     horn is held (HornSound plays the script's horn with playSoundLoopedImpl);
-  * doors: open / close / lock / unlock clips merged into the door parts' anim blocks (VehicleScript
-    .LoadPart and LoadAnim merge a re-declared part / anim by id, so only `sound` changes).
+  * doors, tailgate, hood: the vanilla sounds (2026-10-22, player feedback "please remove or add option to
+    toggle the obnoxious car interaction sounds"): the parts take them from the same vanilla templates as
+    the vanilla SUV (Door/part/Door*, TrunkDoor, EngineDoor: VehicleDoorOpenStandard ...). The synthesised
+    door clips once merged into the door parts' anim blocks (CRVGen1DoorOpen / Close / Lock / Unlock) are
+    gone with their .ogg files and sound scripts; test_gamedata checks no door, gate or hood part names a
+    CRVGen1 sound.
 
 Damage (_polish_damage.py): the vehicle shader samples rust, dents, scratches and blood through the
 SECOND UV layer, an even xatlas layout of our shell; vanilla's sheets are painted for vanilla's layout.
@@ -68,23 +72,6 @@ def VEHICLE_KEYS(gen, vehicle):
             "ignitionFail": "VehicleIgnitionFailSmallCar",
         },
     }
-
-
-DOOR_SOUNDS = {"Open": "CRVGen1DoorOpen", "Close": "CRVGen1DoorClose",
-               "Lock": "CRVGen1DoorLock", "Unlock": "CRVGen1DoorUnlock"}
-
-
-def VEHICLE_PARTS(gen, vehicle):
-    """The four doors' sounds, merged into the parts the core declares (only `sound` is given, so the
-    clips, rates and templates' keys stay as they are)."""
-    out = []
-    for door in ("DoorFrontLeft", "DoorFrontRight", "DoorRearLeft", "DoorRearRight"):
-        lines = ["\t\tpart %s" % door, "\t\t{"]
-        for anim, snd in DOOR_SOUNDS.items():
-            lines += ["\t\t\tanim %s" % anim, "\t\t\t{", "\t\t\t\tsound = %s," % snd, "\t\t\t}"]
-        lines.append("\t\t}")
-        out.append("\n".join(lines))
-    return out
 
 
 # ---------------------------------------------------------------------------------------------
@@ -164,8 +151,7 @@ def _shell_objects():
 LUA = ["client/HondaCRVGen1_Polish.lua", SKIN_HSV_LUA, "server/HondaCRVGen1_PolishServer.lua",
        "client/HondaCRVGen1_PolishViewpoint.lua"]
 
-SOUND_FILES = ["CRVGen1_EngineLow.ogg", "CRVGen1_EngineHigh.ogg", "CRVGen1_Horn.ogg",
-               "CRVGen1_DoorOpen.ogg", "CRVGen1_DoorClose.ogg", "CRVGen1_DoorLock.ogg", "CRVGen1_DoorUnlock.ogg"]
+SOUND_FILES = ["CRVGen1_EngineLow.ogg", "CRVGen1_EngineHigh.ogg", "CRVGen1_Horn.ogg"]   # the doors: vanilla's (2026-10-22)
 MEDIA = (["42/media/scripts/sounds/HondaCRVGen1_PolishSounds.txt"]
          + ["42/media/sound/" + f for f in SOUND_FILES]
          + ["common/media/viewpoint/HondaCRVGen1.properties",

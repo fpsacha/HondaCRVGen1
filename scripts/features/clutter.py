@@ -2,8 +2,8 @@ r"""
 Cargo clutter (feature round 2026-10-19): what the player loads into the trunk shows in the cargo bay, through
 the rear and quarter glass and with the gate open, and grows with how full the trunk is. Our own code.
 
-The trunk is the vanilla SUV template's part TruckBed (template Trunk/part/TruckBed: item Base.NormalTrunk,
-capacity from the vehicle's trunk item). Its fill (container weight over capacity) picks a state, like the roof
+The trunk is the vanilla SUV template's part TruckBed (template Trunk/part/TruckBed; gen_scripts re-declares its
+item family Base.BigTrunk since 2026-10-22, capacity from the vehicle's trunk item). Its fill (container weight over capacity) picks a state, like the roof
 rack's cargo (HondaCRVGen1Accessories.lua, Acc.updateRack): 0 empty, 1 from FILL[0], 2 from FILL[1], 3 from
 FILL[2]. The states are INCREMENTAL: model InteriorClutter<k> holds only what state k adds, and state n shows
 models 1..n, so every piece sits in the same place in every state it appears in and the file carries each piece

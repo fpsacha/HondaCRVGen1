@@ -547,6 +547,7 @@ AREAS = [
 # Vanilla part templates, listed exactly as vehicle_car_modern_martin.txt does. These carry the
 # door {} block, itemType, install/uninstall tables and the open/close sounds; without them a
 # `part DoorFrontLeft` is just a name with a model hanging off it.
+TRUNK_ITEM = "Base.BigTrunk"          # the trunk's item family (vehicle_script: part TruckBed): BigTrunk1 = 70
 PART_TEMPLATES = [
     "Door/part/DoorFrontLeft", "Door/part/DoorFrontRight",
     "Door/part/DoorRearLeft", "Door/part/DoorRearRight",
@@ -799,6 +800,16 @@ def vehicle_section(name=VEHICLE, mechanic_type=1, off_road="1.05", engine_repai
         "\t\t\t\trequireUninstalled = WindshieldRear,",
         "\t\t\t\ttest = %s.GateUninstallTest," % ACC_LUA,
         "\t\t\t}",
+        "\t\t}",
+        "",
+        # the trunk (template SUV -> Trunk/part/TruckBed, item family Base.NormalTrunk: 55 at our mechanicType 1)
+        # takes the big-trunk family (2026-10-22, feedback "increase the trunk space, it has a lot of room"):
+        # BigTrunk1 = 70, re-declared the way vanilla's vans do it (vehicle_van_*: part TruckBed { itemType =
+        # Base.BigTrunk }; VehicleScript.LoadPart merges the key). A car already in a save keeps the trunk item it
+        # has until that is replaced
+        "\t\tpart TruckBed",
+        "\t\t{",
+        "\t\t\titemType = %s," % TRUNK_ITEM,
         "\t\t}",
         "",
         "\t\tpart WindshieldRear",
@@ -1115,14 +1126,20 @@ def translations(translate_dir=None):
     items ={"Base.%s" % item: name for item, _w, _e, name in ACC_ITEMS}
     items["Base." + TABLE_ITEM] = "CRV Picnic Table"
     ui.update({"IGUI_CRV_SeatsFolded": "Rear seats folded flat into a bed",
+               "IGUI_CRV_SeatsFoldedFlat": "Rear seats folded flat: more room for cargo",
+               "IGUI_CRV_BedMade": "Bed made up on the folded seats",
+               "IGUI_CRV_BedCleared": "Bed cleared: the load floor is free",
                "IGUI_CRV_SeatsUp": "Rear seats put back",
                "IGUI_CRV_NoRearSeats": "Both rear seats must be fitted",
                "IGUI_CRV_SeatsNotEmpty": "Empty the rear seats first",
                "IGUI_CRV_SeatsOccupied": "Someone is sitting in the back"})
     menu = {"ContextMenu_CRV_TakeTable": "Take out the picnic table",
             "ContextMenu_CRV_PutTable": "Put the picnic table back",
+            "ContextMenu_CRV_FoldFlat": "Fold the rear seats flat (load floor)",
             "ContextMenu_CRV_FoldBed": "Fold the rear seats into a bed",
-            "ContextMenu_CRV_UnfoldBed": "Put the rear seats back"}
+            "ContextMenu_CRV_MakeBed": "Make up the bed",
+            "ContextMenu_CRV_ClearBed": "Clear the bed for cargo",
+            "ContextMenu_CRV_UnfoldBed": "Put the rear seats back up"}
     tips = {"Tooltip_CRV_GateClosed": "Open the tailgate first"}
     tables = {"IG_UI": ui, "ItemName": items, "ContextMenu": menu, "Tooltip": tips}
     extra = features.translations()
