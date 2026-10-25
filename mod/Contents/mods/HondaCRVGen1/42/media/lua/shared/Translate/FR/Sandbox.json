@@ -1,0 +1,13 @@
+{
+    "Sandbox_HondaCRVGen1": "Honda CRV (RD1)",
+    "Sandbox_HondaCRVGen1_ArmourStrength": "Résistance du blindage du CRV",
+    "Sandbox_HondaCRVGen1_ArmourStrength_tooltip": "Durée de vie du blindage de survie du CRV. 1 = une plaque ou un grillage encaisse autant de dégâts que la porte ou la fenêtre qu'il couvre, qui dure donc environ deux fois plus longtemps ; 2 = le blindage dure deux fois plus ; 0,5 = moitié moins.",
+    "Sandbox_HondaCRVGen1_FunctionSpawnRate": "Taux d'apparition du CRV (pourcentage)",
+    "Sandbox_HondaCRVGen1_FunctionSpawnRate_tooltip": "Fréquence à laquelle le CRV apparaît dans les allées, les quartiers résidentiels, les fermes, les parkings et les embouteillages. 100 est le taux normal du mod, 0 aucun.",
+    "Sandbox_HondaCRVGen1_FunctionAccessoryChance": "Chance d'accessoires du CRV (pourcentage)",
+    "Sandbox_HondaCRVGen1_FunctionAccessoryChance_tooltip": "Ajuste la probabilité qu'un CRV apparaisse avec des accessoires (pare-buffle, galerie de toit, grilles de fenêtres, housse de roue de secours, et snorkel, sabot de protection, pare-chocs arrière, échelle et jerrycans tout-terrain). 100 est la normale, 0 des voitures nues. La table de pique-nique est de série.",
+    "Sandbox_HondaCRVGen1_FunctionLootRarity": "Multiplicateur de butin du CRV",
+    "Sandbox_HondaCRVGen1_FunctionLootRarity_tooltip": "Multiplie la fréquence à laquelle les kits, le blindage, les magazines et les manuels du propriétaire du CRV sont trouvés en butin. 1 est la normale, 0 jamais, 4 quatre fois plus souvent.",
+    "Sandbox_HondaCRVGen1_PolishEngineVolume": "Volume de la couche moteur du CRV (pourcentage)",
+    "Sandbox_HondaCRVGen1_PolishEngineVolume_tooltip": "Volume de la couche sonore B20B synthétisée du CRV, par-dessus le moteur de petite voiture du jeu. 0 la désactive."
+}

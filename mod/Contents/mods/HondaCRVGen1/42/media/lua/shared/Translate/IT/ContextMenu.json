@@ -1,0 +1,21 @@
+{
+    "ContextMenu_CRV_TakeTable": "Tira fuori il tavolo da picnic",
+    "ContextMenu_CRV_PutTable": "Rimetti a posto il tavolo da picnic",
+    "ContextMenu_CRV_FoldFlat": "Abbatti i sedili posteriori (piano di carico)",
+    "ContextMenu_CRV_FoldBed": "Abbatti i sedili posteriori a letto",
+    "ContextMenu_CRV_MakeBed": "Prepara il letto",
+    "ContextMenu_CRV_ClearBed": "Sgombra il letto per il carico",
+    "ContextMenu_CRV_UnfoldBed": "Rialza i sedili posteriori",
+    "ContextMenu_CRV_SleepInBed": "Dormi nel letto",
+    "ContextMenu_CRV_SleepOnBed": "Dormi sui sedili abbattuti (buon letto)",
+    "ContextMenu_CRV_Awning_Deploy": "Srotola il tendalino",
+    "ContextMenu_CRV_Awning_Stow": "Arrotola il tendalino",
+    "ContextMenu_CRV_Function_LiftFloor": "Solleva il pianale del bagagliaio",
+    "ContextMenu_CRV_Function_BrowseManual": "Sfoglia il manuale d'uso",
+    "ContextMenu_CRV_Lift_Menu": "Kit di rialzo",
+    "ContextMenu_CRV_Lift_Alloy": "Monta il kit di rialzo da 3 poll. (cerchi in lega EX)",
+    "ContextMenu_CRV_Lift_Steel": "Monta il kit di rialzo da 3 poll. (cerchi in acciaio neri)",
+    "ContextMenu_CRV_Lift_Remove": "Smonta il kit di rialzo",
+    "ContextMenu_CRV_Lift_ToSteel": "Passa ai cerchi in acciaio neri",
+    "ContextMenu_CRV_Lift_ToAlloy": "Passa ai cerchi in lega EX"
+}

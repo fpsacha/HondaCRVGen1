@@ -1,0 +1,8 @@
+{
+    "Print_Media_CRVGen1_Manual_title": "Manual del propietario Honda CRV: bienvenida y conducción (1 de 3)",
+    "Print_Media_CRVGen1_Manual_info": "<type:parent, width:1616, height:1131><type:texture, texture:media/textures/printMedia/CRVGen1_Manual.png, x:0, y:0, width:1616, height:1131>",
+    "Print_Media_CRVGen1_Manual2_title": "Manual del propietario Honda CRV: espacio de carga (2 de 3)",
+    "Print_Media_CRVGen1_Manual2_info": "<type:parent, width:1616, height:1131><type:texture, texture:media/textures/printMedia/CRVGen1_Manual_2.png, x:0, y:0, width:1616, height:1131>",
+    "Print_Media_CRVGen1_Manual3_title": "Manual del propietario Honda CRV: accesorios y modificaciones (3 de 3)",
+    "Print_Media_CRVGen1_Manual3_info": "<type:parent, width:1616, height:1131><type:texture, texture:media/textures/printMedia/CRVGen1_Manual_3.png, x:0, y:0, width:1616, height:1131>"
+}

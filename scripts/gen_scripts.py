@@ -1368,6 +1368,65 @@ def translations(translate_dir=None):
         if fn.endswith(".json") and fn[:-5] not in tables:
             os.remove(os.path.join(translate_dir, fn))
             print("REMOVED %s (no feature writes it any more)" % os.path.join(translate_dir, fn))
+    if os.path.basename(os.path.normpath(translate_dir)) == "EN":
+        paths += language_translations(os.path.dirname(os.path.normpath(translate_dir)), tables)
+    return paths
+
+
+def language_translations(translate_root, en_tables, sources=None):
+    """The other languages beside EN (scripts/lang_sources.py): Translate/<CODE>/<File>.json for every
+    scripts/translations/<CODE>.json, holding exactly its keys (a key it lacks shows the English: the game loads EN
+    first). A non-game language code, or a translation whose markup (%1, tags, ** markers) differs from the English,
+    stops the build; a key or file this build's English does not have is left out (a build with some features off
+    has fewer keys) and a missing key shows the English; both are only reported here, scripts/test_translations.py
+    insists on the full set. The Translate/<CODE> folders are generated: one whose source is gone is removed. No
+    language.json is written (a mod's one would replace the game's own entry for that language)."""
+    import lang_sources as LS
+    sources = LS.codes() if sources is None else sources
+    paths = []
+    for code in sources:
+        try:
+            src = LS.load(code)
+        except LS.SourceError as exc:
+            raise SystemExit("gen_scripts: translations/%s.json: %s" % (code, exc))
+        probs = LS.problems(code, src, en_tables)
+        fatal = [m for kind, m in probs if kind not in ("missing", "unknown")]
+        if fatal:
+            raise SystemExit("gen_scripts: translations/%s.json does not match the English:\n  %s"
+                             % (code, "\n  ".join(fatal)))
+        for kind, what in (("missing", "EN keys untranslated (the English shows)"),
+                           ("unknown", "keys this build's English lacks (left out)")):
+            ms = [m for k, m in probs if k == kind]
+            if ms:
+                print("WARNING %s: %d %s, e.g. %s" % (code, len(ms), what, ms[0]))
+        out_dir = os.path.join(translate_root, code)
+        os.makedirs(out_dir, exist_ok=True)
+        written = set()
+        for fname in en_tables:                                  # the EN files' order, the EN keys' order
+            table = src.get(fname) or {}
+            keyed = {k: table[k] for k in en_tables[fname] if k in table}
+            if not keyed:
+                continue
+            path = os.path.join(out_dir, fname + ".json")
+            with open(path, "w", encoding="utf-8", newline="\n") as f:
+                json.dump(keyed, f, indent=4, ensure_ascii=False)
+                f.write("\n")
+            written.add(fname + ".json")
+            paths.append(path)
+        for fn in sorted(os.listdir(out_dir)):
+            if fn not in written and fn.endswith(".json"):
+                os.remove(os.path.join(out_dir, fn))
+                print("REMOVED %s (not in translations/%s.json)" % (os.path.join(out_dir, fn), code))
+    for code in sorted(os.listdir(translate_root)):
+        d = os.path.join(translate_root, code)
+        if code == "EN" or code in sources or not os.path.isdir(d):
+            continue
+        for fn in os.listdir(d):
+            if fn.endswith(".json"):
+                os.remove(os.path.join(d, fn))
+        if not os.listdir(d):
+            os.rmdir(d)
+        print("REMOVED %s (no scripts/translations/%s.json)" % (d, code))
     return paths
 
 

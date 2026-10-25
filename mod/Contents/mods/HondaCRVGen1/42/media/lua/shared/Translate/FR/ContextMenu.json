@@ -1,0 +1,21 @@
+{
+    "ContextMenu_CRV_TakeTable": "Sortir la table de pique-nique",
+    "ContextMenu_CRV_PutTable": "Ranger la table de pique-nique",
+    "ContextMenu_CRV_FoldFlat": "Rabattre les sièges arrière à plat (plancher de chargement)",
+    "ContextMenu_CRV_FoldBed": "Rabattre les sièges arrière en lit",
+    "ContextMenu_CRV_MakeBed": "Faire le lit",
+    "ContextMenu_CRV_ClearBed": "Défaire le lit pour charger",
+    "ContextMenu_CRV_UnfoldBed": "Relever les sièges arrière",
+    "ContextMenu_CRV_SleepInBed": "Dormir dans le lit",
+    "ContextMenu_CRV_SleepOnBed": "Dormir sur les sièges rabattus (bon lit)",
+    "ContextMenu_CRV_Awning_Deploy": "Dérouler l'auvent",
+    "ContextMenu_CRV_Awning_Stow": "Enrouler l'auvent",
+    "ContextMenu_CRV_Function_LiftFloor": "Soulever le plancher du coffre",
+    "ContextMenu_CRV_Function_BrowseManual": "Feuilleter le manuel du propriétaire",
+    "ContextMenu_CRV_Lift_Menu": "Kit de rehausse",
+    "ContextMenu_CRV_Lift_Alloy": "Monter le kit de rehausse 3 po (jantes alu EX)",
+    "ContextMenu_CRV_Lift_Steel": "Monter le kit de rehausse 3 po (jantes acier noires)",
+    "ContextMenu_CRV_Lift_Remove": "Démonter le kit de rehausse",
+    "ContextMenu_CRV_Lift_ToSteel": "Passer aux jantes acier noires",
+    "ContextMenu_CRV_Lift_ToAlloy": "Passer aux jantes alu EX"
+}

@@ -1,0 +1,13 @@
+{
+    "Sandbox_HondaCRVGen1": "Honda CRV (RD1)",
+    "Sandbox_HondaCRVGen1_ArmourStrength": "Resistencia del blindaje del CRV",
+    "Sandbox_HondaCRVGen1_ArmourStrength_tooltip": "Cuánto dura el blindaje de supervivencia del CRV. 1 = una placa o malla aguanta tanto daño como la puerta o ventana que cubre, así que esa pieza dura el doble; 2 = el blindaje dura el doble; 0.5 = la mitad.",
+    "Sandbox_HondaCRVGen1_FunctionSpawnRate": "Aparición del CRV (porcentaje)",
+    "Sandbox_HondaCRVGen1_FunctionSpawnRate_tooltip": "Con qué frecuencia aparece el CRV en entradas de casas, urbanizaciones, granjas, aparcamientos y atascos. 100 es la frecuencia normal del mod, 0 ninguno.",
+    "Sandbox_HondaCRVGen1_FunctionAccessoryChance": "Probabilidad de accesorios del CRV (porcentaje)",
+    "Sandbox_HondaCRVGen1_FunctionAccessoryChance_tooltip": "Ajusta la probabilidad de que un CRV aparezca con accesorios (defensa tubular, baca, protectores de ventana, funda de la rueda de repuesto, y el snorkel, cubrecárter, parachoques trasero, escalera y bidones todoterreno). 100 es lo normal, 0 coches sin nada. La mesa de picnic es de serie.",
+    "Sandbox_HondaCRVGen1_FunctionLootRarity": "Multiplicador de botín del CRV",
+    "Sandbox_HondaCRVGen1_FunctionLootRarity_tooltip": "Multiplica la frecuencia con la que aparecen como botín los kits, el blindaje, las revistas y los manuales del propietario del CRV. 1 es lo normal, 0 nunca, 4 cuatro veces más.",
+    "Sandbox_HondaCRVGen1_PolishEngineVolume": "Volumen de la capa de motor del CRV (porcentaje)",
+    "Sandbox_HondaCRVGen1_PolishEngineVolume_tooltip": "Volumen de la capa de sonido B20B sintetizada del CRV sobre el motor de coche pequeño del juego. 0 la desactiva."
+}

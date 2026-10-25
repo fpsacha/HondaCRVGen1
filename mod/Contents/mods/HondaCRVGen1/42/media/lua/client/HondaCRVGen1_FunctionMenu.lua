@@ -15,8 +15,9 @@ Honda CR-V (RD1), function feature, client UI:
     scripts/manual_art.py) gives each string its box: where it starts, its font, size, colour, angle, its width and
     the room the English took. M.manualWords lays out getText(M.MANUAL_KEY_PREFIX .. id) in that box with the game's
     font metrics (TextManager.MeasureStringX): **runs** bold, wrapped to the box's width, shrunk to fit its room
-    (to M.MIN_FIT, then it may run long). A string the SDF fonts have no glyphs for (CJK) uses the language's own
-    UI font (M.FALLBACK_FONT).
+    (to M.MIN_FIT, then it may run long). A string the SDF fonts have no glyphs for (CJK, Thai...) uses the
+    language's own UI font (M.FALLBACK_FONT). Lines break at spaces, and between any two CJK characters (Chinese and
+    Japanese have no spaces), never before a closing mark (，。、）」 ...) nor after an opening one.
 ]]
 
 require "Vehicles/ISUI/ISVehicleMenu"
@@ -114,10 +115,24 @@ M.MIN_FIT_LINE = 0.6            -- a one-line string to 60%
 M.FIT_STEP = 0.05
 M.FALLBACK_FONT = "Medium"      -- the language's own UI font (TextManager loads the CJK ones for CN / CH / JP / KO)
 M.FALLBACK_ABOVE = 12287        -- U+2FFF: a character code past it (CJK, kana, hangul) has no SDF glyph
+M.FALLBACK_RANGE = { 0x0590, 0x1DFF }   -- nor Hebrew, Arabic, the Indic scripts, Thai .. Hangul Jamo (sdf*.fnt, 42.21)
 M.overlayCache = {}
 
 local BOLD = { SdfRegular = "SdfBold", SdfBold = "SdfBold", SdfItalic = "SdfBoldItalic", SdfBoldItalic = "SdfBoldItalic" }
 local GLUE = ",.;:!?)'"
+-- CJK line breaking: a line may break between any two CJK characters, but not before a closing mark nor after an
+-- opening one (the basic kinsoku rules); UTF-16 codes
+local CJK_CLOSE = { [0x3001] = true, [0x3002] = true, [0xFF0C] = true, [0xFF0E] = true, [0xFF1A] = true,
+                    [0xFF1B] = true, [0xFF01] = true, [0xFF1F] = true, [0xFF09] = true, [0x300D] = true,
+                    [0x300F] = true, [0x300B] = true, [0x3009] = true, [0x3011] = true, [0x30FC] = true,
+                    [0x3005] = true, [0x309D] = true, [0x309E] = true, [0x30FD] = true, [0x30FE] = true,
+                    [0x3041] = true, [0x3043] = true, [0x3045] = true, [0x3047] = true, [0x3049] = true,
+                    [0x3063] = true, [0x3083] = true, [0x3085] = true, [0x3087] = true, [0x30A1] = true,
+                    [0x30A3] = true, [0x30A5] = true, [0x30A7] = true, [0x30A9] = true, [0x30C3] = true,
+                    [0x30E3] = true, [0x30E5] = true, [0x30E7] = true, [0x30FB] = true, [0xFF5E] = true }
+local SPACES_NOT, SPACE_FIRST, SPACE_LAST = "[^ \t\r\n]+", "^[ \t\r\n]", "[ \t\r\n]$"
+local CJK_OPEN = { [0xFF08] = true, [0x300C] = true, [0x300E] = true, [0x300A] = true, [0x3008] = true,
+                   [0x3010] = true }
 
 -- the game's font metrics: fn(font name, s) -> the pen's advance over s in the font's own pixels. MeasureStringX is
 -- AngelCodeFont.getWidth, which counts the last character's glyph width, not its advance: a trailing space (width 0)
@@ -142,12 +157,69 @@ function M.measurer()
     end
 end
 
--- true when s has a character no SDF font draws (Kahlua's strings are Java's: byte() is the UTF-16 code)
+-- the characters of s: { { s = the character, c = its code } }. Kahlua's strings are Java's (one index per UTF-16
+-- unit, byte() is its code); under a byte-string Lua (the tests' lupa) a UTF-8 sequence is decoded into one
+-- character. A Latin-1 letter followed by a C1 / Latin-1 symbol unit (U+0080..U+00BF) could read as UTF-8 in
+-- Kahlua; no translation pairs those
+function M.chars(s)
+    local out, i, n = {}, 1, #s
+    while i <= n do
+        local b = string.byte(s, i)
+        local len, code = 1, b
+        if b >= 0xC2 and b <= 0xF4 then
+            local need = (b >= 0xF0 and 3) or (b >= 0xE0 and 2) or 1
+            local c = b % ((need == 1 and 32) or (need == 2 and 16) or 8)
+            local ok = i + need <= n
+            local j = 1
+            while ok and j <= need do
+                local cb = string.byte(s, i + j)
+                if cb >= 0x80 and cb <= 0xBF then c = c * 64 + cb % 64 else ok = false end
+                j = j + 1
+            end
+            if ok then len, code = need + 1, c end
+        end
+        out[#out + 1] = { s = string.sub(s, i, i + len - 1), c = code }
+        i = i + len
+    end
+    return out
+end
+
+-- a character CJK text breaks around: ideographs, kana, CJK punctuation, full-width forms (Hangul breaks at spaces,
+-- as Korean is written with them)
+function M.isCJK(c)
+    return (c >= 0x2E80 and c <= 0x30FF) or (c >= 0x3400 and c <= 0x9FFF) or (c >= 0xF900 and c <= 0xFAFF)
+        or (c >= 0xFE30 and c <= 0xFE4F) or (c >= 0xFF00 and c <= 0xFFEF)
+end
+
+-- true when s has a character no SDF font draws
 function M.needsFallback(s)
-    for i = 1, #s do
-        if string.byte(s, i) > M.FALLBACK_ABOVE then return true end
+    for _, ch in ipairs(M.chars(s)) do
+        local c = ch.c
+        if c > M.FALLBACK_ABOVE or (c >= M.FALLBACK_RANGE[1] and c <= M.FALLBACK_RANGE[2]) then return true end
     end
     return false
+end
+
+-- a whitespace-free word cut where CJK text may break: { { w, cjk = first char is CJK, close, open, last } }
+local function cjkTokens(word)
+    local toks, cur = {}, nil
+    for _, ch in ipairs(M.chars(word)) do
+        local c = ch.c
+        if M.isCJK(c) then
+            if cur then toks[#toks + 1] = cur; cur = nil end
+            toks[#toks + 1] = { w = ch.s, first = c, last = c }
+        else
+            if not cur then cur = { w = "", first = c } end
+            cur.w = cur.w .. ch.s
+            cur.last = c
+        end
+    end
+    if cur then toks[#toks + 1] = cur end
+    return toks
+end
+
+local function isClose(c)
+    return CJK_CLOSE[c] == true or (c < 128 and string.find(GLUE, string.char(c), 1, true) ~= nil)
 end
 
 -- the font's metrics in the layout: em (its size in its pixels) and base (top of a line to its baseline)
@@ -164,7 +236,8 @@ local function metrics(name)
     return m
 end
 
--- words of a string: { w = text, f = font, glue = true when it sticks to the one before (punctuation after a **run**) }
+-- words of a string: { w = text, f = font, glue = true when it sticks to the one before (punctuation after a **run**;
+-- no break, no space), tight = true when it follows the one before without a space but a line may break there (CJK) }
 function M.manualRuns(text, font)
     local chunks, pos = {}, 1
     while true do
@@ -176,16 +249,41 @@ function M.manualRuns(text, font)
         chunks[#chunks + 1] = string.sub(text, pos, a - 1)
         pos = b + 1
     end
-    local words = {}
+    local words, prevLast, prevSpaced = {}, nil, true
     for i, chunk in ipairs(chunks) do
         local f = (i % 2 == 0) and (BOLD[font] or font) or font
         local first = true
-        for w in string.gmatch(chunk, "%S+") do
-            local glue = first and #words > 0 and string.find(chunk, "^%s") == nil
-                and string.find(GLUE, string.sub(w, 1, 1), 1, true) ~= nil
-            words[#words + 1] = { w = w, f = f, glue = glue and true or false }
+        -- spaces are ASCII ones: "%s" is the C library's isspace, which under some locales takes the byte 0xA0 (inside
+        -- many UTF-8 characters: 你 is E4 BD A0) for a space
+        for w in string.gmatch(chunk, SPACES_NOT) do
+            -- does this word touch the one before (across a ** marker, no space between)?
+            local touches = first and #words > 0 and string.find(chunk, SPACE_FIRST) == nil and not prevSpaced
+            local glue = touches and string.find(GLUE, string.sub(w, 1, 1), 1, true) ~= nil
+            local toks = cjkTokens(w)
+            if #toks == 1 and not M.isCJK(toks[1].first) and not (touches and prevLast and M.isCJK(prevLast)) then
+                words[#words + 1] = { w = w, f = f, glue = glue and true or false, tight = false }
+                prevLast = toks[1].last
+            else
+                for j, t in ipairs(toks) do
+                    local adjacent = j > 1 or touches
+                    local g, tight = false, false
+                    if adjacent then
+                        local before = (j > 1) and toks[j - 1].last or prevLast
+                        if isClose(t.first) or (before and CJK_OPEN[before]) then
+                            g = true
+                        elseif M.isCJK(t.first) or (before and M.isCJK(before)) then
+                            tight = true
+                        else
+                            g = true
+                        end
+                    end
+                    words[#words + 1] = { w = t.w, f = f, glue = g, tight = tight }
+                    prevLast = t.last
+                end
+            end
             first = false
         end
+        prevSpaced = string.find(chunk, SPACE_LAST) ~= nil or (chunk == "" and prevSpaced)
     end
     return words
 end
@@ -195,13 +293,35 @@ local function breakLines(words, width, k, measure, space)
     local lines, cur, curw = {}, {}, 0
     for _, wd in ipairs(words) do
         local ww = measure(wd.f, wd.w) * k
-        local gap = wd.glue and 0 or space
-        if width and #cur > 0 and curw + gap + ww > width and not wd.glue then
-            lines[#lines + 1] = { words = cur, w = curw }
-            cur, curw = {}, 0
+        local gap = (wd.glue or wd.tight) and 0 or space
+        if width and #cur > 0 and curw + gap + ww > width then
+            if not wd.glue then
+                lines[#lines + 1] = { words = cur, w = curw }
+                cur, curw = {}, 0
+            elseif wd.tight == false and M.isCJK((M.chars(wd.w)[1] or { c = 0 }).c) then
+                -- a CJK closing mark that does not fit: it takes the character before it to the next line (a
+                -- line never opens with it); that character's own break opportunity is a tight or spaced one
+                local j = #cur
+                while j > 1 and cur[j].glue do j = j - 1 end
+                if j > 1 then
+                    local moved = {}
+                    for m = j, #cur do moved[#moved + 1] = cur[m] end
+                    for m = #cur, j, -1 do cur[m] = nil end
+                    local last = cur[#cur]
+                    lines[#lines + 1] = { words = cur, w = last.x + measure(last.f, last.w) * k }
+                    cur, curw = {}, 0
+                    for m, mw in ipairs(moved) do
+                        local g = (m == 1 or mw.glue or mw.tight) and 0 or space
+                        mw.x = curw + g
+                        cur[#cur + 1] = mw
+                        curw = curw + g + measure(mw.f, mw.w) * k
+                    end
+                    gap = 0
+                end
+            end
         end
         if #cur == 0 then gap = 0 end
-        cur[#cur + 1] = { w = wd.w, f = wd.f, glue = wd.glue, x = curw + gap }
+        cur[#cur + 1] = { w = wd.w, f = wd.f, glue = wd.glue, tight = wd.tight, x = curw + gap }
         curw = curw + gap + ww
     end
     if #cur > 0 then lines[#lines + 1] = { words = cur, w = curw } end
@@ -273,7 +393,7 @@ function M.emit(p, f, lines, ends, dy)
             local first = line.words[j]
             local parts, n = { first.w }, j + 1
             while n <= #line.words and line.words[n].f == first.f do
-                parts[#parts + 1] = (line.words[n].glue and "" or " ") .. line.words[n].w
+                parts[#parts + 1] = ((line.words[n].glue or line.words[n].tight) and "" or " ") .. line.words[n].w
                 n = n + 1
             end
             local wm = metrics(first.f)

@@ -1,0 +1,5 @@
+{
+    "UI_CRV_Options_Name": "Honda CRV",
+    "UI_CRV_Options_EngineVolume": "CRV 引擎声音量 (%)",
+    "UI_CRV_Options_EngineVolume_Info": "CRV 专属的引擎声, 仅对你生效: 0 为关闭, 100 为录音原始音量. 服务器沙盒设置中的音量仍然有效."
+}

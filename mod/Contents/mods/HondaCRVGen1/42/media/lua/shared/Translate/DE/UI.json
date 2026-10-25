@@ -1,0 +1,5 @@
+{
+    "UI_CRV_Options_Name": "Honda CRV",
+    "UI_CRV_Options_EngineVolume": "CRV-Motorgeräusch Lautstärke (%)",
+    "UI_CRV_Options_EngineVolume_Info": "Das eigene Motorgeräusch des CRV, nur für dich: 0 schaltet es ab, 100 ist der aufgenommene Pegel. Die Sandbox-Lautstärke des Servers gilt weiterhin."
+}

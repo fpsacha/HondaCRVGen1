@@ -1,0 +1,21 @@
+{
+    "ContextMenu_CRV_TakeTable": "ピクニックテーブルを取り出す",
+    "ContextMenu_CRV_PutTable": "ピクニックテーブルを戻す",
+    "ContextMenu_CRV_FoldFlat": "後部座席を倒す (荷室を広げる)",
+    "ContextMenu_CRV_FoldBed": "後部座席を倒してベッドにする",
+    "ContextMenu_CRV_MakeBed": "ベッドを整える",
+    "ContextMenu_CRV_ClearBed": "ベッドを片付けて荷室に戻す",
+    "ContextMenu_CRV_UnfoldBed": "後部座席を起こす",
+    "ContextMenu_CRV_SleepInBed": "ベッドで眠る",
+    "ContextMenu_CRV_SleepOnBed": "倒した座席の上で眠る (良いベッド)",
+    "ContextMenu_CRV_Awning_Deploy": "オーニングを広げる",
+    "ContextMenu_CRV_Awning_Stow": "オーニングを巻き取る",
+    "ContextMenu_CRV_Function_LiftFloor": "荷室の床を持ち上げる",
+    "ContextMenu_CRV_Function_BrowseManual": "取扱説明書に目を通す",
+    "ContextMenu_CRV_Lift_Menu": "リフトアップキット",
+    "ContextMenu_CRV_Lift_Alloy": "3インチのリフトアップキットを取り付ける (EXアルミホイール)",
+    "ContextMenu_CRV_Lift_Steel": "3インチのリフトアップキットを取り付ける (黒のスチールホイール)",
+    "ContextMenu_CRV_Lift_Remove": "リフトアップキットを取り外す",
+    "ContextMenu_CRV_Lift_ToSteel": "黒のスチールホイールに交換する",
+    "ContextMenu_CRV_Lift_ToAlloy": "EXアルミホイールに交換する"
+}

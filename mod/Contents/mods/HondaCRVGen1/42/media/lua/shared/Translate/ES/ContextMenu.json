@@ -1,0 +1,21 @@
+{
+    "ContextMenu_CRV_TakeTable": "Sacar la mesa de picnic",
+    "ContextMenu_CRV_PutTable": "Guardar la mesa de picnic",
+    "ContextMenu_CRV_FoldFlat": "Abatir los asientos traseros (piso de carga)",
+    "ContextMenu_CRV_FoldBed": "Abatir los asientos traseros como cama",
+    "ContextMenu_CRV_MakeBed": "Hacer la cama",
+    "ContextMenu_CRV_ClearBed": "Despejar la cama para la carga",
+    "ContextMenu_CRV_UnfoldBed": "Levantar los asientos traseros",
+    "ContextMenu_CRV_SleepInBed": "Dormir en la cama",
+    "ContextMenu_CRV_SleepOnBed": "Dormir en los asientos abatidos (buena cama)",
+    "ContextMenu_CRV_Awning_Deploy": "Desplegar el toldo",
+    "ContextMenu_CRV_Awning_Stow": "Recoger el toldo",
+    "ContextMenu_CRV_Function_LiftFloor": "Levantar el piso del maletero",
+    "ContextMenu_CRV_Function_BrowseManual": "Hojear el manual del propietario",
+    "ContextMenu_CRV_Lift_Menu": "Kit de elevación",
+    "ContextMenu_CRV_Lift_Alloy": "Montar el kit de elevación de 3 pulg. (llantas de aleación EX)",
+    "ContextMenu_CRV_Lift_Steel": "Montar el kit de elevación de 3 pulg. (llantas de acero negras)",
+    "ContextMenu_CRV_Lift_Remove": "Desmontar el kit de elevación",
+    "ContextMenu_CRV_Lift_ToSteel": "Cambiar a llantas de acero negras",
+    "ContextMenu_CRV_Lift_ToAlloy": "Cambiar a las llantas de aleación EX"
+}

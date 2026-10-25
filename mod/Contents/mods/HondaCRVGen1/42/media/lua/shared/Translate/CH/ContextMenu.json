@@ -1,0 +1,21 @@
+{
+    "ContextMenu_CRV_TakeTable": "取出野餐桌",
+    "ContextMenu_CRV_PutTable": "收回野餐桌",
+    "ContextMenu_CRV_FoldFlat": "放平後座 (載貨地板)",
+    "ContextMenu_CRV_FoldBed": "將後座摺成床",
+    "ContextMenu_CRV_MakeBed": "鋪床",
+    "ContextMenu_CRV_ClearBed": "收起床鋪以便載貨",
+    "ContextMenu_CRV_UnfoldBed": "將後座立回原位",
+    "ContextMenu_CRV_SleepInBed": "在床上睡覺",
+    "ContextMenu_CRV_SleepOnBed": "在摺平的床上睡覺 (好床)",
+    "ContextMenu_CRV_Awning_Deploy": "展開遮陽篷",
+    "ContextMenu_CRV_Awning_Stow": "收起遮陽篷",
+    "ContextMenu_CRV_Function_LiftFloor": "掀起行李廂地板",
+    "ContextMenu_CRV_Function_BrowseManual": "翻閱車主手冊",
+    "ContextMenu_CRV_Lift_Menu": "升高套件",
+    "ContextMenu_CRV_Lift_Alloy": "安裝 3 吋升高套件 (EX 鋁圈)",
+    "ContextMenu_CRV_Lift_Steel": "安裝 3 吋升高套件 (黑色鐵圈)",
+    "ContextMenu_CRV_Lift_Remove": "拆除升高套件",
+    "ContextMenu_CRV_Lift_ToSteel": "換成黑色鐵圈",
+    "ContextMenu_CRV_Lift_ToAlloy": "換成 EX 鋁圈"
+}

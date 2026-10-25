@@ -1,0 +1,13 @@
+{
+    "Sandbox_HondaCRVGen1": "Honda CRV (RD1)",
+    "Sandbox_HondaCRVGen1_ArmourStrength": "CRV 장갑 내구도",
+    "Sandbox_HondaCRVGen1_ArmourStrength_tooltip": "CRV 생존 장갑이 얼마나 오래 버티는지입니다. 1 = 장갑판이나 철망이 그 아래의 문이나 창문만큼 피해를 받아, 해당 부위가 약 두 배 오래 버팁니다. 2 = 장갑이 두 배 오래 버팁니다. 0.5 = 절반입니다.",
+    "Sandbox_HondaCRVGen1_FunctionSpawnRate": "CRV 생성 빈도 (%)",
+    "Sandbox_HondaCRVGen1_FunctionSpawnRate_tooltip": "CRV가 진입로, 주택가, 농장, 주차장, 교통 정체 속에 나타나는 빈도입니다. 100은 모드의 기본값, 0은 전혀 나타나지 않습니다.",
+    "Sandbox_HondaCRVGen1_FunctionAccessoryChance": "CRV 액세서리 확률 (%)",
+    "Sandbox_HondaCRVGen1_FunctionAccessoryChance_tooltip": "생성된 CRV에 액세서리 (불바, 루프랙, 창문 보호대, 스페어 타이어 커버, 오프로드용 스노클, 스키드 플레이트, 후방 범퍼, 사다리, 제리캔) 가 달려 있을 확률을 조정합니다. 100은 기본, 0은 아무것도 없는 차입니다. 야외 탁자는 기본 장비입니다.",
+    "Sandbox_HondaCRVGen1_FunctionLootRarity": "CRV 전리품 배율",
+    "Sandbox_HondaCRVGen1_FunctionLootRarity_tooltip": "CRV의 키트, 장갑, 잡지, 사용 설명서가 전리품으로 발견되는 빈도에 곱하는 배율입니다. 1은 기본, 0은 나오지 않음, 4는 네 배입니다.",
+    "Sandbox_HondaCRVGen1_PolishEngineVolume": "CRV 엔진 레이어 음량 (%)",
+    "Sandbox_HondaCRVGen1_PolishEngineVolume_tooltip": "게임의 소형차 엔진음 위에 겹치는, CRV 전용으로 합성한 B20B 소리의 크기입니다. 0이면 꺼집니다."
+}

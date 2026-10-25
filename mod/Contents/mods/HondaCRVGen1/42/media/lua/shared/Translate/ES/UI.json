@@ -1,0 +1,5 @@
+{
+    "UI_CRV_Options_Name": "Honda CRV",
+    "UI_CRV_Options_EngineVolume": "Volumen del sonido de motor del CRV (%)",
+    "UI_CRV_Options_EngineVolume_Info": "El sonido de motor propio del CRV, solo para ti: 0 lo desactiva, 100 es el nivel grabado. El volumen del servidor (sandbox) sigue aplicándose."
+}

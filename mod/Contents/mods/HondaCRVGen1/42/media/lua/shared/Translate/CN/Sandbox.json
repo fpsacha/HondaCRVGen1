@@ -1,0 +1,13 @@
+{
+    "Sandbox_HondaCRVGen1": "Honda CRV (RD1)",
+    "Sandbox_HondaCRVGen1_ArmourStrength": "CRV 装甲强度",
+    "Sandbox_HondaCRVGen1_ArmourStrength_tooltip": "CRV 生存装甲的耐久程度. 1 = 钢板或钢网承受的伤害与其下方的车门或车窗相同, 因此该部件的耐久大约翻倍; 2 = 装甲耐久翻倍; 0.5 = 减半.",
+    "Sandbox_HondaCRVGen1_FunctionSpawnRate": "CRV 生成率 (百分比)",
+    "Sandbox_HondaCRVGen1_FunctionSpawnRate_tooltip": "CRV 出现在车道, 郊区, 农场, 停车场和堵车车流中的频率. 100 为本模组的正常频率, 0 为完全不生成.",
+    "Sandbox_HondaCRVGen1_FunctionAccessoryChance": "CRV 配件几率 (百分比)",
+    "Sandbox_HondaCRVGen1_FunctionAccessoryChance_tooltip": "调整生成的 CRV 带有配件的几率 (防撞杠, 车顶行李架, 车窗护栏, 备胎罩, 以及越野用的涉水喉, 底盘护板, 后保险杠, 车顶梯和汽油桶). 100 为正常, 0 为不带配件的裸车. 野餐桌为标准配置.",
+    "Sandbox_HondaCRVGen1_FunctionLootRarity": "CRV 物资倍率",
+    "Sandbox_HondaCRVGen1_FunctionLootRarity_tooltip": "调整 CRV 的套件, 装甲, 杂志和车主手册作为物资被找到的频率. 1 为正常, 0 为从不出现, 4 为四倍.",
+    "Sandbox_HondaCRVGen1_PolishEngineVolume": "CRV 引擎音层音量 (百分比)",
+    "Sandbox_HondaCRVGen1_PolishEngineVolume_tooltip": "叠加在游戏小型车引擎声之上的 CRV 专属合成 B20B 引擎声的响度. 0 为关闭."
+}

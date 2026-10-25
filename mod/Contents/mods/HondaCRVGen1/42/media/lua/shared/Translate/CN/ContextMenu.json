@@ -1,0 +1,21 @@
+{
+    "ContextMenu_CRV_TakeTable": "取出野餐桌",
+    "ContextMenu_CRV_PutTable": "放回野餐桌",
+    "ContextMenu_CRV_FoldFlat": "将后排座椅放平 (载货地板)",
+    "ContextMenu_CRV_FoldBed": "将后排座椅放平成床",
+    "ContextMenu_CRV_MakeBed": "铺床",
+    "ContextMenu_CRV_ClearBed": "收起床铺, 腾出载货空间",
+    "ContextMenu_CRV_UnfoldBed": "将后排座椅竖起复位",
+    "ContextMenu_CRV_SleepInBed": "在床上睡觉",
+    "ContextMenu_CRV_SleepOnBed": "睡在放平的床上 (好床)",
+    "ContextMenu_CRV_Awning_Deploy": "展开遮阳篷",
+    "ContextMenu_CRV_Awning_Stow": "收起遮阳篷",
+    "ContextMenu_CRV_Function_LiftFloor": "掀起行李箱地板",
+    "ContextMenu_CRV_Function_BrowseManual": "翻阅车主手册",
+    "ContextMenu_CRV_Lift_Menu": "升高套件",
+    "ContextMenu_CRV_Lift_Alloy": "安装3英寸升高套件 (EX 铝合金轮圈)",
+    "ContextMenu_CRV_Lift_Steel": "安装3英寸升高套件 (黑色钢圈)",
+    "ContextMenu_CRV_Lift_Remove": "拆除升高套件",
+    "ContextMenu_CRV_Lift_ToSteel": "换装黑色钢圈",
+    "ContextMenu_CRV_Lift_ToAlloy": "换装 EX 铝合金轮圈"
+}

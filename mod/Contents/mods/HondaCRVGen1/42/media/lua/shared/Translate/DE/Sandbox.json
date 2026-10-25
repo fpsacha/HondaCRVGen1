@@ -1,0 +1,13 @@
+{
+    "Sandbox_HondaCRVGen1": "Honda CRV (RD1)",
+    "Sandbox_HondaCRVGen1_ArmourStrength": "CRV-Panzerungsstärke",
+    "Sandbox_HondaCRVGen1_ArmourStrength_tooltip": "Wie lange die Survival-Panzerung des CRV hält. 1 = eine Platte oder ein Gitter steckt so viel Schaden ein wie die Tür oder das Fenster darunter, das Teil hält also etwa doppelt so lange; 2 = die Panzerung hält doppelt so lange; 0,5 = halb so lange.",
+    "Sandbox_HondaCRVGen1_FunctionSpawnRate": "CRV-Spawn-Rate (Prozent)",
+    "Sandbox_HondaCRVGen1_FunctionSpawnRate_tooltip": "Wie oft der CRV in Einfahrten, Vororten, auf Höfen, Parkplätzen und in Staus auftaucht. 100 ist die normale Rate der Mod, 0 gar keiner.",
+    "Sandbox_HondaCRVGen1_FunctionAccessoryChance": "CRV-Zubehör-Chance (Prozent)",
+    "Sandbox_HondaCRVGen1_FunctionAccessoryChance_tooltip": "Skaliert die Chance, dass ein gespawnter CRV Zubehör trägt (Frontbügel, Dachträger, Fenstergitter, Reserveradabdeckung sowie die Offroad-Teile Schnorchel, Unterfahrschutz, Heckstoßstange, Leiter und Kanister). 100 ist normal, 0 nackte Autos. Der Picknicktisch ist Serienausstattung.",
+    "Sandbox_HondaCRVGen1_FunctionLootRarity": "CRV-Beute-Multiplikator",
+    "Sandbox_HondaCRVGen1_FunctionLootRarity_tooltip": "Multipliziert, wie oft Kits, Panzerung, Zeitschriften und Betriebsanleitungen des CRV als Beute gefunden werden. 1 ist normal, 0 nie, 4 viermal so oft.",
+    "Sandbox_HondaCRVGen1_PolishEngineVolume": "CRV-Motorebene Lautstärke (Prozent)",
+    "Sandbox_HondaCRVGen1_PolishEngineVolume_tooltip": "Lautstärke der eigenen synthetisierten B20B-Ebene des CRV über dem Kleinwagenmotor des Spiels. 0 schaltet sie ab."
+}

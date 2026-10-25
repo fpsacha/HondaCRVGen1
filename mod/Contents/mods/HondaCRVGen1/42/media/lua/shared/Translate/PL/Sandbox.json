@@ -1,0 +1,13 @@
+{
+    "Sandbox_HondaCRVGen1": "Honda CRV (RD1)",
+    "Sandbox_HondaCRVGen1_ArmourStrength": "Wytrzymałość pancerza CRV",
+    "Sandbox_HondaCRVGen1_ArmourStrength_tooltip": "Jak długo wytrzymuje pancerz przetrwania CRV. 1 = płyta lub siatka przyjmuje tyle obrażeń co drzwi lub szyba pod nią, więc ta część wytrzymuje mniej więcej dwa razy dłużej; 2 = pancerz wytrzymuje dwa razy dłużej; 0,5 = o połowę krócej.",
+    "Sandbox_HondaCRVGen1_FunctionSpawnRate": "Częstość pojawiania się CRV (procent)",
+    "Sandbox_HondaCRVGen1_FunctionSpawnRate_tooltip": "Jak często CRV pojawia się na podjazdach, przedmieściach, farmach, parkingach i w korkach. 100 to normalna częstość moda, 0 wcale.",
+    "Sandbox_HondaCRVGen1_FunctionAccessoryChance": "Szansa na akcesoria CRV (procent)",
+    "Sandbox_HondaCRVGen1_FunctionAccessoryChance_tooltip": "Skaluje szansę, że wygenerowany CRV ma akcesoria (orurowanie przednie, bagażnik dachowy, osłony szyb, pokrowiec koła zapasowego oraz terenowe: snorkel, osłonę podwozia, tylny zderzak, drabinkę i kanistry). 100 to normalnie, 0 gołe auta. Stolik piknikowy jest wyposażeniem standardowym.",
+    "Sandbox_HondaCRVGen1_FunctionLootRarity": "Mnożnik łupów CRV",
+    "Sandbox_HondaCRVGen1_FunctionLootRarity_tooltip": "Mnoży częstość znajdowania zestawów, pancerza, czasopism i instrukcji obsługi CRV jako łupu. 1 to normalnie, 0 nigdy, 4 cztery razy częściej.",
+    "Sandbox_HondaCRVGen1_PolishEngineVolume": "Głośność warstwy silnika CRV (procent)",
+    "Sandbox_HondaCRVGen1_PolishEngineVolume_tooltip": "Głośność własnej, syntezowanej warstwy B20B nałożonej na dźwięk silnika małego auta z gry. 0 ją wyłącza."
+}

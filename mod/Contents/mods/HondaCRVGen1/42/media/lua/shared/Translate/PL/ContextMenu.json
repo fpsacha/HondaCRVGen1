@@ -1,0 +1,21 @@
+{
+    "ContextMenu_CRV_TakeTable": "Wyjmij stolik piknikowy",
+    "ContextMenu_CRV_PutTable": "Odłóż stolik piknikowy",
+    "ContextMenu_CRV_FoldFlat": "Złóż tylne fotele na płasko (podłoga ładunkowa)",
+    "ContextMenu_CRV_FoldBed": "Rozłóż tylne fotele w łóżko",
+    "ContextMenu_CRV_MakeBed": "Pościel łóżko",
+    "ContextMenu_CRV_ClearBed": "Zwolnij łóżko pod ładunek",
+    "ContextMenu_CRV_UnfoldBed": "Podnieś tylne fotele",
+    "ContextMenu_CRV_SleepInBed": "Śpij w łóżku",
+    "ContextMenu_CRV_SleepOnBed": "Śpij na złożonych fotelach (dobre łóżko)",
+    "ContextMenu_CRV_Awning_Deploy": "Rozwiń markizę",
+    "ContextMenu_CRV_Awning_Stow": "Zwiń markizę",
+    "ContextMenu_CRV_Function_LiftFloor": "Podnieś podłogę bagażnika",
+    "ContextMenu_CRV_Function_BrowseManual": "Przejrzyj instrukcję obsługi",
+    "ContextMenu_CRV_Lift_Menu": "Lift zawieszenia",
+    "ContextMenu_CRV_Lift_Alloy": "Zamontuj lift 3 cale (felgi aluminiowe EX)",
+    "ContextMenu_CRV_Lift_Steel": "Zamontuj lift 3 cale (czarne felgi stalowe)",
+    "ContextMenu_CRV_Lift_Remove": "Zdemontuj lift",
+    "ContextMenu_CRV_Lift_ToSteel": "Zmień na czarne felgi stalowe",
+    "ContextMenu_CRV_Lift_ToAlloy": "Zmień na felgi aluminiowe EX"
+}

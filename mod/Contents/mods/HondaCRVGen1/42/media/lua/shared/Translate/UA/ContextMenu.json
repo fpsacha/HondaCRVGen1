@@ -1,0 +1,21 @@
+{
+    "ContextMenu_CRV_TakeTable": "Дістати стіл для пікніка",
+    "ContextMenu_CRV_PutTable": "Покласти стіл для пікніка на місце",
+    "ContextMenu_CRV_FoldFlat": "Скласти задні сидіння (рівна підлога)",
+    "ContextMenu_CRV_FoldBed": "Розкласти задні сидіння в ліжко",
+    "ContextMenu_CRV_MakeBed": "Застелити ліжко",
+    "ContextMenu_CRV_ClearBed": "Прибрати ліжко під вантаж",
+    "ContextMenu_CRV_UnfoldBed": "Підняти задні сидіння",
+    "ContextMenu_CRV_SleepInBed": "Спати в ліжку",
+    "ContextMenu_CRV_SleepOnBed": "Спати на розкладених сидіннях (добре ліжко)",
+    "ContextMenu_CRV_Awning_Deploy": "Розгорнути тент",
+    "ContextMenu_CRV_Awning_Stow": "Згорнути тент",
+    "ContextMenu_CRV_Function_LiftFloor": "Підняти підлогу багажника",
+    "ContextMenu_CRV_Function_BrowseManual": "Погортати посібник власника",
+    "ContextMenu_CRV_Lift_Menu": "Ліфт-комплект",
+    "ContextMenu_CRV_Lift_Alloy": "Установити ліфт-комплект 3 дюйми (литі диски EX)",
+    "ContextMenu_CRV_Lift_Steel": "Установити ліфт-комплект 3 дюйми (чорні сталеві диски)",
+    "ContextMenu_CRV_Lift_Remove": "Зняти ліфт-комплект",
+    "ContextMenu_CRV_Lift_ToSteel": "Поставити чорні сталеві диски",
+    "ContextMenu_CRV_Lift_ToAlloy": "Поставити литі диски EX"
+}

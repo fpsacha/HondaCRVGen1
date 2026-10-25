@@ -44,10 +44,11 @@ the badge numbers and letters, the "kg" and "!" glyphs inside icons, the heading
 stamp (a distressed, rotated decal: "NOLAN'S USED CARS / MULDRAUGH - KENTUCKY / PRE-LOVED CARS - NO LEMONS").
 CRV_MANUAL_BAKED_TEXT=1 draws every string into the art as before (comparisons only; never shipped).
 
-    python scripts\manual_art.py --preview [--lang en|pseudo] [--screen 1080|1440|2160] [--out DIR]
+    python scripts\manual_art.py --preview [--lang en|pseudo|<CODE>|<source.json>] [--screen 1080|1440|2160] [--out DIR]
         simulated screenshots: the shipped spreads as the game draws them (window scale 0.8 x the screen height, the
         overlay laid out by FunctionMenu.lua under lupa with the game's .fnt metrics, the SDF glyphs drawn with the
-        game's sdf.frag threshold); --lang pseudo stretches every string ~40% (German-like) to show re-wrapping
+        game's sdf.frag threshold); --lang pseudo stretches every string ~40% (German-like) to show re-wrapping;
+        --lang CN (any scripts	ranslations\<CODE>.json) lays out that language with its own fallback UI font
 """
 import json
 import math
@@ -1190,11 +1191,14 @@ FNT_FILES = {"SdfRegular": "sdfRegular", "SdfBold": "sdfBold", "SdfItalic": "sdf
 class Fnt:
     """An AngelCode .fnt as AngelCodeFont reads it: chars, kerning, pages (the SDF in the PNG's alpha)."""
 
-    def __init__(self, name, gdir=None):
-        gdir = gdir or game_dir()
-        self.dir = os.path.join(gdir, "media", "fonts")
+    def __init__(self, name, gdir=None, path=None):
+        """name: one of the SDF fonts (media/fonts/<file>.fnt); or path: any .fnt (a language's UI font)"""
+        if path is None:
+            gdir = gdir or game_dir()
+            path = os.path.join(gdir, "media", "fonts", FNT_FILES[name] + ".fnt")
+        self.dir = os.path.dirname(path)
         self.chars, self.kern, self.pages, self._img = {}, {}, {}, {}
-        with open(os.path.join(self.dir, FNT_FILES[name] + ".fnt"), encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             for line in f:
                 tag, _, rest = line.strip().partition(" ")
                 kv = dict(re.findall(r'(\w+)=("[^"]*"|\S+)', rest))
@@ -1228,6 +1232,26 @@ class Fnt:
             cur += d[2] if i == len(s) - 1 else d[6]
             best = max(best, cur)
         return best
+
+    def fill(self, text, ttf, ref=0x4E2D):
+        """REVIEW ONLY (--fill): give the characters of `text` this font lacks a glyph drawn from the TrueType font
+        `ttf`, as wide as the font's own `ref` character, so a translation can be read and its layout judged where the
+        game's bitmap font has gaps (42.21's CN font lacks ~870 simplified characters). Never what the game draws."""
+        adv = self.chars.get(ref, (0, 0, 0, 0, 0, 0, self.line_height, 0))[6]
+        tt = ImageFont.truetype(ttf, adv)
+        added = 0
+        for ch in sorted(set(text)):
+            c = ord(ch)
+            if c in self.chars or c < 32:
+                continue
+            w, h = adv + 4, self.line_height + 4
+            im = Image.new("L", (w, h), 0)
+            ImageDraw.Draw(im).text((1, self.base + 2), ch, font=tt, fill=255, anchor="ls")
+            pid = 100000 + c
+            self._img[pid] = np.asarray(im).astype(np.float32) / 255.0
+            self.chars[c] = (0, 0, w, h, -1, -2, adv, pid)
+            added += 1
+        return added
 
     def page(self, i):
         if i not in self._img:
@@ -1340,29 +1364,78 @@ def pseudo(s):
     return re.sub(r"[A-Za-z]+", word, s)
 
 
-def lua_words(lang="en", strings=None):
-    """Run FunctionMenu.lua's layout under lupa (lua_harness: Kahlua's Lua 5.1, no next) with the game's .fnt metrics
-    as TextManager.MeasureStringX: the data strings the window would get, one per spread."""
+def language_strings(code):
+    """The manual's strings in language `code` (scripts/translations/<CODE>.json, or a path to such a file), every key
+    the source lacks in English (the game shows the English then)."""
+    import lang_sources as LS
+    en = json.load(open(STRINGS_JSON, encoding="utf-8"))
+    path = code if code.endswith(".json") else os.path.join(LS.SOURCES, code + ".json")
+    src = LS.read_json(path).get("Print_Text", {})
+    return {k: src.get(k, v) for k, v in en.items()}
+
+
+def language_fonts(code=None):
+    """The fonts the overlay uses in language `code`: the five SDF fonts, and the language's Medium UI font as
+    M.FALLBACK_FONT (TextManager: EN's fonts.txt, then the language's; the default size's 1x folder)."""
+    import lang_sources as LS
+    fonts = {n: Fnt(n) for n in SDF_FONTS}
+    g = game_dir()
+    if code and g:
+        p = LS.font_file(g, code, "Medium")
+        if p:
+            fonts["Medium"] = Fnt(None, path=p)
+    return fonts
+
+
+def lua_side(strings, fonts):
+    """FunctionMenu.lua under lupa (lua_harness: Kahlua's Lua 5.1, no next) with the game's .fnt metrics as
+    TextManager.MeasureStringX / getFontHeight, getText from `strings`."""
     import sys
     sys.path.insert(0, HERE)
     from lua_harness import Side
-    strings = dict(strings if strings is not None else json.load(open(STRINGS_JSON, encoding="utf-8")))
-    if lang == "pseudo":
-        strings = {k: pseudo(v) for k, v in strings.items()}
-    fonts = {n: Fnt(n) for n in SDF_FONTS}
+
+    def measure(name, s):
+        if isinstance(s, bytes):
+            s = s.decode("utf-8")              # a byte-split UTF-8 character would raise here: never hidden
+        return fonts[name].width(s)
     side = Side("sp")
-    side.L.globals().PY_MEASURE = lambda name, s: fonts[name].width(s)
+    side.L.globals().PY_MEASURE = measure
+    side.L.globals().PY_HEIGHT = lambda name: fonts[name].line_height if name in fonts else 20
     side.L.globals().PY_TEXT = lambda k: strings.get(k, k)
     side.run("""
         getText = function(k) return PY_TEXT(k) end
         getTextManager = function() return { MeasureStringX = function(self, f, s) return PY_MEASURE(f, s) end,
-                                             getFontHeight = function(self, f) return 20 end } end
+                                             getFontHeight = function(self, f) return PY_HEIGHT(f) end } end
         UIFont = { FromString = function(n) return n end }
         ISVehicleMenu = { FillMenuOutsideVehicle = function() end, showRadialMenuOutside = function() end }
         ISWorldObjectContextMenu = {}
         HondaCRVGen1 = { Function = { MANUAL_SPREADS = {}, KNOW_HOW = "K" }, Shared = {} }
     """)
     side.load("client/HondaCRVGen1_ManualLayout.lua", "client/HondaCRVGen1_FunctionMenu.lua")
+    return side
+
+
+FILL_TTF = {"KO": "malgunbd.ttf", "JP": "YuGothB.ttc", "CH": "msjhbd.ttc"}     # else msyhbd.ttc (YaHei Bold)
+
+
+def lua_words(lang="en", strings=None, fill=False):
+    """Run FunctionMenu.lua's layout under lupa with the game's .fnt metrics: the data strings the window would get,
+    one per spread. lang: en, pseudo, or a language code / source file (scripts/translations/<CODE>.json)."""
+    code = None
+    if strings is None:
+        if lang in ("en", "pseudo"):
+            strings = json.load(open(STRINGS_JSON, encoding="utf-8"))
+        else:
+            strings, code = language_strings(lang), os.path.basename(lang).split(".")[0].upper()
+    strings = dict(strings)
+    if lang == "pseudo":
+        strings = {k: pseudo(v) for k, v in strings.items()}
+    fonts = language_fonts(code)
+    if fill and "Medium" in fonts:
+        ttf = os.path.join(os.environ.get("WINDIR", "C:/Windows"), "Fonts", FILL_TTF.get(code, "msyhbd.ttc"))
+        print("FILL %d glyphs the game's %s font lacks, from %s (review only)"
+              % (fonts["Medium"].fill("".join(strings.values()), ttf), code, ttf))
+    side = lua_side(strings, fonts)
     return [side.eval("HondaCRVGen1.Function.Menu.manualWords(%d)" % i) for i in (1, 2, 3)], fonts
 
 
@@ -1433,7 +1506,7 @@ def draw_sdf(canvas, fonts, params, text, scale):
         pen += xa
 
 
-def preview(lang="en", screen=1440, out_dir=None, before=False, crop=None):
+def preview(lang="en", screen=1440, out_dir=None, before=False, crop=None, fill=False):
     """Simulated screenshots of the three spreads as the print media window shows them on a `screen` px tall screen
     (PrintMedia.lua updateSize: the 1616 x 1131 spread fitted to 0.8 x the screen height). before=True: the art as
     master shipped it (git HEAD's textures, words baked in)."""
@@ -1442,7 +1515,7 @@ def preview(lang="en", screen=1440, out_dir=None, before=False, crop=None):
     scale = screen * 0.8 / H
     size = (int(round(W * scale)), int(round(H * scale)))
     paths = []
-    datas, fonts = (None, None) if before else lua_words(lang)
+    datas, fonts = (None, None) if before else lua_words(lang, fill=fill)
     for i, tex in enumerate(OUTS):
         img = Image.open(tex if not before else before[i]).convert("RGB").resize(size, Image.BILINEAR)
         canvas = np.asarray(img).astype(np.float32) / 255.0
@@ -1450,7 +1523,8 @@ def preview(lang="en", screen=1440, out_dir=None, before=False, crop=None):
             for params, text in parse_elements(datas[i]):
                 draw_sdf(canvas, fonts, params, text, scale)
         im = Image.fromarray(np.clip(canvas * 255 + 0.5, 0, 255).astype(np.uint8))
-        name = "spread%d_%s_%d.png" % (i + 1, "before" if before else lang, screen)
+        tag = os.path.basename(lang).split(".")[0] if lang.endswith(".json") else lang
+        name = "spread%d_%s%s_%d.png" % (i + 1, "before" if before else tag, "_filled" if fill else "", screen)
         p = os.path.join(out_dir, name)
         im.save(p)
         paths.append(p)
@@ -1461,12 +1535,15 @@ if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("--preview", action="store_true")
-    ap.add_argument("--lang", default="en", choices=("en", "pseudo"))
+    ap.add_argument("--lang", default="en", help="en, pseudo, a language code (scripts/translations/<CODE>.json) "
+                                                 "or the path of such a source file")
     ap.add_argument("--screen", type=int, default=1440)
     ap.add_argument("--out")
+    ap.add_argument("--fill", action="store_true", help="review only: draw the glyphs the game's font lacks from a "
+                                                        "Windows font (marked _filled)")
     a = ap.parse_args()
     if a.preview:
-        for p in preview(a.lang, a.screen, a.out):
+        for p in preview(a.lang, a.screen, a.out, fill=a.fill):
             print("WROTE", p)
     else:
         for p in build():

@@ -1,0 +1,13 @@
+{
+    "Sandbox_HondaCRVGen1": "Honda CRV (RD1)",
+    "Sandbox_HondaCRVGen1_ArmourStrength": "CRV アーマーの強度",
+    "Sandbox_HondaCRVGen1_ArmourStrength_tooltip": "CRVのサバイバル・アーマーの持ちです。1 = プレートやメッシュがその下のドアや窓と同じだけダメージを受け止め、その部位がおよそ2倍長持ちします。2 = アーマーが2倍長持ち、0.5 = 半分です。",
+    "Sandbox_HondaCRVGen1_FunctionSpawnRate": "CRV の生成割合 (%)",
+    "Sandbox_HondaCRVGen1_FunctionSpawnRate_tooltip": "CRVが私道、住宅街、農場、駐車場、渋滞の中に出現する頻度です。100がMODの標準、0で出現しません。",
+    "Sandbox_HondaCRVGen1_FunctionAccessoryChance": "CRV のアクセサリー確率 (%)",
+    "Sandbox_HondaCRVGen1_FunctionAccessoryChance_tooltip": "生成されたCRVがアクセサリー (ブルバー、ルーフラック、ウィンドウガード、スペアタイヤカバー、オフロード用のシュノーケル、スキッドプレート、リアバンパー、ラダー、ジェリカン) を装備している確率を調整します。100が標準、0で何も付きません。ピクニックテーブルは標準装備です。",
+    "Sandbox_HondaCRVGen1_FunctionLootRarity": "CRV の戦利品倍率",
+    "Sandbox_HondaCRVGen1_FunctionLootRarity_tooltip": "CRVのキット、アーマー、雑誌、取扱説明書が戦利品として見つかる頻度の倍率です。1が標準、0で出現せず、4で4倍になります。",
+    "Sandbox_HondaCRVGen1_PolishEngineVolume": "CRV エンジン音レイヤーの音量 (%)",
+    "Sandbox_HondaCRVGen1_PolishEngineVolume_tooltip": "ゲームの小型車エンジン音に重ねる、CRV独自に合成したB20Bの音の大きさです。0でオフになります。"
+}

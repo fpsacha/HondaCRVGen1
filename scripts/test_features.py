@@ -77,7 +77,9 @@ def no_features(tmp, base):
     a = os.path.join(tmp, "nofeat")
     gen_subprocess(a)
     got = files(a)
-    check(sorted(got) == sorted("media/" + g for g in GENERATED), "no-feature output files: %s" % sorted(got))
+    # the other languages (scripts/translations, test_translations.py) follow the English files they translate
+    core = sorted(f for f in got if "/Translate/" not in f or "/Translate/EN/" in f)
+    check(core == sorted("media/" + g for g in GENERATED), "no-feature output files: %s" % core)
     if not features.discovered():
         check(got == tracked, "CRV_FEATURES=none differs from a build without feature modules")
     if base:
@@ -221,7 +223,9 @@ def example(tmp, keep):
     features.activate([])
     with contextlib.redirect_stdout(io.StringIO()) as buf:
         gen.main(out)
-    removed = buf.getvalue().count("REMOVED")
+    # (a translation's Translate/<CODE> file follows its English one: not counted)
+    removed = sum(1 for line in buf.getvalue().splitlines() if line.startswith("REMOVED")
+                  and ("Translate" not in line or "Translate" + os.sep + "EN" in line or "Translate/EN" in line))
     after = files(out)
     for p in [k for k in after if k.startswith(("media/lua/client/HondaCRVGen1_Example", "media/lua/shared/HondaCRVGen1_Example",
                                                "media/scripts/sounds/HondaCRVGen1_Example"))]:

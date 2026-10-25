@@ -1,0 +1,21 @@
+{
+    "ContextMenu_CRV_TakeTable": "Tirar a mesa de piquenique",
+    "ContextMenu_CRV_PutTable": "Guardar a mesa de piquenique",
+    "ContextMenu_CRV_FoldFlat": "Rebater os bancos traseiros (assoalho de carga)",
+    "ContextMenu_CRV_FoldBed": "Rebater os bancos traseiros em cama",
+    "ContextMenu_CRV_MakeBed": "Arrumar a cama",
+    "ContextMenu_CRV_ClearBed": "Desfazer a cama para a carga",
+    "ContextMenu_CRV_UnfoldBed": "Levantar os bancos traseiros",
+    "ContextMenu_CRV_SleepInBed": "Dormir na cama",
+    "ContextMenu_CRV_SleepOnBed": "Dormir nos bancos rebatidos (cama boa)",
+    "ContextMenu_CRV_Awning_Deploy": "Abrir o toldo",
+    "ContextMenu_CRV_Awning_Stow": "Recolher o toldo",
+    "ContextMenu_CRV_Function_LiftFloor": "Levantar o assoalho do porta-malas",
+    "ContextMenu_CRV_Function_BrowseManual": "Folhear o manual do proprietário",
+    "ContextMenu_CRV_Lift_Menu": "Kit de elevação",
+    "ContextMenu_CRV_Lift_Alloy": "Instalar o kit de elevação de 3 pol. (rodas de liga EX)",
+    "ContextMenu_CRV_Lift_Steel": "Instalar o kit de elevação de 3 pol. (rodas de aço pretas)",
+    "ContextMenu_CRV_Lift_Remove": "Remover o kit de elevação",
+    "ContextMenu_CRV_Lift_ToSteel": "Trocar para rodas de aço pretas",
+    "ContextMenu_CRV_Lift_ToAlloy": "Trocar para as rodas de liga EX"
+}

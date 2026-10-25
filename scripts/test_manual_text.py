@@ -143,6 +143,18 @@ def test_window():
 def layout_report(s, page, ld_check=True):
     """Every item of a spread through M.fit / M.fitFlow: (item, fit, lines, height)."""
     s.run("""
+        local function heads(lines)
+            local t = {}
+            for _, l in ipairs(lines) do
+                t[#t + 1] = l.words[1] and l.words[1].w or ""
+            end
+            return table.concat(t, "")
+        end
+        local function widest(lines)
+            local w, n = 0, 0
+            for _, l in ipairs(lines) do if l.w > w then w, n = l.w, #l.words end end
+            return n
+        end
         function REPORT(page)
             local M, out = HondaCRVGen1.Function.Menu, {}
             local items = HondaCRVGen1.ManualLayout.spreads[page]
@@ -162,14 +174,15 @@ def layout_report(s, page, ld_check=True):
                     for j, q in ipairs(placed) do
                         local w = 0
                         for _, l in ipairs(q.lines) do w = math.max(w, l.w) end
-                        out[#out + 1] = { i = i + j - 1, f = q.f, n = #q.lines, w = w, h = (j == #placed) and (last.top + h) or 0, flow = 1 }
+                        out[#out + 1] = { i = i + j - 1, f = q.f, n = #q.lines, w = w, h = (j == #placed) and (last.top + h) or 0, flow = 1,
+                                          heads = heads(q.lines), wn = widest(q.lines) }
                     end
                     i = n
                 else
                     local f, lines, h = M.fit(p, measure)
                     local w = 0
                     for _, l in ipairs(lines) do w = math.max(w, l.w) end
-                    out[#out + 1] = { i = i, f = f, n = #lines, w = w, h = h }
+                    out[#out + 1] = { i = i, f = f, n = #lines, w = w, h = h, heads = heads(lines), wn = widest(lines) }
                     i = i + 1
                 end
             end
@@ -243,12 +256,112 @@ def test_runs_and_fallback():
     print("RUNS: bold runs, glued punctuation, one element per run, fallback font, rotation")
 
 
+CLOSING = "，。、；：！？）」』》〉】,.;:!?)"
+
+
+def language_sources():
+    """Every translation source to lay out: scripts/translations/*.json, plus the *.json in the folders named by
+    --sources DIR (other branches' files, read only)."""
+    import lang_sources as LS
+    out = [os.path.join(LS.SOURCES, c + ".json") for c in LS.codes()]
+    args = sys.argv[1:]
+    for i, a in enumerate(args):
+        if a == "--sources" and i + 1 < len(args):
+            d = args[i + 1]
+            out += [os.path.join(d, fn) for fn in sorted(os.listdir(d)) if fn.endswith(".json")]
+    return out
+
+
+def test_languages():
+    """Every translation's manual through FunctionMenu.lua under lupa with that language's fonts (the SDF fonts; its own
+    Medium UI font for strings the SDF fonts cannot draw): no error (UTF-8 is laid out by character, never split
+    inside one), every wrapped line inside its box unless it is one unbreakable word, a box's room kept or the string
+    at M.MIN_FIT, no line opening with a closing mark (CJK breaks between characters: not before 。，、）),
+    every element on the page and in valid UTF-8."""
+    if not MA.game_dir():
+        print("LANGUAGES: no game here, the fonts are not available, skipped")
+        return
+    srcs = language_sources()
+    for path in srcs:
+        code = os.path.basename(path)[:-5].upper()
+        strings = MA.language_strings(path)
+        fonts = MA.language_fonts(code)
+        s = MA.lua_side(strings, fonts)
+        lay = s.eval("HondaCRVGen1.ManualLayout.spreads")
+        min_fit = s.eval("HondaCRVGen1.Function.Menu.MIN_FIT")
+        long_, worst, fallback = [], 1.0, 0
+        for page in (1, 2, 3):
+            items = lay[page]
+            try:
+                rep = layout_report(s, page)
+            except Exception as exc:                     # noqa: BLE001 (a decode error is the failure)
+                check(False, "%s spread %d: the layout fails: %s" % (code, page, exc))
+                continue
+            for r in rep:
+                it = items[r["i"]]
+                f = r["f"]
+                worst = min(worst, f)
+                text = strings.get(MA.KEY_PREFIX + it.k, "")
+                if any(0x0590 <= ord(c) < 0x1E00 or ord(c) > 0x2FFF for c in text):
+                    fallback += 1
+                heads = (r.get("heads") or "").split("\1")[1:]
+                bad = [h for h in heads if h and h[0] in CLOSING]
+                check(not bad, "%s %d %s: no line opens with a closing mark: %s" % (code, page, it.k, bad))
+                if it.w:
+                    check(r["w"] <= it.w + 2.0 or r["wn"] == 1, "%s %d %s: its lines stay %s wide (%.1f)"
+                          % (code, page, it.k, it.w, r["w"]))
+                    check(f >= min_fit - 0.001, "%s %d %s: shrinks to MIN_FIT at the most" % (code, page, it.k))
+                    room = it.mh if not r.get("flow") else None
+                    if room is not None and r["h"] > room + 0.5:
+                        long_.append("%d:%s" % (page, it.k))
+                elif r["w"] > it.mw + 0.5 and f <= 0.601:
+                    long_.append("%d:%s" % (page, it.k))
+            try:
+                data = s.eval("HondaCRVGen1.Function.Menu.manualWords(%d)" % page)
+            except Exception as exc:                     # noqa: BLE001
+                check(False, "%s spread %d: manualWords fails: %s" % (code, page, exc))
+                continue
+            els = MA.parse_elements(data)
+            check(all(-2 <= float(p["x"]) <= MA.W and 0 <= float(p["y"]) <= MA.H for p, _t in els),
+                  "%s %d: every element on the page" % (code, page))
+        print("LANGUAGE %s: 3 spreads laid out, smallest fit %.2f, %d strings in the %s UI font, %d run past their "
+              "room at MIN_FIT%s" % (code, worst, fallback, code, len(long_), (": " + ", ".join(long_)) if long_ else ""))
+
+
+def test_cjk_breaking():
+    """The wrapper itself: Chinese with no spaces breaks between characters, a closing mark stays on its line, an
+    opening one with the next character, Latin words inside CJK stay whole, **bold** keeps its markers' positions."""
+    s = side({})
+    s.run("""
+        M = HondaCRVGen1.Function.Menu
+        W = M.manualRuns("你好，**世界**（CRV的）。", "SdfRegular")
+        IT = { x = 0, y = 20, s = 10, f = "SdfRegular", c = { 0, 0, 0, 1 }, al = 0, w = 22, mh = 500, ld = 1.3, a0 = 8 }
+        P = M.prepare(IT, "一二三四五六七八九十，好")
+        L = select(1, M.linesAt(P, 1, function(f, t) return 10 * #M.chars(t) end))
+    """)
+    words = [(s.eval("W[%d].w" % i), bool(s.eval("W[%d].glue" % i)), bool(s.eval("W[%d].tight" % i)))
+             for i in range(1, s.eval("#W") + 1)]
+    want = [("你", False, False), ("好", False, True), ("，", True, False), ("世", False, True), ("界", False, True),
+            ("（", False, True), ("CRV", True, False), ("的", False, True), ("）", True, False), ("。", True, False)]
+    check(words == want, "CJK tokens: one per character, closing marks glued, opening marks hold the next: %s" % words)
+    check(s.eval("W[4].f") == "SdfBold" and s.eval("W[3].f") == "SdfRegular", "**bold** runs by character")
+    lines = ["".join(s.eval("L[%d].words[%d].w" % (i, j)) for j in range(1, s.eval("#L[%d].words" % i) + 1))
+             for i in range(1, s.eval("#L") + 1)]
+    check(len(lines) >= 3 and all(not l.startswith("，") for l in lines) and "".join(lines) == "一二三四五六七八九十，好",
+          "a spaceless line wraps by character, never opening with a closing mark: %s" % lines)
+    check(s.eval("M.needsFallback('" + "ก" + "')") and s.eval("M.needsFallback('中')")
+          and not s.eval("M.needsFallback('Straße Ж')"), "fallback for Thai and CJK, not Latin or Cyrillic")
+    print("CJK: spaceless text breaks by character with basic kinsoku, Latin inside CJK stays whole, fallback ranges")
+
+
 def main():
     spreads = test_art_has_no_words()
     test_keys(spreads)
     test_window()
     test_layout()
     test_runs_and_fallback()
+    test_cjk_breaking()
+    test_languages()
     if FAILS:
         print("MANUAL TEXT TESTS FAILED: %d" % len(FAILS))
         sys.exit(1)

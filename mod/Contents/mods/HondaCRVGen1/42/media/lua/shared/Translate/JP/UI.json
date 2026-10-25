@@ -1,0 +1,5 @@
+{
+    "UI_CRV_Options_Name": "Honda CRV",
+    "UI_CRV_Options_EngineVolume": "CRV エンジン音の音量 (%)",
+    "UI_CRV_Options_EngineVolume_Info": "CRV独自のエンジン音 (自分だけに適用): 0でオフ、100が録音時の音量です。サーバーのサンドボックス音量も引き続き適用されます。"
+}

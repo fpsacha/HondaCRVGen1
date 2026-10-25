@@ -1,0 +1,13 @@
+{
+    "Sandbox_HondaCRVGen1": "Honda CRV (RD1)",
+    "Sandbox_HondaCRVGen1_ArmourStrength": "Міцність броні CRV",
+    "Sandbox_HondaCRVGen1_ArmourStrength_tooltip": "Як довго служить броня для виживання CRV. 1 = пластина чи сітка витримує стільки ж пошкоджень, скільки дверцята чи вікно під нею, тож ця частина служить приблизно вдвічі довше; 2 = броня служить удвічі довше; 0.5 = удвічі менше.",
+    "Sandbox_HondaCRVGen1_FunctionSpawnRate": "Частота появи CRV (відсотки)",
+    "Sandbox_HondaCRVGen1_FunctionSpawnRate_tooltip": "Як часто CRV трапляється біля будинків, у передмістях, на фермах, парковках і в заторах. 100 — звичайна частота мода, 0 — зовсім немає.",
+    "Sandbox_HondaCRVGen1_FunctionAccessoryChance": "Шанс аксесуарів на CRV (відсотки)",
+    "Sandbox_HondaCRVGen1_FunctionAccessoryChance_tooltip": "Змінює шанс, що знайдений CRV матиме аксесуари (кенгурятник, багажник на дах, захист вікон, чохол запасного колеса, а також позашляхові шноркель, захист картера, задній бампер, драбину й каністри). 100 — звичайно, 0 — голі авто. Стіл для пікніка входить у стандартну комплектацію.",
+    "Sandbox_HondaCRVGen1_FunctionLootRarity": "Множник здобичі CRV",
+    "Sandbox_HondaCRVGen1_FunctionLootRarity_tooltip": "Множить, як часто трапляються комплекти, броня, журнали й посібники власника CRV. 1 — звичайно, 0 — ніколи, 4 — учетверо частіше.",
+    "Sandbox_HondaCRVGen1_PolishEngineVolume": "Гучність шару двигуна CRV (відсотки)",
+    "Sandbox_HondaCRVGen1_PolishEngineVolume_tooltip": "Гучність власного синтезованого звуку B20B для CRV поверх звуку малолітражного двигуна гри. 0 вимикає його."
+}

@@ -1,0 +1,13 @@
+{
+    "Sandbox_HondaCRVGen1": "Honda CRV (RD1)",
+    "Sandbox_HondaCRVGen1_ArmourStrength": "Resistenza corazzatura CRV",
+    "Sandbox_HondaCRVGen1_ArmourStrength_tooltip": "Quanto dura la corazzatura di sopravvivenza della CRV. 1 = una piastra o rete incassa tanto danno quanto la porta o la finestra sotto, quindi quella parte dura circa il doppio; 2 = la corazzatura dura il doppio; 0.5 = la metà.",
+    "Sandbox_HondaCRVGen1_FunctionSpawnRate": "Tasso di generazione CRV (percentuale)",
+    "Sandbox_HondaCRVGen1_FunctionSpawnRate_tooltip": "Quanto spesso la CRV compare nei vialetti, nei quartieri, nelle fattorie, nei parcheggi e negli ingorghi. 100 è il tasso normale della mod, 0 nessuna.",
+    "Sandbox_HondaCRVGen1_FunctionAccessoryChance": "Probabilità accessori CRV (percentuale)",
+    "Sandbox_HondaCRVGen1_FunctionAccessoryChance_tooltip": "Regola la probabilità che una CRV generata abbia accessori (bull bar, portapacchi, protezioni finestre, copriruota di scorta, e snorkel, paracoppa, paraurti posteriore, scaletta e taniche fuoristrada). 100 è normale, 0 auto spoglie. Il tavolo da picnic è di serie.",
+    "Sandbox_HondaCRVGen1_FunctionLootRarity": "Moltiplicatore bottino CRV",
+    "Sandbox_HondaCRVGen1_FunctionLootRarity_tooltip": "Moltiplica la frequenza con cui kit, corazzature, riviste e manuali d'uso della CRV si trovano come bottino. 1 è normale, 0 mai, 4 quattro volte più spesso.",
+    "Sandbox_HondaCRVGen1_PolishEngineVolume": "Volume strato motore CRV (percentuale)",
+    "Sandbox_HondaCRVGen1_PolishEngineVolume_tooltip": "Volume dello strato B20B sintetizzato della CRV sopra il motore da utilitaria del gioco. 0 lo disattiva."
+}

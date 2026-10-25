@@ -1,0 +1,21 @@
+{
+    "ContextMenu_CRV_TakeTable": "야외 탁자 꺼내기",
+    "ContextMenu_CRV_PutTable": "야외 탁자 다시 넣기",
+    "ContextMenu_CRV_FoldFlat": "뒷좌석 평평하게 접기 (적재 공간)",
+    "ContextMenu_CRV_FoldBed": "뒷좌석 접어 침대 만들기",
+    "ContextMenu_CRV_MakeBed": "잠자리 깔기",
+    "ContextMenu_CRV_ClearBed": "잠자리 치우고 짐칸으로 쓰기",
+    "ContextMenu_CRV_UnfoldBed": "뒷좌석 다시 세우기",
+    "ContextMenu_CRV_SleepInBed": "침대에서 잠자기",
+    "ContextMenu_CRV_SleepOnBed": "접은 좌석 위에서 잠자기 (좋은 침대)",
+    "ContextMenu_CRV_Awning_Deploy": "어닝 펼치기",
+    "ContextMenu_CRV_Awning_Stow": "어닝 말아 넣기",
+    "ContextMenu_CRV_Function_LiftFloor": "트렁크 바닥 들어 올리기",
+    "ContextMenu_CRV_Function_BrowseManual": "사용 설명서 훑어보기",
+    "ContextMenu_CRV_Lift_Menu": "리프트 키트",
+    "ContextMenu_CRV_Lift_Alloy": "3인치 리프트 키트 장착 (EX 알루미늄 휠)",
+    "ContextMenu_CRV_Lift_Steel": "3인치 리프트 키트 장착 (검은색 철제 휠)",
+    "ContextMenu_CRV_Lift_Remove": "리프트 키트 제거",
+    "ContextMenu_CRV_Lift_ToSteel": "검은색 철제 휠로 교체",
+    "ContextMenu_CRV_Lift_ToAlloy": "EX 알루미늄 휠로 교체"
+}

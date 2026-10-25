@@ -1,0 +1,21 @@
+{
+    "ContextMenu_CRV_TakeTable": "Picknicktisch herausnehmen",
+    "ContextMenu_CRV_PutTable": "Picknicktisch zurücklegen",
+    "ContextMenu_CRV_FoldFlat": "Rücksitze flach umklappen (Ladefläche)",
+    "ContextMenu_CRV_FoldBed": "Rücksitze zum Bett umklappen",
+    "ContextMenu_CRV_MakeBed": "Bett herrichten",
+    "ContextMenu_CRV_ClearBed": "Bett für Ladung räumen",
+    "ContextMenu_CRV_UnfoldBed": "Rücksitze wieder aufstellen",
+    "ContextMenu_CRV_SleepInBed": "Im Bett schlafen",
+    "ContextMenu_CRV_SleepOnBed": "Auf den umgeklappten Sitzen schlafen (gutes Bett)",
+    "ContextMenu_CRV_Awning_Deploy": "Markise ausrollen",
+    "ContextMenu_CRV_Awning_Stow": "Markise einrollen",
+    "ContextMenu_CRV_Function_LiftFloor": "Kofferraumboden anheben",
+    "ContextMenu_CRV_Function_BrowseManual": "In der Betriebsanleitung blättern",
+    "ContextMenu_CRV_Lift_Menu": "Höherlegungskit",
+    "ContextMenu_CRV_Lift_Alloy": "3-Zoll-Höherlegung montieren (EX-Alufelgen)",
+    "ContextMenu_CRV_Lift_Steel": "3-Zoll-Höherlegung montieren (schwarze Stahlfelgen)",
+    "ContextMenu_CRV_Lift_Remove": "Höherlegung ausbauen",
+    "ContextMenu_CRV_Lift_ToSteel": "Auf schwarze Stahlfelgen wechseln",
+    "ContextMenu_CRV_Lift_ToAlloy": "Auf EX-Alufelgen wechseln"
+}

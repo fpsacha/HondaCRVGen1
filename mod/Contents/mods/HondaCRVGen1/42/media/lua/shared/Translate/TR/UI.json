@@ -1,0 +1,5 @@
+{
+    "UI_CRV_Options_Name": "Honda CRV",
+    "UI_CRV_Options_EngineVolume": "CRV motor sesi seviyesi (%)",
+    "UI_CRV_Options_EngineVolume_Info": "CRV'nin kendi motor sesi, sadece senin için: 0 kapatır, 100 kaydedilmiş seviyedir. Sunucunun sandbox ses ayarı yine de geçerlidir."
+}

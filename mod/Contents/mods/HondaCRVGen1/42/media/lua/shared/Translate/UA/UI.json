@@ -1,0 +1,5 @@
+{
+    "UI_CRV_Options_Name": "Honda CRV",
+    "UI_CRV_Options_EngineVolume": "Гучність двигуна CRV (%)",
+    "UI_CRV_Options_EngineVolume_Info": "Власний звук двигуна CRV, лише для вас: 0 вимикає його, 100 — записаний рівень. Гучність із налаштувань сервера все одно діє."
+}

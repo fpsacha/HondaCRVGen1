@@ -1,0 +1,5 @@
+{
+    "UI_CRV_Options_Name": "Honda CRV",
+    "UI_CRV_Options_EngineVolume": "CRV 엔진 소리 크기 (%)",
+    "UI_CRV_Options_EngineVolume_Info": "나에게만 적용되는 CRV 전용 엔진 소리: 0은 끔, 100은 녹음된 크기입니다. 서버의 샌드박스 음량도 계속 적용됩니다."
+}

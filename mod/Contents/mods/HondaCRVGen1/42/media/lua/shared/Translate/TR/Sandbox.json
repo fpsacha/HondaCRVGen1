@@ -1,0 +1,13 @@
+{
+    "Sandbox_HondaCRVGen1": "Honda CRV (RD1)",
+    "Sandbox_HondaCRVGen1_ArmourStrength": "CRV zırh dayanıklılığı",
+    "Sandbox_HondaCRVGen1_ArmourStrength_tooltip": "CRV'nin hayatta kalma zırhının ne kadar dayanacağı. 1 = bir plaka ya da kafes, altındaki kapı veya cam kadar hasar kaldırır, böylece o parça yaklaşık iki kat uzun dayanır; 2 = zırh iki kat uzun dayanır; 0.5 = yarısı kadar.",
+    "Sandbox_HondaCRVGen1_FunctionSpawnRate": "CRV çıkma sıklığı (yüzde)",
+    "Sandbox_HondaCRVGen1_FunctionSpawnRate_tooltip": "CRV'nin garaj yollarında, banliyölerde, çiftliklerde, otoparklarda ve trafik sıkışıklıklarında ne sıklıkla çıkacağı. 100 modun normal oranıdır, 0 hiç çıkmaz.",
+    "Sandbox_HondaCRVGen1_FunctionAccessoryChance": "CRV aksesuar şansı (yüzde)",
+    "Sandbox_HondaCRVGen1_FunctionAccessoryChance_tooltip": "Çıkan bir CRV'de aksesuar bulunma şansını ölçekler (ön koruma demiri, port bagaj, cam korumaları, stepne kılıfı ve arazi için şnorkel, karter koruması, arka tampon, merdiven ve bidonlar). 100 normal, 0 çıplak araçlar. Piknik masası standart donanımdır.",
+    "Sandbox_HondaCRVGen1_FunctionLootRarity": "CRV ganimet çarpanı",
+    "Sandbox_HondaCRVGen1_FunctionLootRarity_tooltip": "CRV kitlerinin, zırhlarının, dergilerinin ve kullanım kılavuzlarının ganimet olarak ne sıklıkla bulunacağını çarpar. 1 normal, 0 asla, 4 dört kat daha sık.",
+    "Sandbox_HondaCRVGen1_PolishEngineVolume": "CRV motor katmanı ses seviyesi (yüzde)",
+    "Sandbox_HondaCRVGen1_PolishEngineVolume_tooltip": "Oyunun küçük araba motor sesinin üzerine binen, CRV'ye özel sentezlenmiş B20B katmanının yüksekliği. 0 kapatır."
+}

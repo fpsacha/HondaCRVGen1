@@ -1,0 +1,21 @@
+{
+    "ContextMenu_CRV_TakeTable": "Piknik masasını çıkar",
+    "ContextMenu_CRV_PutTable": "Piknik masasını yerine koy",
+    "ContextMenu_CRV_FoldFlat": "Arka koltukları yatır (düz yük zemini)",
+    "ContextMenu_CRV_FoldBed": "Arka koltukları yatağa çevir",
+    "ContextMenu_CRV_MakeBed": "Yatağı hazırla",
+    "ContextMenu_CRV_ClearBed": "Yatağı topla, yüke yer aç",
+    "ContextMenu_CRV_UnfoldBed": "Arka koltukları kaldır",
+    "ContextMenu_CRV_SleepInBed": "Yatakta uyu",
+    "ContextMenu_CRV_SleepOnBed": "Yatırılmış koltuklarda uyu (iyi yatak)",
+    "ContextMenu_CRV_Awning_Deploy": "Tenteyi aç",
+    "ContextMenu_CRV_Awning_Stow": "Tenteyi topla",
+    "ContextMenu_CRV_Function_LiftFloor": "Bagaj tabanını kaldır",
+    "ContextMenu_CRV_Function_BrowseManual": "Kullanım kılavuzuna göz at",
+    "ContextMenu_CRV_Lift_Menu": "Yükseltme kiti",
+    "ContextMenu_CRV_Lift_Alloy": "3 inç yükseltme kitini tak (EX alaşım jantlar)",
+    "ContextMenu_CRV_Lift_Steel": "3 inç yükseltme kitini tak (siyah çelik jantlar)",
+    "ContextMenu_CRV_Lift_Remove": "Yükseltme kitini sök",
+    "ContextMenu_CRV_Lift_ToSteel": "Siyah çelik jantlara geç",
+    "ContextMenu_CRV_Lift_ToAlloy": "EX alaşım jantlara geç"
+}
