@@ -1039,6 +1039,18 @@ def build(report=print):
     made.append(build_rear_plate(report))
     for tag in ("fl", "fr", "rl", "rr"):
         made.append(build_arch(tag, report))
+    # faces no camera sees out (BA.prune_hidden, optimization pass 2026-10-24), each piece against what it
+    # rides: the door plates and window meshes their door, the rear plate the flip-up glass (a level hinge),
+    # the arch guards the body. The back sheets' cells along a plate's edge, seen through the slit to the
+    # skin (round 5), have samples on that edge and stay
+    for ob in made:
+        n = ob.name
+        if n.startswith(("acc_armour_door_", "acc_armour_mesh_")):
+            BA.prune_hidden(ob, ("door_" + n[-2:],), report)
+        elif n == "acc_armour_rear_plate":
+            BA.prune_hidden(ob, ("trunk_top",), report, gate=True)
+        else:
+            BA.prune_hidden(ob, ("body",), report)
     _check_materials(made)
     report("FEATURE armour: %d objects, %d tris with everything fitted, every face on %s"
            % (len(made), sum(BA.tris(o) for o in made), "/".join(OWN_MATS)))

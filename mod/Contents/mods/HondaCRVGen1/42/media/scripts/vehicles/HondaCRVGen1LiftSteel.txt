@@ -80,7 +80,7 @@ module Base
 			engine = VehicleEngineSmallCar,
 			engineStart = VehicleEngineSmallCar,
 			engineTurnOff = VehicleEngineSmallCar,
-			horn = CRVGen1Horn,
+			horn = VehicleHornStandard,
 			ignitionFail = VehicleIgnitionFailSmallCar,
 		}
 
@@ -350,7 +350,12 @@ module Base
 
 		part TruckBed
 		{
-			itemType = Base.BigTrunk,
+			itemType = Base.BigTrunk;Base.NormalTrunk,
+			lua
+			{
+				create = HondaCRVGen1.Trunk.Create,
+				init = HondaCRVGen1.Trunk.Init,
+			}
 		}
 
 		part WindshieldRear
@@ -709,6 +714,189 @@ module Base
 				test = HondaCRVGen1.Acc.RearSeatAccess,
 				soundMap = ContainerPut VehicleCarseatTransferItem,
 				soundMap = ContainerTake VehicleCarseatTransferItem,
+			}
+		}
+
+		part SeatFrontLeft
+		{
+			table install
+			{
+				skills = Mechanics:1,
+				recipes = Basic Mechanics,
+			}
+			table uninstall
+			{
+				skills = Mechanics:1,
+				recipes = Basic Mechanics,
+			}
+		}
+		part SeatFrontRight
+		{
+			table install
+			{
+				skills = Mechanics:1,
+				recipes = Basic Mechanics,
+			}
+			table uninstall
+			{
+				skills = Mechanics:1,
+				recipes = Basic Mechanics,
+			}
+		}
+		part SeatRearLeft
+		{
+			table install
+			{
+				skills = Mechanics:1,
+				recipes = Basic Mechanics,
+			}
+			table uninstall
+			{
+				skills = Mechanics:1,
+				recipes = Basic Mechanics,
+			}
+		}
+		part SeatRearRight
+		{
+			table install
+			{
+				skills = Mechanics:1,
+				recipes = Basic Mechanics,
+			}
+			table uninstall
+			{
+				skills = Mechanics:1,
+				recipes = Basic Mechanics,
+			}
+		}
+		part GasTank
+		{
+			table install
+			{
+				skills = Mechanics:5,
+				recipes = Basic Mechanics,
+			}
+			table uninstall
+			{
+				skills = Mechanics:5,
+				recipes = Basic Mechanics,
+			}
+		}
+		part Muffler
+		{
+			table install
+			{
+				skills = Mechanics:5,
+				recipes = Basic Mechanics,
+			}
+			table uninstall
+			{
+				skills = Mechanics:5,
+				recipes = Basic Mechanics,
+			}
+		}
+		part BrakeFrontLeft
+		{
+			table install
+			{
+				skills = Mechanics:3,
+				recipes = Basic Mechanics,
+			}
+			table uninstall
+			{
+				skills = Mechanics:3,
+				recipes = Basic Mechanics,
+			}
+		}
+		part BrakeFrontRight
+		{
+			table install
+			{
+				skills = Mechanics:3,
+				recipes = Basic Mechanics,
+			}
+			table uninstall
+			{
+				skills = Mechanics:3,
+				recipes = Basic Mechanics,
+			}
+		}
+		part BrakeRearLeft
+		{
+			table install
+			{
+				skills = Mechanics:3,
+				recipes = Basic Mechanics,
+			}
+			table uninstall
+			{
+				skills = Mechanics:3,
+				recipes = Basic Mechanics,
+			}
+		}
+		part BrakeRearRight
+		{
+			table install
+			{
+				skills = Mechanics:3,
+				recipes = Basic Mechanics,
+			}
+			table uninstall
+			{
+				skills = Mechanics:3,
+				recipes = Basic Mechanics,
+			}
+		}
+		part SuspensionFrontLeft
+		{
+			table install
+			{
+				skills = Mechanics:3,
+				recipes = Basic Mechanics,
+			}
+			table uninstall
+			{
+				skills = Mechanics:3,
+				recipes = Basic Mechanics,
+			}
+		}
+		part SuspensionFrontRight
+		{
+			table install
+			{
+				skills = Mechanics:3,
+				recipes = Basic Mechanics,
+			}
+			table uninstall
+			{
+				skills = Mechanics:3,
+				recipes = Basic Mechanics,
+			}
+		}
+		part SuspensionRearLeft
+		{
+			table install
+			{
+				skills = Mechanics:3,
+				recipes = Basic Mechanics,
+			}
+			table uninstall
+			{
+				skills = Mechanics:3,
+				recipes = Basic Mechanics,
+			}
+		}
+		part SuspensionRearRight
+		{
+			table install
+			{
+				skills = Mechanics:3,
+				recipes = Basic Mechanics,
+			}
+			table uninstall
+			{
+				skills = Mechanics:3,
+				recipes = Basic Mechanics,
 			}
 		}
 
@@ -1279,13 +1467,13 @@ module Base
 			table install
 			{
 				time = 150,
-				test = Vehicles.InstallTest.Default,
+				test = HondaCRVGen1.Trunk.TableInstallTest,
 				complete = HondaCRVGen1.Acc.InstallComplete,
 			}
 			table uninstall
 			{
 				time = 150,
-				test = Vehicles.UninstallTest.Default,
+				test = HondaCRVGen1.Trunk.TableUninstallTest,
 				complete = HondaCRVGen1.Acc.UninstallComplete,
 			}
 			lua
@@ -1958,6 +2146,18 @@ module Base
 			{
 				file = HondaCRVGen1Acc_clutter_load3,
 			}
+			model InteriorClutterFold1
+			{
+				file = HondaCRVGen1Acc_clutter_fold1,
+			}
+			model InteriorClutterFold2
+			{
+				file = HondaCRVGen1Acc_clutter_fold2,
+			}
+			model InteriorClutterFold3
+			{
+				file = HondaCRVGen1Acc_clutter_fold3,
+			}
 			model InteriorClutterWell
 			{
 				file = HondaCRVGen1Acc_clutter_well,
@@ -2265,7 +2465,7 @@ module Base
 			specificItem = false,
 			itemType = Base.JerryCan,
 			mechanicRequireKey = false,
-			repairMechanic = true,
+			repairMechanic = false,
 			durability = 5,
 			parent = TrunkDoor,
 			table install
@@ -2299,7 +2499,7 @@ module Base
 			specificItem = false,
 			itemType = Base.JerryCan,
 			mechanicRequireKey = false,
-			repairMechanic = true,
+			repairMechanic = false,
 			durability = 5,
 			table install
 			{

@@ -164,13 +164,15 @@ Vector3f = { new = function() return setmetatable({ X = 0, Y = 0, Z = 0 }, V3) e
 function V3:x() return self.X end
 function V3:y() return self.Y end
 function V3:z() return self.Z end
--- vanilla's player:getNearVehicle(): the nearest vehicle of the cell within a few tiles (the polish scan)
+-- 42.21 IsoPlayer.getNearVehicle, its rules (bytecode): null while the player is IN a vehicle; otherwise the
+-- nearest car closer than 4 tiles (DistToSquared < 16) the player FACES (p.facingAway = true: turned away)
 function Player:getNearVehicle() return PLAYER_NEAR_VEHICLE(self) end
 function PLAYER_NEAR_VEHICLE(p)
-    local best, bd = nil, 10 * 10
+    if p:getVehicle() ~= nil or p.facingAway then return nil end
+    local best, bd = nil, 16
     for _, v in pairs(VEHICLES) do
         local dx, dy = v:getX() - p:getX(), v:getY() - p:getY()
-        if dx * dx + dy * dy <= bd then best, bd = v, dx * dx + dy * dy end
+        if dx * dx + dy * dy < bd then best, bd = v, dx * dx + dy * dy end
     end
     return best
 end
@@ -358,6 +360,21 @@ function Player:getSecondaryHandItem() return nil end
 function Player:getUsername() return self.name end
 function Player:isLocalPlayer() return true end
 function Player:getNearVehicle() return PLAYER_NEAR_VEHICLE(self) end   -- (again: Player was redefined above)
+-- sleep (the bed menus): lua_harness's sleep stubs, again on the redefined Player
+function Player:isAsleep() return self.asleep == true end
+function Player:setAsleep(b) self.asleep = b end
+function Player:getBedType() return self.bedType or "averageBed" end
+function Player:setBedType(t) self.bedType = t end
+function Player:getStats()
+    local p = self
+    return { get = function(_, stat) if stat == "FATIGUE" then return p.fatigue or 0.6 end return 0 end,
+             getNumVisibleZombies = function() return p.zombies or 0 end,
+             getNumChasingZombies = function() return 0 end, getNumVeryCloseZombies = function() return 0 end }
+end
+function Player:getMoodles() local p = self return { getMoodleLevel = function(_, m) return (p.moodles or {})[m] or 0 end } end
+function Player:getHoursSurvived() return self.hours or 100 end
+function Player:getLastHourSleeped() return self.lastSlept or 0 end
+function Player:getSleepingTabletEffect() return self.tablet or 0 end
 function Player:getCurrentSquare() return getSquare(self.x, self.y, 0) end
 function Player:getSquare() return getSquare(self.x, self.y, 0) end
 
@@ -517,6 +534,8 @@ function Veh:doDamageOverlay() end
 function Veh:isInArea(area, chr) return chr.area == area end
 function Veh:isSeatOccupied(seat) return self.seats[seat] ~= nil end
 function Veh:getCharacter(seat) return self.seats[seat] end
+function Veh:isSeatInstalled(seat) return true end
+function Veh:isStopped() return not self.moving end
 function Veh:getMaxPassengers() return 4 end
 function Veh:getChoosenParts() return self.chosen end
 function Veh:getAngleX() return self.ax end
@@ -742,6 +761,9 @@ ENTERED = {}
 function ISVehicleMenu.onEnter(playerObj, vehicle, seat) table.insert(ENTERED, seat) end
 function ISVehicleMenu.getVehicleToInteractWith(playerObj) return playerObj:getVehicle() or RADIAL_TARGET end
 ISVehicleMenu.showRadialMenuOutside = VANILLA_RADIAL_OUTSIDE
+ISVehicleMenu.showRadialMenu = VANILLA_RADIAL_INSIDE
+function ISVehicleMenu.onSwitchSeat(playerObj, seatTo) ISVehicleMenu.switchedTo = seatTo end
+function ISVehicleMenu.onSleep(playerObj, vehicle) end
 ''',
     "client/Vehicles/ISUI/ISCarMechanicsOverlay.lua": r'''
 ISCarMechanicsOverlay = { CarList = {}, PartList = { EngineDoor = { img = "hood", vehicles = {} } } }
@@ -1407,6 +1429,28 @@ def radial_menus(g):
     g.run("PLAYER.vehicle = nil")
 
 
+def polish_and_inside(g):
+    """With every file loaded: the engine layer plays for the driver (H-LUA-1: getNearVehicle is nil in a car, the
+    fake now answers as the game) and on foot within RANGE whatever the facing; the in-car radial carries the fold
+    actions (every wrapper chained over vanilla's showRadialMenu)."""
+    count = "(function() local n = 0 for _ in pairs(HondaCRVGen1.Polish.cars) do n = n + 1 end return n end)()"
+    g.run("v.running = true; PLAYER.vehicle = v; PLAYER.x, PLAYER.y = v.x, v.y")
+    ok, r = g.try_run("TICK(31)")
+    check(ok and g.eval(count) == 1 and g.eval("HondaCRVGen1.Polish.cars[v] ~= nil"),
+          "the driver of the running CR-V hears its engine layer (%s, %s cars)" % (r, g.eval(count)))
+    g.run("PLAYER.vehicle = nil; PLAYER.x = v.x + 8; PLAYER.facingAway = true; TICK(31)")
+    check(g.eval(count) == 1, "on foot 8 tiles away, turned away: still heard")
+    g.run("v.running = false; TICK(31)")
+    check(g.eval(count) == 0, "engine off: stopped")
+    g.run("PLAYER.facingAway = nil; PLAYER.x, PLAYER.y = 101, 100")
+    g.run("RADIAL = newRadial(); PLAYER.vehicle = v")
+    ok, r = g.try_run("ISVehicleMenu.showRadialMenu(PLAYER)")
+    texts = g.eval("RADIAL:texts()") if ok else r
+    check(ok and texts.startswith("IGUI_SwitchSeat,") and "ContextMenu_CRV_FoldBed" in texts and "ContextMenu_CRV_FoldFlat" in texts,
+          "the in-car radial: vanilla's slices, then the fold actions (%s)" % texts)
+    g.run("RADIAL = newRadial(); PLAYER.vehicle = nil; QUEUE = {}")
+
+
 BAY_TICKS = {"grace": 4000 // 16 + 2, "hold": 3000 // 16 + 2}     # HondaCRVGen1.Bay.OPEN_GRACE / CLOSE_HOLD in frames
 
 
@@ -1430,9 +1474,9 @@ def engine_bay_sp(g):
     check(g.eval("vis(v, 'CRVEngineBay')") == "EngineBay", "engine bay: the hold does not run out while the game is paused")
     g.try_run("PAUSED = false; TICK(%d)" % BAY_TICKS["hold"])
     check(g.eval("vis(v, 'CRVEngineBay')") == "EngineBayLow", "engine bay: the stand-in once the hood is down")
-    g.try_run("v.parts.EngineDoor:setInventoryItem(nil); TICK(1)")
+    g.try_run("v.parts.EngineDoor:setInventoryItem(nil); TICK(HondaCRVGen1.Bay.EVERY)")
     check(g.eval("vis(v, 'CRVEngineBay')") == "EngineBay", "engine bay: shown with the hood removed")
-    g.try_run("v.parts.EngineDoor:setInventoryItem(newItem('Base.EngineDoor1')); TICK(%d)" % BAY_TICKS["hold"])
+    g.try_run("v.parts.EngineDoor:setInventoryItem(newItem('Base.EngineDoor1')); TICK(%d + HondaCRVGen1.Bay.EVERY)" % BAY_TICKS["hold"])
     check(g.eval("vis(v, 'CRVEngineBay')") == "EngineBayLow", "engine bay: the stand-in again with a shut hood refitted")
     calls = g.eval("v.parts.CRVEngineBay.calls")
     g.try_run("TICK(50)")
@@ -1515,7 +1559,7 @@ def engine_bay_mp(net, S, A, B):
     check(ok and S.eval("v.parts.CRVEngineBay.calls") == 0, "server: the open completes, still nothing drawn (%s)" % r)
     net.pump()
     for c in (A, B):
-        c.try_run("TICK(1)")
+        c.try_run("TICK(HondaCRVGen1.Bay.EVERY)")
         check(c.eval("vis(v, 'CRVEngineBay')") == "EngineBay", "%s: engine bay shown once the open door is synced" % c.name)
     S.run("v.parts.EngineDoor.door.open = false; v:transmitPartDoor(v.parts.EngineDoor)")
     net.pump()
@@ -1527,7 +1571,7 @@ def engine_bay_mp(net, S, A, B):
     S.run("v.parts.EngineDoor:setInventoryItem(nil); v:transmitPartItem(v.parts.EngineDoor)")
     net.pump()
     for c in (A, B):
-        c.try_run("TICK(1)")
+        c.try_run("TICK(HondaCRVGen1.Bay.EVERY)")
         check(c.eval("vis(v, 'CRVEngineBay')") == "EngineBay", "%s: engine bay shown with the hood removed" % c.name)
     S.run("v.parts.EngineDoor:setInventoryItem(newItem('Base.EngineDoor1')); v:transmitPartItem(v.parts.EngineDoor)")
     net.pump()
@@ -1585,6 +1629,7 @@ def single_player():
     action_params(g)
     engine_bay_sp(g)
     cabin_sp(g)
+    polish_and_inside(g)
 
     # armour plate + window mesh
     ok, r = g.try_eval("{install(PLAYER, v, 'CRVArmourDoorFrontLeft', 'Base.CRVGen1_ArmourDoorFront')}")
@@ -1636,8 +1681,8 @@ def single_player():
           % g.eval("vis(v, 'CRVAwning')"))
     g.run("ACT = nil")
     # fold seats, cargo, floor
-    g.run("f = ISCRVFoldSeats:new(PLAYER, v, true)")
-    ok, r = g.try_eval("f:isValid() and f:complete() and HondaCRVGen1.Shared.isBed(v)")
+    g.run("f = ISCRVFoldSeats:new(PLAYER, v, true, 'cargo')")      # a load floor (a bed's floor is shut, empty)
+    ok, r = g.try_eval("f:isValid() and f:complete() and HondaCRVGen1.Shared.isCargo(v)")
     check(ok and r is True, "rear seats folded (%s)" % r)
     g.run("v.parts.CRVFunctionCargo.cont:AddItem(newItem('Base.Tent', 8))")
     g.run("v.parts.TrunkDoor.door.open = true; lf = ISCRVFunctionLiftFloor:new(PLAYER, v)")
@@ -1665,7 +1710,7 @@ def single_player():
     check(g.eval("vis(n, 'CRVGuardFrontLeft')") == "ArmourMesh", "lifted car: mesh only (%s)" % g.eval("vis(n, 'CRVGuardFrontLeft')"))
     check(g.eval("vis(n, 'CRVRoofRack')") == "CRVRoofRack,RackLoad2", "lifted car: rack load 2 (%s)" % g.eval("vis(n, 'CRVRoofRack')"))
     check(g.eval("vis(n, 'CRVEngineBay')") == "EngineBayLow", "lifted car: the engine bay's stand-in (%s)" % g.eval("vis(n, 'CRVEngineBay')"))
-    check(g.eval("HondaCRVGen1.Shared.isBed(n)") is True and g.eval("n.parts.CRVFunctionCargo.cont:count()") == 1,
+    check(g.eval("HondaCRVGen1.Shared.isCargo(n)") is True and g.eval("n.parts.CRVFunctionCargo.cont:count()") == 1,
           "lifted car: folded, the load floor's cargo kept")
     check(g.eval("HondaCRVGen1.Function.isFloorFound(n)") is True and g.eval("n.parts.CRVFunctionUnderfloor.cont:count()") == 1,
           "lifted car: floor found, the under-floor contents kept")

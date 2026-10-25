@@ -40,6 +40,17 @@ function SHOWN(v)
     for _, m in ipairs(p.models) do t[#t + 1] = p.visible[m] and "1" or "0" end
     return table.concat(t)
 end
+-- the full part (2026-10-24): the folded load floor's pieces and the function feature's two containers (no item):
+-- the folded load floor (CRVFunctionCargo, 60) and the under-floor storage (CRVFunctionUnderfloor, 10). SHOWN reads
+-- "trunk 1-3 | fold 1-3 | well"
+function newCRV2(id)
+    local v = newCRV(id)
+    v:addPart("CRVFunctionCargo").cont = newContainer(60, 0)
+    v:addPart("CRVFunctionUnderfloor").cont = newContainer(10, 0)
+    v.parts.CRVClutterCargo.models = { "InteriorClutter1", "InteriorClutter2", "InteriorClutter3", "InteriorClutterFold1",
+                                       "InteriorClutterFold2", "InteriorClutterFold3", "InteriorClutterWell" }
+    return v
+end
 '''
 
 FAILS = []
@@ -208,9 +219,117 @@ def multiplayer():
           "table and fold follow on both clients; a streamed-in car shows at init")
 
 
+def well_follows_storage():
+    """H-FEATURES-8 (2026-10-24): the well blanket followed the TRUNK's fill: a well holding the under-floor storage's
+    things showed nothing with an empty trunk. It now shows while the table is out and the storage holds something
+    (State key clutter_well, derived on the authoritative side), or the trunk is loaded (its pieces stand partly over
+    the open well); single player and a server with a client."""
+    sp = side("sp", player="tester")
+    C = "HondaCRVGen1.Clutter"
+    sp.run("v = newCRV2(1); %s.Init(v, v.parts.CRVClutterCargo); v.parts.CRVPicnicTable:setInventoryItem(nil); TICK(30)" % C)
+    check(sp.eval("SHOWN(v)") == "0000000", "table out, empty well and trunk: nothing (%s)" % sp.eval("SHOWN(v)"))
+    sp.run("v.parts.CRVFunctionUnderfloor.cont.items = 2; v.parts.CRVFunctionUnderfloor.cont.weight = 1.5; TICK(15)")
+    check(sp.eval("HondaCRVGen1.State.get(v, 'clutter_well')") is True, "the storage holds something: clutter_well")
+    check(sp.eval("SHOWN(v)") == "0000001", "table out, things in the well, empty trunk: the blanket (%s)" % sp.eval("SHOWN(v)"))
+    sp.run("v.parts.CRVPicnicTable:setInventoryItem(newItem('Base.CRVGen1_PicnicTable')); TICK(30)")
+    check(sp.eval("SHOWN(v)") == "0000000", "table back over the well: hidden")
+    sp.run("v.parts.CRVPicnicTable:setInventoryItem(nil); TICK(30); v.parts.CRVFunctionUnderfloor.cont.items = 0; TICK(15)")
+    check(sp.eval("SHOWN(v)") == "0000000" and sp.eval("v.parts.CRVClutterCargo.md.crv_clutter_well") is None,
+          "the well emptied: hidden, the key back to its default")
+    sp.run("v.parts.TruckBed.cont.weight = 30; TICK(15)")
+    check(sp.eval("SHOWN(v)") == "1100001", "empty well, loaded trunk: the blanket under the load (nothing floats)")
+    sp.run("v.parts.TruckBed.cont.weight = 0; v.parts.CRVFunctionUnderfloor.cont.items = 1; HondaCRVGen1.Shared.setBed(v, true); TICK(15)")
+    check(sp.eval("SHOWN(v)") == "0000000", "the bed made up over it: nothing")
+    sp.run("HondaCRVGen1.Shared.setBed(v, false)")
+    # multiplayer: the server derives it, the client draws it
+    net = Net()
+    server = side("server", net, seed=21)
+    a = side("client", net, player="alice", seed=22)
+    for s in (server, a):
+        s.run("v = newCRV2(5); v.parts.CRVPicnicTable.item = nil; %s.Init(v, v.parts.CRVClutterCargo)" % C)
+    server.run("v.parts.CRVFunctionUnderfloor.cont.items = 3; TICK(15)")
+    net.pump()
+    check(a.eval("SHOWN(v)") == "0000001", "alice: the server's storage with things in it shows the blanket (%s)" % a.eval("SHOWN(v)"))
+    a.run("v.parts.CRVFunctionUnderfloor.cont.items = 0; TICK(60)")
+    check(a.eval("SHOWN(v)") == "0000001", "alice's own container copy changes nothing")
+    check(server.eval("v.parts.CRVClutterCargo.calls") == 0, "the server draws nothing")
+    print("WELL: the blanket follows the under-floor storage (or the trunk's load under which it lies), SP and MP")
+
+
+def fold_load():
+    """I-FEATURES-4 (2026-10-24): what lies on the folded load floor (CRVFunctionCargo, 60) shows on the folded seats in
+    fold mode "cargo": InteriorClutterFold1..3 at 10 / 40 / 75 %, hidden while the seats are up or made up as a bed."""
+    sp = side("sp", player="tester")
+    C = "HondaCRVGen1.Clutter"
+    S = "HondaCRVGen1.Shared"
+    sp.run("v = newCRV2(1); %s.Init(v, v.parts.CRVClutterCargo); %s.setFold(v, true, 'cargo')" % (C, S))
+    check(sp.eval("SHOWN(v)") == "0000000", "folded flat, empty: nothing")
+    for kg, shown in ((5.0, "0000000"), (6.5, "0001000"), (24.5, "0001100"), (45.5, "0001110"), (60.0, "0001110")):
+        sp.run("v.parts.CRVFunctionCargo.cont.weight = %r; TICK(15)" % kg)
+        check(sp.eval("SHOWN(v)") == shown, "%.1f kg of 60 on the load floor: %s (got %s)" % (kg, shown, sp.eval("SHOWN(v)")))
+    check(sp.eval("v.parts.CRVClutterCargo.md.crv_clutter_fold") == 3, "the state lives in the part's mod data")
+    sp.run("v.parts.CRVFunctionCargo.cont.weight = 44.5; TICK(15)")
+    check(sp.eval("HondaCRVGen1.State.get(v, 'clutter_fold')") == 3, "hysteresis on the way down (74 %% stays 3)")
+    sp.run("v.parts.TruckBed.cont.weight = 30; TICK(15)")
+    check(sp.eval("SHOWN(v)") == "1101110", "both loads: the trunk's and the folded floor's (%s)" % sp.eval("SHOWN(v)"))
+    sp.run("%s.setFold(v, true, 'bed')" % S)
+    check(sp.eval("SHOWN(v)") == "0000000", "made up as a bed: nothing")
+    sp.run("%s.setFold(v, true, 'cargo')" % S)
+    check(sp.eval("SHOWN(v)") == "1101110", "back to a load floor: both again")
+    sp.run("%s.setBed(v, false)" % S)
+    check(sp.eval("SHOWN(v)") == "1100000", "seats up: the folded floor's pieces go, the trunk's stay")
+    sp.run("calls0 = v.parts.CRVClutterCargo.calls; TICK(300)")
+    check(sp.eval("v.parts.CRVClutterCargo.calls - calls0") == 0, "idle ticks make no setModelVisible calls")
+    net = Net()
+    server = side("server", net, seed=31)
+    a = side("client", net, player="alice", seed=32)
+    for s in (server, a):
+        s.run("v = newCRV2(5); %s.Init(v, v.parts.CRVClutterCargo)" % C)
+    server.run("%s.setFold(v, true, 'cargo'); v.parts.CRVFunctionCargo.cont.weight = 30; TICK(15)" % S)
+    net.pump()
+    check(a.eval("SHOWN(v)") == "0001100", "alice: the server's folded floor at state 2 (%s)" % a.eval("SHOWN(v)"))
+    server.run("%s.setFold(v, true, 'bed')" % S)
+    net.pump()
+    check(a.eval("SHOWN(v)") == "0000000", "alice: the bed made up on the server hides it")
+    print("FOLD LOAD: the folded load floor's pieces at 10/40/75 %, cargo mode only, SP and MP")
+
+
+def prune_shown():
+    """H-LUA-3 (2026-10-24): C.shown kept every CR-V a client ever drew (only re-initialising the same id replaced an
+    entry). The State poll now drops the cars that left the world (State.prunable)."""
+    s = side("client", Net(), player="bob")
+    C = "HondaCRVGen1.Clutter"
+    s.run("for id = 1, 50 do local v = newCRV2(id); %s.Init(v, v.parts.CRVClutterCargo); v.removed = true; VEHICLES[id] = nil end" % C)
+    s.run("keep = newCRV2(99); %s.Init(keep, keep.parts.CRVClutterCargo)" % C)
+    n0 = s.eval("(function() local n = 0 for _ in pairs(%s.shown) do n = n + 1 end return n end)()" % C)
+    s.run("TICK(HondaCRVGen1.State.POLL)")
+    n1 = s.eval("(function() local n = 0 for _ in pairs(%s.shown) do n = n + 1 end return n end)()" % C)
+    check(n0 == 51 and n1 == 1 and s.eval("%s.shown[99] ~= nil" % C), "50 cars left the world: dropped by the poll (%d -> %d)" % (n0, n1))
+    print("PRUNE: Clutter.shown loses the cars that left the world")
+
+
+def parts_reset_on_init():
+    """I-DIFF-1 (mutation clutter-parts-reset): the authoritative side keeps the car's parts and their containers
+    (C.cars[id].parts, perf 2026-10-24); a part init (the parts re-made, e.g. the car reloaded under the same id and
+    object) must look them up again, or the fill follows the old, dead trunk container."""
+    sp = side("sp", player="tester")
+    C = "HondaCRVGen1.Clutter"
+    sp.run("v = newCRV(1); %s.Init(v, v.parts.CRVClutterCargo); v.parts.TruckBed.cont.weight = 30; TICK(15)" % C)
+    check(sp.eval("HondaCRVGen1.State.get(v, 'clutter_load')") == 2, "parts reset: the first trunk followed (state 2)")
+    sp.run("old = v.parts.TruckBed.cont; local t = v:addPart('TruckBed'); t.item = newItem('Base.NormalTrunk'); "
+           "t.cont = newContainer(55, 50); %s.Init(v, v.parts.CRVClutterCargo); old.weight = 0; TICK(30)" % C)
+    check(sp.eval("HondaCRVGen1.State.get(v, 'clutter_load')") == 3,
+          "parts reset: after the part init the new trunk (50 of 55 kg) is followed, not the old container (got %s)"
+          % sp.eval("HondaCRVGen1.State.get(v, 'clutter_load')"))
+
+
 def main():
     single_player()
+    parts_reset_on_init()
     multiplayer()
+    well_follows_storage()
+    fold_load()
+    prune_shown()
     if FAILS:
         print("%d FAIL(s)" % len(FAILS))
         sys.exit(1)

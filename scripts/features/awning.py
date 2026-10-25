@@ -416,19 +416,76 @@ BAKE_MAT_WEIGHTS = {"AccAwningBag": 1.0, "AccAwningCanvas": 1.0, "AccAwningAlu":
 # icon and the mechanics overlay
 
 
+ICON_SQUASH = 0.26          # the 2.8 m bag shortened to ~0.73 m: about 4.5 x its section, so it stays a fat roll in 32 px
+# R2-VIS-2 (2026-10-25): drawn with the bag's sheet, the all-dark roll was lifted by gen_icons' levels (a part's
+# brightest tenth is raised to MIN_HI) into a light blue-grey beam. The icon now paints the bag flat in its canvas
+# colour (matte: no studio glint on the top) with the end caps black, and wraps it in light webbing straps at the
+# model's STRAPS_Y: the straps carry the highlights the levels look for, so the canvas stays dark.
+ICON_CANVAS = (0.12, 0.12, 0.13)        # stored sRGB: the bag's black PVC canvas (its top face ~0.18 in the icon)
+ICON_CAPS = (0.06, 0.06, 0.065)         # the rubber end caps
+ICON_STRAP = (0.62, 0.62, 0.60)         # grey webbing, read at 32 px
+ICON_STRAP_W = 0.060                    # m on the squashed roll (~2.5 icon px)
+ICON_STRAP_OUT = 0.005                  # m proud of the bag's skin
+
+
 def _icon_scene(ic):
-    """The awning deployed (bag, canopy, poles in place), from the open side: what the item is for."""
+    """The item as it is carried: the rolled awning in its black canvas bag (the stowed model, brackets off),
+    laid diagonally and shortened along its length so its section, end caps and straps survive the 32 px
+    reduction. (The deployed canopy on its poles read as a second picnic table.)"""
+    import bmesh
+    import build_accessories as BA
+    ob = ic.copy(BAG, squash=ICON_SQUASH)
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    bmesh.ops.delete(bm, geom=[f for f in bm.faces if f.material_index == STEEL], context='FACES')
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context='VERTS')
+    bm.to_mesh(ob.data)
+    bm.free()
+    me = ob.data
+    me.materials.clear()
+    for i, _name in enumerate(MATS):                  # flat colours by the bag's own material slots
+        mat = ic.flat_material("icon_awning_%d" % i, ICON_CAPS if i == RUBBER else ICON_CANVAS)
+        mat.roughness, mat.metallic = 1.0, 0.0       # canvas, not paint: Workbench's specular reads these
+        me.materials.append(mat)
+    me.update()
+    # the straps: bands round the bag's section at STRAPS_Y, built on the car and put through copy()'s own
+    # transform (its centring and its squash along the parts' principal axis, which the brackets tilt off y)
     import bpy
-    out = []
-    for n in (BAG, CANOPY, POLES):
-        ob = bpy.data.objects[n]
-        pts = [ob.matrix_world @ v.co for v in ob.data.vertices]
-        c = sum(pts, pts[0] * 0.0) / len(pts)
-        out.append(ic.copy(n, at=tuple(c)))
-    return out
+    import numpy as np
+    src = bpy.data.objects[BAG]
+    pts = np.array([tuple(src.matrix_world @ v.co) for v in src.data.vertices])
+    c = pts.mean(0)
+    ax = np.linalg.eigh((pts - c).T @ (pts - c))[1][:, 2]
+    m3 = np.eye(3) + (ICON_SQUASH - 1.0) * np.outer(ax, ax)
+    a, b = (BAG_X[1] - BAG_X[0]) / 2.0, (BAG_Z[1] - BAG_Z[0]) / 2.0
+    xc, zc = (BAG_X[0] + BAG_X[1]) / 2.0, (BAG_Z[0] + BAG_Z[1]) / 2.0
+    sec = BA._rr(a + ICON_STRAP_OUT, b + ICON_STRAP_OUT, BAG_R + ICON_STRAP_OUT, 2)
+    half = ICON_STRAP_W / 2.0 / ICON_SQUASH            # its width before the squash
+    verts, faces, mids = [], [], []
+    for ys in STRAPS_Y:
+        base, n = len(verts), len(sec)
+        for yy in (ys - half, ys + half):
+            w = np.array([(xc + x, yy, zc + z) for x, z in sec])
+            verts += [tuple(p) for p in (w - c) @ m3.T]
+        mids.append(m3 @ (np.array([xc, ys, zc]) - c))
+        faces += [(base + j, base + (j + 1) % n, base + n + (j + 1) % n, base + n + j) for j in range(n)]
+    straps = ic._object("icon_awning_straps", verts, faces, ICON_STRAP)
+    straps.data.materials[0].roughness = 1.0
+    sm = bmesh.new()                                  # outward normals (the icons cull back faces)
+    sm.from_mesh(straps.data)
+    for f in sm.faces:
+        fc = f.calc_center_median()
+        m = mids[f.index // len(sec)]
+        r = np.array(tuple(fc)) - m
+        r -= ax * float(r @ ax)
+        if float(np.array(tuple(f.normal)) @ r) < 0.0:
+            f.normal_flip()
+    sm.to_mesh(straps.data)
+    sm.free()
+    return [ob, straps]
 
 
-ICONS = {ITEM_ID: (_icon_scene, 300.0, 28.0)}
+ICONS = {ITEM_ID: (_icon_scene, 295.0, 40.0)}
 
 # the right-hand column between the front wheel's frames and the front window guard's (sheet rows ~228-264, x
 # 221-257 are free; the car's right is the sheet's right), a leader to the roof's right edge

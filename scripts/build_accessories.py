@@ -1625,6 +1625,127 @@ def _guard_lower(bm, name, c, n, u, v, glass, lift, bar, out, bar_us):
 # ----------------------------------------------------------------------------------------------
 
 
+PRUNE_STEP, PRUNE_MAX_DIV = 0.0025, 40      # prune_hidden's fine grid: a sample every 2.5 mm, at most 40 a side
+
+
+def prune_hidden(ob, occluders, report=print, gate=False):
+    """Delete the faces of accessory ob that no camera can ever see (optimization pass 2026-10-24): the backs
+    and ends of bars and plates pressed against the body or a door skin, the insides of brackets, the faces
+    of a closed solid buried in another of its pieces. The cameras are bay.visibility's (the game's pitch all
+    round, the low and steep third-person ones, the seats and rings of eyes round the car); the occluders
+    are ob itself and the named objects, which must move with it: "body" for a part fixed to the car, its
+    own door for a part on a door (a door turns about an upright hinge, so the elevations stay those of the
+    camera set; the azimuths cover any angle), its gate for a part on the gate (gate True: the gate turns
+    about a level hinge, so the rays go in every direction, below the horizon too). Never another fitted
+    part: each part may be fitted alone. A face is kept if a ray from its centre, from 98 % of the way to
+    any corner or edge middle, or from any point of a 2.5 mm grid over it (0.6 mm off the face) reaches any
+    camera, passing through the faces it meets from behind (the game culls them): a face seen only through
+    the slit between a plate's edge and the skin (the armour's back sheets, round 5) has samples on that
+    edge. pzview's leak counts are the acceptance check. Returns the tris removed."""
+    import bmesh
+    from bay import visibility as V
+    names = tuple(n for n in occluders if bpy.data.objects.get(n) is not None)
+    keep_occ = V.OCCLUDERS
+    V.OCCLUDERS = names
+    try:
+        tree, (lo, hi) = V._occluders([ob])
+    finally:
+        V.OCCLUDERS = keep_occ
+    far = (hi - lo).length * 2
+    dirs = []
+    for el, step in V.PARALLEL:
+        for sgn in ((1.0, -1.0) if gate else (1.0,)):
+            e = math.radians(el) * sgn
+            for az in range(0, 360, step):
+                a = math.radians(az)
+                dirs.append(Vector((math.cos(e) * math.cos(a), math.cos(e) * math.sin(a), math.sin(e))))
+    eyes = [] if gate else V._eyes(lo, hi)             # a gate's eyes move with it: the full sphere stands in
+    M = ob.matrix_world
+    R = M.to_3x3()
+    me = ob.data
+    def clear(q, d, dist):
+        """Nothing the game draws between q and the camera along d: a face hit from its front (as the
+        camera sees it: its normal along d) blocks; one hit from behind is culled in game (Model.DrawVehicle
+        culls always) and the ray goes on. The scratch build of 2026-10-24 counted every hit as a blocker
+        and dropped hitch and can-bracket faces the camera sees past the open shell's culled backs (58-114
+        leak px)."""
+        for _i in range(24):
+            loc, nrm, _idx, t = tree.ray_cast(q, d, dist)
+            if loc is None:
+                return True
+            if nrm.dot(d) > 0.0:
+                return False
+            q = loc + d * 1e-4
+            dist -= t + 1e-4
+            if dist <= 0.0:
+                return True
+        return False
+
+    def seen(pts, n):
+        for q in pts:
+            q = q + n * V.LIFT
+            for d in dirs:
+                if n.dot(d) > 0.0 and clear(q, d, far):
+                    return True
+            for e in eyes:
+                v = e - q
+                L = v.length
+                v /= L
+                if n.dot(v) > 0.0 and clear(q, v, L):
+                    return True
+        return False
+
+    def grid(corners):
+        """Points over the face every ~PRUNE_STEP (barycentric grids on its fan triangles), corners and
+        edges included: a face seen only through a slit (the hitch receiver's mouth, the can bracket's
+        back, 2026-10-24 scratch build: 58-114 leak px with the sparse samples alone) has samples there."""
+        out = []
+        for i in range(1, len(corners) - 1):
+            a, b, c = corners[0], corners[i], corners[i + 1]
+            k = max(2, min(PRUNE_MAX_DIV, int(max((b - a).length, (c - b).length, (a - c).length) / PRUNE_STEP) + 1))
+            for u in range(k + 1):
+                for v in range(k + 1 - u):
+                    w = k - u - v
+                    out.append((a * u + b * v + c * w) / k)
+        return out
+
+    hidden = []
+    for p in me.polygons:
+        n = (R @ p.normal).normalized()
+        c = M @ p.center
+        corners = [M @ me.vertices[i].co for i in p.vertices]
+        mids = [(corners[i] + corners[(i + 1) % len(corners)]) / 2 for i in range(len(corners))]
+        if seen([c] + [c.lerp(x, 0.98) for x in corners + mids], n):
+            continue
+        # every face the quick samples call hidden is tried again on a fine grid before it goes
+        if seen([c.lerp(x, 0.995) for x in grid(corners)], n):
+            continue
+        hidden.append(p.index)
+    if not hidden:
+        report("  %-26s no hidden faces (occluders %s)" % (ob.name, "/".join(names) or "itself"))
+        return 0
+    removed = sum(len(me.polygons[i].vertices) - 2 for i in hidden)
+    before = tris(ob)
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bm.faces.ensure_lookup_table()
+    bmesh.ops.delete(bm, geom=[bm.faces[i] for i in hidden], context='FACES_ONLY')
+    loose = [v for v in bm.verts if not v.link_faces]
+    if loose:
+        bmesh.ops.delete(bm, geom=loose, context='VERTS')
+    bm.to_mesh(me)
+    bm.free()
+    me.update()
+    report("  %-26s %d -> %d tris: %d faces no camera sees removed (occluders %s%s)"
+           % (ob.name, before, tris(ob), len(hidden), "/".join(names) or "itself", ", gate" if gate else ""))
+    return removed
+
+
+# what each accessory of this file is pruned against (prune_hidden): the object it rides with
+GUARD_PRUNE = {"acc_guard_fl": ("door_fl",), "acc_guard_fr": ("door_fr",), "acc_guard_rl": ("door_rl",),
+               "acc_guard_rr": ("door_rr",), "acc_guard_ws": ("body",), "acc_guard_rear": ("trunk_top",)}
+
+
 def build(report=print):
     if bpy.context.object and bpy.context.object.mode != 'OBJECT':
         bpy.ops.object.mode_set(mode='OBJECT')
@@ -1632,6 +1753,15 @@ def build(report=print):
     made += build_rack_loads(report, made[1])              # one state shows at a time; the total counts all three
     for name in GUARDS:
         made.append(build_guard(name, report))
+    # hidden faces out: the bull bar and the rack on the body, each guard against what it rides (the spare
+    # cover keeps its own: its lining and back disc are there for rays the samples could miss, ACC-1)
+    for ob in made:
+        if ob is None:
+            continue
+        if ob.name in ("acc_bullbar", "acc_roofrack"):
+            prune_hidden(ob, ("body",), report)
+        elif ob.name in GUARD_PRUNE:
+            prune_hidden(ob, GUARD_PRUNE[ob.name], report, gate=ob.name == "acc_guard_rear")
     cover = build_spare_cover(report)
     if cover is not None:
         made.append(cover)

@@ -44,6 +44,7 @@ Texel-sized constants here (DECLUTTER) are in SHEET texels and scaled to the bak
 size (SS 1) composes as before.
 """
 import argparse
+import json
 import os
 import sys
 
@@ -202,6 +203,292 @@ def reduce_zones(img, k):
     best = np.take_along_axis(blk, score.argmax(-1)[..., None], -1)[..., 0]
     out = np.stack([(best >> 16) & 255, (best >> 8) & 255, best & 255], axis=-1).astype(np.uint8)
     return Image.fromarray(out)
+
+
+# Lamp guard (bug wave 1, H-VISUAL-1, 2026-10-24). The game shrinks the 2048 Mask to the player's Vehicle
+# Texture Size (256 / 512 default / 1024 / 2048) by repeated 2 x 2 integer averages (ImageData.generateMipMaps),
+# then samples it bilinearly; the shader lights a fragment only where that sample lies within 0.01 of a lamp
+# zone's colour. Every averaged block or bilinear footprint that straddles a lamp zone and anything else (the
+# body round the lens, the tail / stop split inside the lens) is no zone: the lit tail lamps drew dark
+# squiggles at 512 (85.5 % of lamp texels kept their zone; 68.5 % at 256). lamp_guard() makes the Mask round
+# every lit lens whole LAMP_GUARD_CAP blocks (sheet / 256 = 8 texels at 2048): every block holding a lit
+# texel, and the ring of blocks round it (the bilinear footprint at the coarsest cap), carries ONE lamp zone
+# throughout. A pure block averages to itself at every cap, so the lens keeps its zone at 2048 down to 256.
+#   * (wave 1, off since bug wave 3: LAMP_ONE_ZONE False) one lamp zone per lens: bake_atlas splits the D-pillar tail lens at TAIL_STOP_Z, upper half
+#     stop_*, lower half lights_*t (2026-10-17, so braking lit the cluster). Any edge between two zones inside a
+#     lit lens is dark at every cap (a bilinear sample between two zone colours matches neither); after the
+#     guard it still drew a dark blotch across the lens at 512 and 256 (pzview --lights tail,brake --night).
+#     So a lit lens (8-connected texels with alpha >= LAMP_GUARD_ALPHA) holding a tail zone takes that side's
+#     tail zone on its stop texels too. The game has no zone lit by both (BaseVehicle lights stop_* from
+#     stoplightsOn alone), so the mod's shader lights a tail zone as a combined stop / tail lamp: dimmed
+#     (gen_shaders.TAIL_LEVEL) with the lights, full while braking (gen_shaders LAMP_RULE). The tail zone, not
+#     the stop zone, because Project Viewpoint places the car's rear lamps from the tail zones and glows a lens
+#     by its zone's game enables; the high stop lamp keeps its one stop zone. Bug wave 3 (H-VP-1): Viewpoint never
+#     runs the mod's shader, so it lit that all-tail lens with the lights only and, braking in daylight, only the
+#     high stop lamp (while still glowing red at the dark lenses). Now bake_atlas packs the lens's tail and stop
+#     parts as separate islands planar_uv.GROUP_GAP apart (one rigid group per side), so each part's blocks are
+#     pure without the merge: the game and Viewpoint light the tail part with the lights and the stop part on the
+#     brake, and mark_combined_stop tags the stop part (stop_rc / stop_lc) for the mod's combined rule;
+#   * the zone of a block is the alpha-weighted majority of the lamp zones under its lit texels; ring blocks
+#     take the nearest lit block's zone;
+#   * window zones are kept in the ring blocks (the shader discards a removed window's zone: a lamp texel
+#     there would stop the hole), but taken inside a lit block: the high stop lamp's lens lies on the rear
+#     glass's texels in places, and a mixed block is no zone at 256 (its top and bottom went dark); the rest of
+#     the lens's own surface under the guard (the lamp's rim, the panel within LAMP_GUARD_NEAR) takes the lamp zone;
+#   * Lights alpha below LAMP_GUARD_ALPHA counts as unlit (a 5 % mix missing is invisible; Project Viewpoint
+#     places its beams from texels with alpha >= 0.1);
+#   * only the lens's own surface (bug wave 2, R2-VIS-1, 2026-10-25): the blocks are UV squares, and on the packed
+#     sheet they reached into neighbouring UV islands far from the lens on the car (hood front lip, front fender
+#     top, rear quarter, D-pillar strips, specks by the mirrors and grille): a removed lamp greyed those panels and
+#     damage / blood followed the lamp there (wave 1 put a lamp zone on 9k covered texels farther than 3 cm from
+#     every lens). With the shell's triangle dump (shell_uvmesh.npz, lens_geometry) the guard rezones a COVERED
+#     texel only when its point on the car lies within LAMP_GUARD_NEAR of a lens texel (covered, lit, and a lamp
+#     zone in the bake); gutter texels (no triangle: never drawn, only averaged into the smaller caps) are all free to take
+#     the zone, which keeps the lens's blocks pure across its gutter. Lit texels farther from every lens (Lights
+#     alpha bled onto a neighbouring island: spare tyre tread, liners, accessories) are no lens: they neither seed
+#     a block nor take a lamp zone. Where another island lies within a block of a lens across the 8 px gutter, its
+#     texels keep their zones: the far panel wins, the lens edge there goes unlit at the 256 cap only (lit
+#     fragments on the lens's surface 100 / 100 / 100 / 99.8 % at 2048 / 1024 / 512 / 256, lampcov --lens).
+# The shipped Mask stays 2048 RGB (zone edges elsewhere keep their 2048 detail for players at 2048).
+LAMP_GUARD_CAP = 256
+LAMP_GUARD_ALPHA = 13
+LAMP_GUARD_REACH = 3            # blocks: a ring block takes the zone of a lit block at most this far
+# a lit lens with a tail zone is all tail (wave 1): still the rule for a bake whose layout has no rigid lens groups
+# (planar_uv meta "rigid_groups" 0: the tail / stop edge runs inside one island), never for one that has them
+# (lamp_guard's merge; compose's main reads the layout: lens_groups)
+LAMP_ONE_ZONE = True
+COMBINED_MIN_X = 0.15           # m off the centre line: stop texels beyond are the D-pillar lens (bake_atlas.STOP_BOX)
+LAMP_GUARD_NEAR = 0.03          # m: the guard rezones only texels this close (on the car) to a lens texel
+LAMP_ISLAND_SHARE = 0.5         # ... or texels of a UV island at least this share lens (the lens's own island)
+
+
+def lens_geometry(npz_path, size):
+    """(pos, covered, island) of the shell sheet at `size` from the triangle dump (uvmesh_dump.py): pos (size,
+    size, 3) float32, every texel's point on the car (metres, the dump's frame; a texel no triangle covers takes
+    the point of the nearest covered texel); covered (size, size) bool, a triangle covers the texel's centre;
+    island (size, size) int, the UV island of that triangle (-1: the shared fallback charts). None when the dump
+    is missing or empty."""
+    if not npz_path or not os.path.exists(npz_path):
+        return None
+    import paint_pass
+    D = np.load(npz_path)
+    uv = D["tri_uv"].astype(np.float64)
+    x, y = uv[..., 0] * size, (1.0 - uv[..., 1]) * size
+    tri, bary = paint_pass.rasterise(x, y, np.ones(len(x), np.int64), size)
+    covered = tri >= 0
+    if not covered.any():
+        return None
+    _d, (ir, ic) = ndimage.distance_transform_edt(~covered, return_indices=True)
+    t, b = tri[ir, ic], bary[ir, ic].astype(np.float64)
+    pos = (D["tri_pos"].astype(np.float64)[t] * b[..., None]).sum(-2).astype(np.float32)
+    # per UV island, the lowest centre height of its triangles (the split lens: bake_atlas cuts its faces at
+    # TAIL_STOP_Z by their centres, so a stop island's lowest centre lies above it, a tail island's below)
+    ti = D["tri_island"].astype(np.int64)
+    cz = D["tri_pos"][..., 2].astype(np.float64).mean(-1)
+    minz = np.full(max(1, int(ti.max()) + 1), np.inf)
+    np.minimum.at(minz, np.maximum(ti, 0), np.where(ti >= 0, cz, np.inf))
+    return pos, covered, ti[t], minz
+
+
+def lens_surface(code, lit, lcodes, geo, near=LAMP_GUARD_NEAR):
+    """(near, own), (H, W) bool each. near: the texel's point on the car (a gutter texel's: its nearest covered
+    texel's) lies within `near` m of a lens texel (covered, lit and already a lamp zone): only such lit texels seed guard
+    blocks. own: the texels the guard may rezone, near ones and every gutter texel. geo = lens_geometry(...) or
+    None (every texel both: the wave-1 rule)."""
+    if geo is None:
+        return np.ones(code.shape, dtype=bool), np.ones(code.shape, dtype=bool)
+    from scipy.spatial import cKDTree
+    pos, covered = geo[0], geo[1]
+    if pos.shape[:2] != code.shape or covered.shape != code.shape:
+        raise ValueError("lamp_guard: lens geometry %s does not match the Mask %s" % (pos.shape[:2], code.shape))
+    # covered texels only: a lit gutter texel carries the lens's dilated zone but the point of whichever covered
+    # texel is nearest, often the next island's (a front fender top took the tail lamp's zone that way)
+    seeds = lit & np.isin(code, lcodes) & covered
+    close = np.zeros(code.shape, dtype=bool)
+    if seeds.any():
+        p = np.asarray(pos, dtype=np.float32)
+        dd, _i = cKDTree(p[seeds]).query(p.reshape(-1, 3), distance_upper_bound=near * 1.0001, workers=-1)
+        close = (dd <= near).reshape(code.shape)
+    own = close | ~covered
+    if len(geo) > 2 and seeds.any() and LAMP_ISLAND_SHARE < 1.0:
+        # the lens's own UV islands (most of their texels lens) are its surface wherever they reach
+        isl = np.asarray(geo[2])
+        ids, n_seed = np.unique(isl[seeds], return_counts=True)
+        n_cov = np.array([int(((isl == i) & covered).sum()) for i in ids])
+        lens_isl = ids[(ids >= 0) & (n_seed >= LAMP_ISLAND_SHARE * n_cov)]
+        own |= np.isin(isl, lens_isl) & covered
+    return close, own
+
+
+def _zone_codes(prefixes):
+    import paint_pass
+    out = {}
+    for name, rgb in paint_pass.ZONE.items():
+        if name.startswith(prefixes):
+            c = [int(np.clip(v * 255.0 + 0.5, 0, 255)) for v in rgb]
+            out[name] = (c[0] << 16) | (c[1] << 8) | c[2]
+    return out
+
+
+def lens_groups(meta):
+    """How many rigid lens groups the shell layout packed (planar_uv meta "rigid_groups"; bake_atlas LENS_GROUPS):
+    0 for a layout from before bug wave 3 (the D-pillar lens's tail / stop edge inside one island). meta: the
+    layout meta dict, its JSON text, or a path to shell_layout_meta.json / shell_uvmesh.npz; 0 when unreadable."""
+    try:
+        if isinstance(meta, str) and meta.endswith(".npz"):
+            meta = str(np.load(meta)["meta"])
+        elif isinstance(meta, str) and os.path.exists(meta):
+            meta = open(meta, encoding="utf-8").read()
+        if isinstance(meta, str):
+            meta = json.loads(meta)
+        return int(meta.get("rigid_groups", 0))
+    except (OSError, ValueError, KeyError, AttributeError, TypeError):
+        return 0
+
+
+def lamp_guard(zones, alpha, cap=LAMP_GUARD_CAP, thr=LAMP_GUARD_ALPHA, log=print, geo=None, near=LAMP_GUARD_NEAR,
+               merge=None):
+    """The Mask's zones (RGB uint8 image or array, the shipped size) with every lit lens wrapped in whole
+    blocks of one lamp zone (see LAMP_GUARD_CAP). alpha: the shipped Lights alpha (uint8, any size that
+    divides the Mask's). geo: lens_geometry at the Mask's size; with it the guard keeps to the lens's own
+    surface (lens_surface; without it every texel of the blocks, the wave-1 rule). merge: a lit lens holding a
+    tail zone takes it on its stop texels too (None: LAMP_ONE_ZONE; compose passes lens_groups(...) == 0).
+    Returns (image, stats)."""
+    z = np.array(np.asarray(zones, dtype=np.uint8)[..., :3])
+    H, W = z.shape[:2]
+    b = max(1, H // cap)
+    a = np.asarray(alpha, dtype=np.uint8)
+    k = H // a.shape[0]
+    a = np.repeat(np.repeat(a, k, 0), k, 1)[:H, :W].astype(np.float32)
+    code = (z[..., 0].astype(np.int64) << 16) | (z[..., 1].astype(np.int64) << 8) | z[..., 2]
+    lamps = _zone_codes(("lights_", "stop_"))
+    windows = set(_zone_codes(("window_",)).values())
+    names, lcodes = list(lamps), np.array(list(lamps.values()), dtype=np.int64)
+    nh, nw = H // b, W // b
+    # one lamp zone per lens (LAMP_ONE_ZONE): a lit lens that holds a tail zone takes it on its stop texels too
+    lit = a >= thr
+    lab, n = ndimage.label(lit, structure=np.ones((3, 3), bool))
+    merged = 0
+    vcode = code                                       # the zones the blocks vote with
+    if n and (LAMP_ONE_ZONE if merge is None else merge):
+        for stop, tail in (("stop_r", "lights_rt"), ("stop_l", "lights_lt")):
+            has_tail = np.zeros(n + 1, bool)
+            has_tail[np.unique(lab[lit & (code == lamps[tail])])] = True
+            has_tail[0] = False
+            sel = (vcode == lamps[stop]) & has_tail[lab]
+            merged += int(sel.sum())
+            vcode = np.where(sel, lamps[tail], vcode)
+
+    # split lens (bug wave 3): each UV island of the D-pillar lens is one part, tail or stop (bake_atlas LENS_GROUPS);
+    # texels of the other part's zone on it (the zone bake projects the full-detail twin, whose faces split at
+    # TAIL_STOP_Z on their own) take the island's part: stop when its lowest triangle centre lies above TAIL_STOP_Z
+    # (lens_geometry's 4th array), else (no heights) its alpha-weighted majority
+    stats_unified = 0
+    if geo is not None and len(geo) > 2 and not (LAMP_ONE_ZONE if merge is None else merge):
+        isl, cov = np.asarray(geo[2]), np.asarray(geo[1])
+        minz = np.asarray(geo[3]) if len(geo) > 3 else None
+        import paint_pass
+        cut = float(paint_pass._bake_const("TAIL_STOP_Z"))
+        for pa, pb in (("lights_rt", "stop_r"), ("lights_lt", "stop_l")):
+            ca, cb = lamps[pa], lamps[pb]
+            # covered texels decide; gutter texels (geo's island: their nearest covered texel's) follow, the Dilate
+            # spread the wrong part into them and their lit Lights alpha voted it back into the guard's blocks
+            sel = (isl >= 0) & ((code == ca) | (code == cb))
+            sc = sel & cov
+            if not sc.any():
+                continue
+            ids = isl[sc]
+            k = int(isl[sel].max()) + 1
+            wa = np.bincount(ids, weights=np.where(code[sc] == ca, a[sc] + 1e-3, 0.0), minlength=k)
+            wb = np.bincount(ids, weights=np.where(code[sc] == cb, a[sc] + 1e-3, 0.0), minlength=k)
+            mixed = (wa > 0) & (wb > 0)
+            want = np.where(wa >= wb, ca, cb)
+            if minz is not None and len(minz) >= k:
+                # by height: every island that is mostly this lens (a whole island can carry the wrong part)
+                n_cov = np.bincount(isl[cov & (isl >= 0)], minlength=k)[:k]
+                mixed = np.bincount(ids, minlength=k) >= 0.5 * np.maximum(n_cov, 1)
+                want = np.where(minz[:k] > cut, cb, ca)
+            if not mixed.any():
+                continue
+            fix = sel & mixed[np.where(sel, isl, 0)] & (code != want[np.where(sel, isl, 0)])
+            new = want[isl[fix]]
+            code = code.copy()
+            code[fix] = new
+            vcode = vcode.copy()
+            vcode[fix] = new
+            z[fix] = np.stack([(new >> 16) & 255, (new >> 8) & 255, new & 255], -1).astype(np.uint8)
+            stats_unified += int(fix.sum())
+
+    # the lens's own surface (R2-VIS-1): lit texels near a lens seed the blocks; only `own` texels are rezoned
+    close, own = lens_surface(code, lit, lcodes, geo, near)
+
+    def blocks(x):
+        return x[:nh * b, :nw * b].reshape(nh, b, nw, b).transpose(0, 2, 1, 3).reshape(nh, nw, b * b)
+    cb, ab = blocks(vcode), blocks(a)
+    litb = (ab >= thr) & blocks(close)
+    lit_blk = litb.any(-1)
+    votes = np.stack([(((cb == c) & litb) * ab).sum(-1) for c in lcodes], -1)
+    assigned = votes.max(-1) > 0
+    zone_blk = votes.argmax(-1)
+    need = ndimage.binary_dilation(lit_blk, structure=np.ones((3, 3), bool))
+    stats = {"block": b, "lit_blocks": int(lit_blk.sum()), "guard_blocks": 0, "changed": {}, "window_kept": 0,
+             "unassigned_lit_blocks": 0, "merged_stop": merged, "unified": stats_unified, "far_kept": 0, "stray_lit": int((lit & ~close).sum())}
+    if not assigned.any():
+        return Image.fromarray(z), stats
+    dist, idx = ndimage.distance_transform_edt(~assigned, return_indices=True)
+    need &= dist <= LAMP_GUARD_REACH
+    stats["unassigned_lit_blocks"] = int((lit_blk & ~need).sum())
+    zi = zone_blk[idx[0], idx[1]]
+    target = np.where(need, lcodes[zi], -1)
+    tfull = np.repeat(np.repeat(target, b, 0), b, 1)
+    tt = np.full(code.shape, -1, dtype=np.int64)
+    tt[:nh * b, :nw * b] = tfull
+    litfull = np.zeros(code.shape, dtype=bool)
+    litfull[:nh * b, :nw * b] = np.repeat(np.repeat(lit_blk, b, 0), b, 1)
+    win = np.isin(code, list(windows)) & ~litfull     # a lit block is all lamp: the high stop lamp sits on the rear glass
+    write = (tt >= 0) & ~win & (code != tt) & own
+    stats["far_kept"] = int(((tt >= 0) & ~win & (code != tt) & ~own).sum())
+    stats["guard_blocks"] = int(need.sum())
+    stats["window_kept"] = int(((tt >= 0) & win).sum())
+    u, c = np.unique(code[write], return_counts=True)
+    stats["changed"] = {"%06x" % int(uu): int(cc) for uu, cc in zip(u, c)}
+    nc = tt[write]
+    z[write] = np.stack([(nc >> 16) & 255, (nc >> 8) & 255, nc & 255], -1).astype(np.uint8)
+    log("mask: lamp guard %d px blocks (cap %d): %d lit blocks, %d guarded, %d texels rezoned (%s), %d window "
+        "texels kept, %d lit blocks out of reach, %d split-lens texels unified to their island's part; %s" % (
+            b, cap, stats["lit_blocks"], stats["guard_blocks"], int(write.sum()),
+            ", ".join("%s %d" % t for t in sorted(stats["changed"].items(), key=lambda t: -t[1])[:6]),
+            stats["window_kept"], stats["unassigned_lit_blocks"], stats["unified"],
+            "lens surface only (%.0f cm): %d texels of other islands kept, %d stray lit texels no lens"
+            % (100 * near, stats["far_kept"], stats["stray_lit"]) if geo is not None else "no lens geometry (whole blocks)"))
+    return Image.fromarray(z), stats
+
+
+def mark_combined_stop(zones, geo, log=print):
+    """The shipped Mask's D-pillar stop texels tagged as the combined stop / tail lens (bug wave 3, H-VP-1):
+    stop_r / stop_l -> stop_rc / stop_lc (bake_atlas.ZONE: blue 2/255, still the stop zone within the 0.01 the
+    game and Project Viewpoint match by) wherever the texel's point on the car (lens_geometry; a gutter texel's
+    is its nearest covered texel's) lies more than COMBINED_MIN_X off the centre line. The high stop lamp (|x| <
+    0.09) keeps plain stop_l. Run after lamp_guard: the guard's blocks round the lens are stop throughout and
+    all lie by the lens, so they stay pure. Returns (image, texels tagged); geo None tags nothing."""
+    z = np.array(np.asarray(zones, dtype=np.uint8)[..., :3])
+    if geo is None:
+        log("mask: no lens geometry, the combined stop / tail lens is not tagged (its stop part lights on the brake only)")
+        return Image.fromarray(z), 0
+    pos = np.asarray(geo[0])
+    if pos.shape[:2] != z.shape[:2]:
+        raise ValueError("mark_combined_stop: lens geometry %s does not match the Mask %s" % (pos.shape[:2], z.shape[:2]))
+    codes = _zone_codes(("stop_",))
+    code = (z[..., 0].astype(np.int64) << 16) | (z[..., 1].astype(np.int64) << 8) | z[..., 2]
+    side = np.abs(pos[..., 0]) > COMBINED_MIN_X
+    n = 0
+    for plain, comb in (("stop_r", "stop_rc"), ("stop_l", "stop_lc")):
+        sel = (code == codes[plain]) & side
+        c = codes[comb]
+        z[sel] = np.array([(c >> 16) & 255, (c >> 8) & 255, c & 255], dtype=np.uint8)
+        n += int(sel.sum())
+    log("mask: %d stop texels of the D-pillar lenses tagged as the combined stop / tail lamp (stop_rc / stop_lc)" % n)
+    return Image.fromarray(z), n
 
 
 def _lin2srgb(c):
@@ -823,7 +1110,6 @@ def main():
     # zones by majority (exact legal colours), the gloss averaged like the colour
     zones = reduce_zones(mask, ss)
     gloss_s = reduce_box((gloss * 255.0).astype(np.float32), ss) if ss > 1 else Image.fromarray((gloss * 255).astype(np.uint8))
-    mask = Image.merge("RGBA", (*zones.split(), gloss_s))
     # zone mask at the shell's full size (2026-10-13): the shader samples it bilinearly and matches a
     # zone within 0.01, so at half size every zone edge lost about a texel, which cut a dark notched rim
     # into each lit lamp (tail 1.4 % of lit fragments, 0.4 % at full size) and an unlit line down the
@@ -834,10 +1120,8 @@ def main():
     # match: no lamp lit and damage / blood / removed-part zones failed, in the game and in Project
     # Viewpoint, for everyone below the 2048 setting. The zones + gloss copy stays a build file for the
     # polish feature (damage art, skin HSV); the shader's gloss is a constant (gen_shaders.GLOSS).
-    mask.save(os.path.join(BAKE_DIR, "shell_mask_gloss.png"))
-    p = os.path.join(a.out, "%s_Mask.png" % PT.NAME)
-    zones.convert("RGB").save(p)
-    written.append(p)
+    # Both are written after the Lights below: the lamp guard (lamp_guard) reads the shipped Lights alpha.
+    mask_path = os.path.join(a.out, "%s_Mask.png" % PT.NAME)
     p = os.path.join(a.out, "%s_Lights.png" % PT.NAME)
     if pp is not None:
         lights = Image.fromarray(lights_lit(pp, shell, BAKE_DIR))
@@ -861,8 +1145,22 @@ def main():
     # 2026-10-19 performance pass: shipped at HALF the shell (1024): the sheet is ~2 % lit texels, and at
     # 2048 it cost 16 MB of video memory per car for players on the 2048 setting (the default 512 shrinks it
     # anyway). Box-averaged, so the lens edge stays a clean ramp (not the LANCZOS staircase above)
-    reduce_box(lights, ss * LIGHTS_REDUCE).save(p)
+    lights_s = reduce_box(lights, ss * LIGHTS_REDUCE)
+    lights_s.save(p)
     written.append(p)
+    # lit lenses keep their zone at every cap, on the lens's own surface only (lens_geometry: R2-VIS-1)
+    lens_geo = lens_geometry(os.path.join(BAKE_DIR, "shell_uvmesh.npz"), zones.height)
+    n_groups = lens_groups(os.path.join(BAKE_DIR, "shell_layout_meta.json"))
+    if not n_groups:
+        print("compose: warning the shell layout has no rigid lens groups (a bake from before bug wave 3): the D-pillar "
+              "lens is made all tail (wave 1), so Project Viewpoint lights it with the lights only; rebake to split it")
+    zones, _guard = lamp_guard(zones, np.asarray(lights_s)[..., 3], geo=lens_geo, merge=not n_groups)
+    mask = Image.merge("RGBA", (*zones.split(), gloss_s))
+    mask.save(os.path.join(BAKE_DIR, "shell_mask_gloss.png"))     # the build copy keeps the plain zones
+    # the shipped Mask tags the D-pillar stop part for the mod's combined stop / tail rule (gen_shaders LAMP_RULE)
+    shipped, _n = mark_combined_stop(zones, lens_geo)
+    shipped.convert("RGB").save(mask_path)
+    written.append(mask_path)
     p = os.path.join(a.out, "%s_Rust.png" % PT.NAME)
     rust_rgba(max(256, sheet // 2)).save(p)
     written.append(p)

@@ -339,6 +339,10 @@ function Lift.restore(v, s)
         end
     end
     v:setSkinIndex(s.skin)
+    -- setSkinIndex only writes the field; the model was built (ModelManager.addVehicle) with the spawn's random
+    -- skin and nothing in single player rebinds it (a multiplayer client's VehicleProperties.parse does):
+    -- updateSkin re-loads the texture, as vanilla ISVehicleColor does after its own setSkinIndex (42.21)
+    try(function() v:updateSkin() end)
     v:setKeyId(s.keyId)
     v:setMechanicalID(s.mechId)
     v:setColorHSV(s.hue, s.sat, s.val)
@@ -366,6 +370,86 @@ function Lift.clearSpawnKey(v)
     end)
     local ok2, still = pcall(function() return v:isKeysInIgnition() end)
     return ok2 and not still
+end
+
+-- addToWorld's trySpawnKey can also leave the fresh car's key elsewhere (42.21 bytecode, BaseVehicle.addKeyToWorld):
+-- in its glove box (addKeyToGloveBox), in a container of an object within 10 tiles, in a zombie's inventory there
+-- (addKeyToSquare -> checkSquareForVehicleKeySpot) or on the ground within 10 tiles (putKeyToWorld). The restore
+-- gives the car the old key id, so that key would open nothing: remove every key carrying the new car's own id
+-- (`keyId`, read right after the spawn) from the car's containers and the squares around it. `keep`: a key id never
+-- touched (the old car's: its real keys stay wherever they are). Returns the number of keys removed
+Lift.KEY_RADIUS = 10
+
+local function isKeyOf(item, keyId)
+    if not item or not item.getKeyId then return false end
+    local ok, id = pcall(function() return item:getKeyId() end)
+    return ok and id == keyId
+end
+
+-- the keys with that id directly in container c (removed, and the removal sent where the game is networked)
+local function removeKeysFrom(c, keyId)
+    if not c or not c.getItems then return 0 end
+    local items = c:getItems()
+    if not items then return 0 end
+    local found = {}
+    for i = 0, items:size() - 1 do
+        local it = items:get(i)
+        if isKeyOf(it, keyId) then found[#found + 1] = it end
+    end
+    for _, it in ipairs(found) do
+        c:DoRemoveItem(it)
+        if isServer() and sendRemoveItemFromContainer then try(sendRemoveItemFromContainer, c, it) end
+    end
+    return #found
+end
+
+local function list(javaList)
+    local out = {}
+    if javaList then
+        for i = 0, javaList:size() - 1 do out[#out + 1] = javaList:get(i) end
+    end
+    return out
+end
+
+function Lift.removeSpawnKeys(v, keyId, keep)
+    if keyId == nil or keyId == keep then return 0 end
+    local n = 0
+    for i = 0, v:getPartCount() - 1 do
+        local part = v:getPartByIndex(i)
+        n = n + removeKeysFrom(part:getItemContainer(), keyId)
+    end
+    if not getSquare then return n end
+    local cx, cy, z = math.floor(v:getX()), math.floor(v:getY()), math.floor(v:getZ())
+    local R = Lift.KEY_RADIUS
+    for x = cx - R, cx + R do
+        for y = cy - R, cy + R do
+            local sq = getSquare(x, y, z)
+            if sq then
+                if sq.getWorldObjects then                   -- on the ground (IsoWorldInventoryObject)
+                    for _, wo in ipairs(list(sq:getWorldObjects())) do
+                        local ok, item = pcall(function() return wo:getItem() end)
+                        if ok and isKeyOf(item, keyId) then
+                            try(function() sq:transmitRemoveItemFromSquare(wo) end)
+                            n = n + 1
+                        end
+                    end
+                end
+                if sq.getObjects then                        -- in a container of an object (a crate, a counter)
+                    for _, o in ipairs(list(sq:getObjects())) do
+                        if o.getContainerCount then
+                            for k = 0, o:getContainerCount() - 1 do n = n + removeKeysFrom(o:getContainerByIndex(k), keyId) end
+                        end
+                    end
+                end
+                if sq.getMovingObjects then                  -- in a zombie's inventory
+                    for _, o in ipairs(list(sq:getMovingObjects())) do
+                        if instanceof and instanceof(o, "IsoZombie") then n = n + removeKeysFrom(o:getInventory(), keyId) end
+                    end
+                end
+            end
+        end
+    end
+    return n
 end
 
 -- every part's init hook again (the engine ran them for the create hooks' parts, before the restore)
@@ -428,6 +512,9 @@ local function spawn(script, s, sq)
     for attempt = 1, 3 do
         local v = addVehicleDebug(script, IsoDirections.N, nil, sq)
         if not (v and Lift.inWorld(v)) then return nil, v end
+        -- the fresh car's own key id, before the restore gives it the old one: its spawn key fits nothing after
+        local okK, keyId = pcall(function() return v:getKeyId() end)
+        if okK then try(Lift.removeSpawnKeys, v, keyId, s.keyId) end
         if Lift.clearSpawnKey(v) then return v end
         -- the key would not come out (never seen): try a fresh car, keep the last one
         if attempt == 3 then
@@ -440,8 +527,10 @@ end
 
 -- tell the acting player how it went: a halo in single player, a server command to that player's
 -- client in multiplayer (client/HondaCRVGen1_LiftMenu.lua shows it). The action's perform() runs on the
--- client before the server's complete(), so it cannot know the outcome itself
+-- client before the server's complete(), so it cannot know the outcome itself. The mod's other networked
+-- actions (ISCRVFoldSeats, ISCRVAwning, ISCRVFunctionLiftFloor) report through here too. No key: nothing to say
 function Lift.report(character, ok, key)
+    if not key then return end
     if isServer() then
         if sendServerCommand and character then
             local id = character.getOnlineID and character:getOnlineID() or nil
@@ -505,6 +594,9 @@ function Lift.convert(character, vehicle, to)
     local from = Lift.kindOf(vehicle)
     local ok, why = Lift.canConvert(character, vehicle, to)
     if not ok then return nil, why[1] end
+    -- the player still at the car (the action's isValid checks it on the acting client only: the server never
+    -- runs isValid for a client's action)
+    if character and not Lift.near(character, vehicle) then return nil, "far" end
     local kit
     if Lift.needsKit(from, to) and not (character.isMechanicsCheat and character:isMechanicsCheat()) then
         kit = Lift.findKit(character)
@@ -542,9 +634,41 @@ function Lift.swapCar(character, vehicle, from, to, kit)
         c:DoRemoveItem(kit)
         sendRemoveItemFromContainer(c, kit)
     elseif Lift.givesKit(from, to) then
-        local item = inv:AddItem(Lift.KIT)
-        if item then sendAddItemToContainer(inv, item) end
+        Lift.giveKit(character)
     end
     Lift.giveXp(character, v, from, to)
     return v
+end
+
+-- the removed kit to the player: into the inventory when it has room, else on the ground at the player's feet, as
+-- vanilla's ISUninstallVehiclePart:complete does with a part ("so player don't go over inventory capacity": 42.21,
+-- hasRoomFor -> AddItem + sendAddItemToContainer, else AddWorldInventoryItem at ISTransferAction.GetDropItemOffset).
+-- Returns the item and where it went ("inventory" / "ground")
+function Lift.giveKit(character)
+    local inv = character:getInventory()
+    local item = instanceItem and instanceItem(Lift.KIT) or nil
+    if not item then                                   -- (no instanceItem: the old way)
+        item = inv:AddItem(Lift.KIT)
+        if item then sendAddItemToContainer(inv, item) end
+        return item, "inventory"
+    end
+    if inv:hasRoomFor(character, item) then
+        inv:AddItem(item)
+        sendAddItemToContainer(inv, item)
+        return item, "inventory"
+    end
+    local sq = character:getCurrentSquare() or (getSquare and getSquare(character:getX(), character:getY(), character:getZ()))
+    if not sq then                                     -- nowhere to put it down (never seen): the inventory after all
+        inv:AddItem(item)
+        sendAddItemToContainer(inv, item)
+        return item, "inventory"
+    end
+    local dx, dy, dz = 0.5, 0.5, 0
+    if ISTransferAction and ISTransferAction.GetDropItemOffset then
+        local ok, x, y, z = pcall(ISTransferAction.GetDropItemOffset, character, sq, item)
+        if ok and x then dx, dy, dz = x, y, z end
+    end
+    sq:AddWorldInventoryItem(item, dx, dy, dz)
+    if not isServer() and ISInventoryPage then ISInventoryPage.renderDirty = true end
+    return item, "ground"
 end

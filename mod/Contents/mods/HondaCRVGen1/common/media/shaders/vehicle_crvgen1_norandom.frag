@@ -15,6 +15,8 @@ const float CRV_SHINE = 28.0;
 const float CRV_SPEC = 0.0;
 const float CRV_RIM = 0.0;
 const float CRV_GLOSS = 0.33;  // body reflection x (0.5 + 1.5 gloss): 0.33 = the stock reflection
+const float CRV_TAIL = 0.40;   // combined stop / tail lens: its glow with the tail lights only (brake = 1)
+const float CRV_MARK = 0.0039;  // Mask blue >= this on a stop zone: the combined lens's stop part (2/255)
 
 uniform sampler2D Texture0;
 uniform vec4 TexturePainColor;
@@ -147,6 +149,17 @@ void main()
 	float t2en = step(0.5, dommat4(texen1, TextureDamage1Enables1) + dommat4(texen2, TextureDamage1Enables2) );
 	float t3en = step(0.5, dommat4(texen1, TextureDamage2Enables1) + dommat4(texen2, TextureDamage2Enables2) );
 	float t4en = step(0.5, dommat4(texen1, TextureUninstall1) + dommat4(texen2, TextureUninstall2) );
+	// combined stop / tail lens (gen_shaders TAIL_LEVEL): its tail part (tail zones) and its stop part (a stop zone
+	// with Mask blue >= CRV_MARK) glow at CRV_TAIL with their side's tail light, fully while braking, and grey
+	// with their side's tail lamp removed; the high stop lamp and the head lamps keep t1en
+	float crvMark = step(CRV_MARK, texColorMask.z);
+	float crvCombR = texen2[1][1] * crvMark;
+	float crvCombL = texen2[1][2] * crvMark;
+	t4en = max(t4en, step(0.5, crvCombR * TextureUninstall2[0][3] + crvCombL * TextureUninstall2[1][0]));
+	float crvTailZone = clamp(texen2[0][3] + texen2[1][0] + crvCombR + crvCombL, 0.0, 1.0);
+	float crvTailOn = step(0.5, (texen2[0][3] + crvCombR) * TextureLightsEnables2[0][3] + (texen2[1][0] + crvCombL) * TextureLightsEnables2[1][0]) * (1.0 - t4en);
+	float crvBrake = step(0.5, TextureLightsEnables2[1][1] + TextureLightsEnables2[1][2]) * (1.0 - t4en);
+	float crvLamp = mix(t1en, max(CRV_TAIL * crvTailOn, crvBrake), crvTailZone);
 
 	float windowAlpha = clamp(texen1[1][2] + texen1[1][3] + texen1[2][0] + texen1[2][1] + texen1[2][2] + texen1[2][3], 0.0, 1.0);
 	float frontAlpha = clamp(texen1[0][0] + texen2[0][1] + texen2[0][2], 0.0, 1.0);
@@ -191,7 +204,7 @@ void main()
 	col += (spec * CRV_SPEC + fres * CRV_RIM * lighting) * gloss * TintColourNew * (1.0 - t4en);
 
 	// Do this after ambient lighting so active headlights and taillights aren't dimmed.
-	col = mix(col, texColorLights.xyz, texColorLights.a*t1en);
+	col = mix(col, texColorLights.xyz, texColorLights.a*crvLamp);
 
 	col = colorDebug(col, texen1, texen2, windowAlpha, frontAlpha, tailAlpha, noTintAlpha, texColorMask);
 

@@ -10,7 +10,8 @@ higher power on the lighter body and pull about 25 % harder.
 
 Power.fix recomputes the power the car would have been given under its current script from its saved engine
 quality, and lowers the power to it when it is higher. A new car already has exactly that power, so nothing
-changes for it; running it again changes nothing; it never raises a power. It runs where the game is
+changes for it; it never raises a power; it checks a car once (flag Power.CHECKED_KEY in the car's mod data), so
+a power raised later (another mod, an admin) stays. It runs where the game is
 authoritative (single player, the server), from the CRVCabin part's init (HondaCRVGen1_Cabin.lua), which runs
 for every car created, loaded or streamed in.
 ]]
@@ -29,12 +30,21 @@ function Power.expected(vehicle)
     return force * math.max(0.6, boosted / 100)
 end
 
--- lower a power left over from the old, heavier tuning; returns true when it changed
+-- the car's mod data flag: this car's power has been checked (H-SAVES-I2: once per car, not on every load, so a power
+-- another mod or an admin raised afterwards is left alone). Set after the first check whether or not it changed
+-- anything; the lift conversion carries the car's mod data, and its power, over to the new car
+Power.CHECKED_KEY = "crvPowerChecked"
+
+-- lower a power left over from the old, heavier tuning, once per car; returns true when it changed
 function Power.fix(vehicle)
     if not vehicle or isClient() then return false end
+    local md = vehicle.getModData and vehicle:getModData()
+    if md and md[Power.CHECKED_KEY] then return false end
     local want = Power.expected(vehicle)
     local have = vehicle:getEnginePower()
-    if not want or not have or have <= want * 1.02 + 1 then return false end
+    if not want or not have then return false end             -- no script yet: no check made, try again next load
+    if md then md[Power.CHECKED_KEY] = true end
+    if have <= want * 1.02 + 1 then return false end
     vehicle:setEngineFeature(vehicle:getEngineQuality(), vehicle:getEngineLoudness(), math.floor(want + 0.5))
     return true
 end

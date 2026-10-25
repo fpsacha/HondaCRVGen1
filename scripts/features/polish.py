@@ -10,8 +10,8 @@ Sound (research Q6, 42.21 bytecode):
     private world emitter (FMODSoundEmitter.setPitch sets the pitch of EVERY sound on an emitter, so
     the vehicle's own emitter would bend the vanilla engine too), pitched and cross-faded from the
     engine speed, stopped when the engine stops;
-  * horn: a 90s Honda dual tone (two notes about a major third apart, ~415 / 520 Hz), looped while the
-    horn is held (HornSound plays the script's horn with playSoundLoopedImpl);
+  * horn: the vanilla VehicleHornStandard (2026-10-24, like the doors below). Our synthesised dual tone
+    (CRVGen1Horn) is gone with its .ogg and sound script entry (R2-AUD-2: nothing referenced it);
   * doors, tailgate, hood: the vanilla sounds (2026-10-22, player feedback "please remove or add option to
     toggle the obnoxious car interaction sounds"): the parts take them from the same vanilla templates as
     the vanilla SUV (Door/part/Door*, TrunkDoor, EngineDoor: VehicleDoorOpenStandard ...). The synthesised
@@ -68,7 +68,7 @@ def VEHICLE_KEYS(gen, vehicle):
             "engine": "VehicleEngineSmallCar",
             "engineStart": "VehicleEngineSmallCar",
             "engineTurnOff": "VehicleEngineSmallCar",
-            "horn": "CRVGen1Horn",
+            "horn": "VehicleHornStandard",   # vanilla's (2026-10-24, as the doors 2026-10-22)
             "ignitionFail": "VehicleIgnitionFailSmallCar",
         },
     }
@@ -151,7 +151,7 @@ def _shell_objects():
 LUA = ["client/HondaCRVGen1_Polish.lua", SKIN_HSV_LUA, "server/HondaCRVGen1_PolishServer.lua",
        "client/HondaCRVGen1_PolishViewpoint.lua"]
 
-SOUND_FILES = ["CRVGen1_EngineLow.ogg", "CRVGen1_EngineHigh.ogg", "CRVGen1_Horn.ogg"]   # the doors: vanilla's (2026-10-22)
+SOUND_FILES = ["CRVGen1_EngineLow.ogg", "CRVGen1_EngineHigh.ogg"]   # the doors (2026-10-22) and horn (2026-10-24): vanilla's
 MEDIA = (["42/media/scripts/sounds/HondaCRVGen1_PolishSounds.txt"]
          + ["42/media/sound/" + f for f in SOUND_FILES]
          + ["common/media/viewpoint/HondaCRVGen1.properties",

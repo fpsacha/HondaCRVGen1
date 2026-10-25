@@ -33,13 +33,13 @@ local LOOT = {
     { list = "GarageMetalwork", item = "Base.CRVGen1_ArmourMeshFront", weight = 0.3 },   -- armour
     { list = "GarageMetalwork", item = "Base.CRVGen1_ArmourMeshRear", weight = 0.3 },   -- armour
     { list = "GarageMetalwork", item = "Base.CRVGen1_ArmourRearPlate", weight = 0.15 },   -- armour
-    { list = "ArmyHangarMechanics", item = "Base.CRVGen1_ArmourDoorFront", weight = 0.4 },   -- armour
-    { list = "ArmyHangarMechanics", item = "Base.CRVGen1_ArmourDoorRear", weight = 0.4 },   -- armour
-    { list = "ArmyHangarMechanics", item = "Base.CRVGen1_ArmourArchFront", weight = 0.8 },   -- armour
-    { list = "ArmyHangarMechanics", item = "Base.CRVGen1_ArmourArchRear", weight = 0.8 },   -- armour
-    { list = "ArmyHangarMechanics", item = "Base.CRVGen1_ArmourMeshFront", weight = 0.8 },   -- armour
-    { list = "ArmyHangarMechanics", item = "Base.CRVGen1_ArmourMeshRear", weight = 0.8 },   -- armour
-    { list = "ArmyHangarMechanics", item = "Base.CRVGen1_ArmourRearPlate", weight = 0.4 },   -- armour
+    { list = "ArmySurplusTools", item = "Base.CRVGen1_ArmourDoorFront", weight = 0.4 },   -- armour
+    { list = "ArmySurplusTools", item = "Base.CRVGen1_ArmourDoorRear", weight = 0.4 },   -- armour
+    { list = "ArmySurplusTools", item = "Base.CRVGen1_ArmourArchFront", weight = 0.8 },   -- armour
+    { list = "ArmySurplusTools", item = "Base.CRVGen1_ArmourArchRear", weight = 0.8 },   -- armour
+    { list = "ArmySurplusTools", item = "Base.CRVGen1_ArmourMeshFront", weight = 0.8 },   -- armour
+    { list = "ArmySurplusTools", item = "Base.CRVGen1_ArmourMeshRear", weight = 0.8 },   -- armour
+    { list = "ArmySurplusTools", item = "Base.CRVGen1_ArmourRearPlate", weight = 0.4 },   -- armour
     { list = "PoliceStorageMechanics", item = "Base.CRVGen1_ArmourDoorFront", weight = 0.25 },   -- armour
     { list = "PoliceStorageMechanics", item = "Base.CRVGen1_ArmourDoorRear", weight = 0.25 },   -- armour
     { list = "PoliceStorageMechanics", item = "Base.CRVGen1_ArmourArchFront", weight = 0.5 },   -- armour
@@ -47,36 +47,35 @@ local LOOT = {
     { list = "PoliceStorageMechanics", item = "Base.CRVGen1_ArmourMeshFront", weight = 0.5 },   -- armour
     { list = "PoliceStorageMechanics", item = "Base.CRVGen1_ArmourMeshRear", weight = 0.5 },   -- armour
     { list = "PoliceStorageMechanics", item = "Base.CRVGen1_ArmourRearPlate", weight = 0.25 },   -- armour
-    { list = "CarSupplyMagazines", item = "Base.CRVGen1_ArmourMagazine", weight = 0.8 },   -- armour
+    { list = "CarSupplyLiterature", item = "Base.CRVGen1_ArmourMagazine", weight = 0.8 },   -- armour
     { list = "BookstoreAutomotive", item = "Base.CRVGen1_ArmourMagazine", weight = 0.8 },   -- armour
     { list = "MagazineRackMixed", item = "Base.CRVGen1_ArmourMagazine", weight = 0.1 },   -- armour
     { list = "CrateMagazines", item = "Base.CRVGen1_ArmourMagazine", weight = 0.3 },   -- armour
     { list = "ArmySurplusMisc", item = "Base.CRVGen1_ArmourMagazine", weight = 0.5 },   -- armour
-    { list = "ArmyHangarMechanics", item = "Base.CRVGen1_ArmourMagazine", weight = 0.4 },   -- armour
+    { list = "ArmySurplusLiterature", item = "Base.CRVGen1_ArmourMagazine", weight = 0.4 },   -- armour
     { list = "CampingStoreTents", item = "Base.CRVGen1_Awning", weight = 1.0 },   -- awning
     { list = "CampingStoreGear", item = "Base.CRVGen1_Awning", weight = 0.5 },   -- awning
     { list = "CampingLockers", item = "Base.CRVGen1_Awning", weight = 0.2 },   -- awning
     { list = "GarageMechanics", item = "Base.CRVGen1_Awning", weight = 0.2 },   -- awning
     { list = "CarDealerDesk", item = "Base.CRVGen1_OwnersManual", weight = 2 },   -- function
-    { list = "CarSupplyLiterature", item = "Base.CRVGen1_OwnersManual", weight = 2 },   -- function
-    { list = "CarSupplyMagazines", item = "Base.CRVGen1_OwnersManual", weight = 1 },   -- function
+    { list = "CarSupplyLiterature", item = "Base.CRVGen1_OwnersManual", weight = 3 },   -- function
     { list = "BookstoreAutomotive", item = "Base.CRVGen1_OwnersManual", weight = 1 },   -- function
     { list = "MechanicShelfBooks", item = "Base.CRVGen1_OwnersManual", weight = 0.5 },   -- function
     { list = "GarageMechanics", item = "Base.CRVGen1_OwnersManual", weight = 0.3 },   -- function
     { list = "GarageMechanics", item = "Base.CRVGen1_LiftKit", weight = 0.3 },   -- lift
     { list = "CrateMechanics", item = "Base.CRVGen1_LiftKit", weight = 0.4 },   -- lift
-    { list = "MechanicShelfMisc", item = "Base.CRVGen1_LiftKit", weight = 0.2 },   -- lift
+    { list = "MechanicShelfSuspension", item = "Base.CRVGen1_LiftKit", weight = 0.2 },   -- lift
     { list = "MechanicSpecial", item = "Base.CRVGen1_LiftKit", weight = 0.5 },   -- lift
-    { list = "CarSupplyMagazines", item = "Base.CRVGen1_LiftMagazine", weight = 2.0 },   -- lift
+    { list = "CarSupplyLiterature", item = "Base.CRVGen1_LiftMagazine", weight = 2.0 },   -- lift
     { list = "BookstoreAutomotive", item = "Base.CRVGen1_LiftMagazine", weight = 1.0 },   -- lift
     { list = "MagazineRackMixed", item = "Base.CRVGen1_LiftMagazine", weight = 0.2 },   -- lift
     { list = "CrateMagazines", item = "Base.CRVGen1_LiftMagazine", weight = 0.2 },   -- lift
     { list = "GarageMechanics", item = "Base.CRVGen1_LiftMagazine", weight = 0.2 },   -- lift
     { list = "GarageMechanics", item = "Base.CRVGen1_OffroadSnorkel", weight = 0.3 },   -- offroad
-    { list = "MechanicShelfMisc", item = "Base.CRVGen1_OffroadSnorkel", weight = 0.4 },   -- offroad
+    { list = "StoreShelfMechanics", item = "Base.CRVGen1_OffroadSnorkel", weight = 0.4 },   -- offroad
     { list = "CrateMechanics", item = "Base.CRVGen1_OffroadSnorkel", weight = 0.4 },   -- offroad
     { list = "GarageMechanics", item = "Base.CRVGen1_OffroadSkidPlate", weight = 0.3 },   -- offroad
-    { list = "MechanicShelfMisc", item = "Base.CRVGen1_OffroadSkidPlate", weight = 0.3 },   -- offroad
+    { list = "MechanicShelfMufflers", item = "Base.CRVGen1_OffroadSkidPlate", weight = 0.3 },   -- offroad
     { list = "GarageMetalwork", item = "Base.CRVGen1_OffroadSkidPlate", weight = 0.2 },   -- offroad
     { list = "CrateMechanics", item = "Base.CRVGen1_OffroadRearBumper", weight = 0.3 },   -- offroad
     { list = "MechanicSpecial", item = "Base.CRVGen1_OffroadRearBumper", weight = 0.4 },   -- offroad
@@ -128,9 +127,67 @@ function Loot.add()
     end
 end
 
--- OnFillContainer(roomName, containerType, container): drop the share of our items the slider takes away
+-- the procedural lists we add to, and the container types whose procList names one of them (Distributions:
+-- room -> container type -> { procList = { { name = list }, ... } }), read once at the first fill (after the
+-- merge); false when there is no distribution table to read (then every container is scanned).
+-- Loot.fallback: room name -> its table, for the rooms whose "other" or "all" entry names one of our lists
+-- (H-DIFF-1, 2026-10-24): ItemPickerJava.fillContainerInternal (42.21) fills a container type the room has no
+-- entry for from the room's "other" (else "all") entry and fires OnFillContainer with the REAL type, which
+-- then is not in Loot.types (a hall's sidetable, a closet's wardrobe ... filled from MechanicSpecial)
+Loot.lists = {}
+for _, e in ipairs(LOOT) do Loot.lists[e.list] = true end
+
+local function ours(c)
+    if type(c) ~= "table" or type(c.procList) ~= "table" then return false end
+    for _, p in ipairs(c.procList) do
+        if type(p) == "table" and Loot.lists[p.name] then return true end
+    end
+    return false
+end
+
+function Loot.containerTypes()
+    if Loot.types ~= nil then return Loot.types end
+    Loot.fallback = {}
+    local dists = {}
+    if type(Distributions) == "table" then
+        for _, d in ipairs(Distributions) do
+            if type(d) == "table" then dists[#dists + 1] = d end
+        end
+    end
+    if #dists == 0 and type(SuburbsDistributions) == "table" then dists[1] = SuburbsDistributions end
+    if #dists == 0 then
+        Loot.types = false
+        return false
+    end
+    local types = {}
+    for _, d in ipairs(dists) do
+        for name, room in pairs(d) do
+            if type(room) == "table" then
+                for ctype, c in pairs(room) do
+                    if ours(c) then
+                        types[ctype] = true
+                        if ctype == "other" or ctype == "all" then Loot.fallback[name] = room end
+                    end
+                end
+            end
+        end
+    end
+    Loot.types = types
+    return types
+end
+
+-- OnFillContainer(roomName, containerType, container): drop the share of our items the slider takes away.
+-- Every procedural fill in the world fires it: a container type none of our lists fills returns at once
+-- (perf 2026-10-24: the item scan ran on every container; the game also fires it for a zombie's bag with
+-- the bag's picker table as `container`) unless the room filled it from its "other" / "all" entry
+-- (Loot.fallback); an unknown type is scanned
 function Loot.thin(roomName, containerType, container)
     if isClient() or not container then return 0 end
+    local types = Loot.containerTypes()
+    if types and containerType ~= nil and not types[containerType] then
+        local room = Loot.fallback[roomName]
+        if not room or room[containerType] ~= nil then return 0 end
+    end
     local items = container:getItems()
     if not items then return 0 end
     local drop = {}

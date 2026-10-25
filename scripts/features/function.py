@@ -40,7 +40,8 @@ floor CRVFunctionCargo open, no bed. Bed: the bedding drawn, the good-bed sleep 
 `--folded` draws the bed, `--folded --fold-mode cargo` the load floor.
 
 A pillow counts on the bed (client/HondaCRVGen1_Menu.lua, getBedQuality): in hand, in the sleeper's seat container
-(vanilla's own vehicle rule), on the folded load floor (CRVFunctionCargo) or the cargo deck (TruckBed).
+(vanilla's own vehicle rule) or on the cargo deck (TruckBed); not on the folded load floor (CRVFunctionCargo), which
+is shut and empty while it is a bed.
 
 The icon is drawn by scripts/function_icon.py (our own pixel art) and shipped as MEDIA.
 """
@@ -196,11 +197,11 @@ SANDBOX = [
     {"name": "FunctionAccessoryChance", "type": "integer", "default": 100, "min": 0, "max": 500,
      "label": "CRV accessory chance (percent)",
      "tooltip": "Scales the chance that a spawned CRV carries accessories (bull bar, roof rack, window guards, "
-                "spare tyre cover, and the off-road snorkel, skid plate, rear bumper, ladder and jerry cans). "
+                "spare tire cover, and the off-road snorkel, skid plate, rear bumper, ladder and jerry cans). "
                 "100 is normal, 0 bare cars. The picnic table is standard equipment."},
     {"name": "FunctionLootRarity", "type": "double", "default": 1.0, "min": 0.0, "max": 4.0,
      "label": "CRV loot multiplier",
-     "tooltip": "Multiplies how often the CRV's kits, armour, magazines and owner's manuals are found as loot. "
+     "tooltip": "Multiplies how often the CRV's kits, armor, magazines and owner's manuals are found as loot. "
                 "1 is normal, 0 never, 4 four times as often."},
 ]
 
@@ -208,8 +209,7 @@ SANDBOX = [
 # (weights before the loot slider's headroom, gen_scripts.LOOT_RARITY)
 DISTRIBUTIONS = [
     {"list": "CarDealerDesk", "item": "Base." + MANUAL, "weight": 2},
-    {"list": "CarSupplyLiterature", "item": "Base." + MANUAL, "weight": 2},
-    {"list": "CarSupplyMagazines", "item": "Base." + MANUAL, "weight": 1},
+    {"list": "CarSupplyLiterature", "item": "Base." + MANUAL, "weight": 3},   # 2 + the 1 that sat in the unused CarSupplyMagazines
     {"list": "BookstoreAutomotive", "item": "Base." + MANUAL, "weight": 1},
     {"list": "MechanicShelfBooks", "item": "Base." + MANUAL, "weight": 0.5},
     {"list": "GarageMechanics", "item": "Base." + MANUAL, "weight": 0.3},
@@ -223,15 +223,15 @@ _PAGES = [
     " <H2> Welcome to your CRV <LINE> <TEXT> Thank you for choosing Honda. Your CRV drives like a car on the highway and "
     "keeps going when the road gives out: Real Time 4WD sends power to the rear wheels the moment the front ones slip. "
     "Inside it is more practical than it looks: the rear seats fold into a flat floor and a bed, the cargo floor lifts out "
-    "as a picnic table, and under it is a storage well. Four seats, a 2.0-litre twin-cam engine, regular fuel, 58 litres "
+    "as a picnic table, and under it is a storage well. Four seats, a 2.0-liter twin-cam engine, regular fuel, 58 liters "
     "in the tank with the filler on the left. Read this manual once, front to back: a mechanic who has read it learns "
     "more from every part fitted, removed or repaired on a CRV. Keep it in the glove box.",
 
     " <H2> Driving <LINE> <TEXT> Most of the time your CRV drives its front wheels. On ice, mud or loose gravel, the rear "
     "wheels join in by themselves, within moments, and let go again when grip comes back: no lever, nothing to engage. "
     "Paved roads, gravel, dirt tracks, fields and snow are home ground; rocks and deep mud are not. Slow down off the "
-    "pavement: the springs are soft and the tyres are road tyres. Look after the timing belt: if it breaks, the engine "
-    "is ruined. A full roof and armour make the car slower to stop, so brake early.",
+    "pavement: the springs are soft and the tires are road tires. Look after the timing belt: if it breaks, the engine "
+    "is ruined. A full roof and armor make the car slower to stop, so brake early.",
 
     " <H2> Rear seats and a night in the car <LINE> <TEXT> Fold the seatbacks down and tumble the seats: the back of the cabin "
     "becomes one long, flat floor, about twice the cargo area, or, made up as a bed, a far better bed than any back seat. Both rear seats "
@@ -249,13 +249,13 @@ _PAGES = [
     " <H2> Accessories and modifications <LINE> <TEXT> From your dealer: the bull bar and the roof rack bolt on with a "
     "wrench, the windshield, window and rear glass guards with a screwdriver, the spare tire cover by hand. Aftermarket: "
     "a snorkel, a steel skid plate, a rear steel bumper with a hitch, a roof ladder and jerry cans, each bolted on and off "
-    "again. The Kestrel Trail Claw 3-inch lift puts the car on 30-inch all-terrain tyres, on the EX alloys or on black "
+    "again. The Kestrel Trail Claw 3-inch lift puts the car on 30-inch all-terrain tires, on the EX alloys or on black "
     "steel wheels; fitting it takes a jack, a lug wrench, a wrench and an experienced mechanic, with the engine off and "
     "everyone out, and the kit comes back if you take it off. The plans are in \"4x4 Off-Road: CRV Edition\".",
 
-    " <H2> Notes in the back of the manual <LINE> <TEXT> Taped in from \"Survival Armour\": door plates, window mesh, "
+    " <H2> Notes in the back of the manual <LINE> <TEXT> Taped in from \"Survival Armor\": door plates, window mesh, "
     "wheel arch guards and a rear glass plate, welded at a workbench and bolted on with a wrench and a screwdriver. "
-    "Armoured windows stay shut, and nothing gets an arm in. The steel wears down as it takes the hits, and every plate "
+    "Armored windows stay shut, and nothing gets an arm in. The steel wears down as it takes the hits, and every plate "
     "makes the car heavier. In pen: plates done at Al's in October; check them after every run. Glove box lid sticks: "
     "lift it and pull. Slept in it three nights at the lake. Storage well: spare keys, flashlight, the good tape.",
 ]
@@ -295,11 +295,23 @@ def _spread_text(i):
 
 PM_TEXT = _spread_text(0)
 
+
+def _manual_page_strings():
+    """The words on the spreads (H-SAVES-I5): scripts/manual_art.py draws the art without them and writes each string
+    with its key (Print_Text_CRVGen1_ManualPage_<id>) to manual_strings.json; client/HondaCRVGen1_FunctionMenu.lua lays
+    getText(key) over the art. "**word**" runs are bold; a translation keeps the markers."""
+    import json
+    import os
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "manual_strings.json"), encoding="utf-8") as f:
+        return json.load(f)
+
+
 TRANSLATIONS = {
     "Print_Media": dict(kv for i, (sid, png, title, _p) in enumerate(SPREADS) for kv in (
         ("Print_Media_%s_title" % sid, "Honda CRV Owner's Manual: %s (%d of %d)" % (title, i + 1, len(SPREADS))),
         ("Print_Media_%s_info" % sid, _info(png)))),
-    "Print_Text": {"Print_Text_%s_info" % sid: _spread_text(i) for i, (sid, _png, _t, _p) in enumerate(SPREADS)},
+    "Print_Text": dict({"Print_Text_%s_info" % sid: _spread_text(i) for i, (sid, _png, _t, _p) in enumerate(SPREADS)},
+                       **_manual_page_strings()),
     "IG_UI": dict({
         "IGUI_VehiclePartCRVFunctionCargo": "Load Floor (seats folded)",
         "IGUI_VehiclePartCRVFunctionUnderfloor": "Under-floor Storage",
@@ -323,6 +335,6 @@ TRANSLATIONS = {
 }
 
 LUA = ["shared/HondaCRVGen1_Function.lua", "shared/TimedActions/ISCRVFunctionLiftFloor.lua",
-       "client/HondaCRVGen1_FunctionMenu.lua", "server/HondaCRVGen1_FunctionServer.lua"]
+       "client/HondaCRVGen1_FunctionMenu.lua", "client/HondaCRVGen1_ManualLayout.lua", "server/HondaCRVGen1_FunctionServer.lua", "server/HondaCRVGen1_BedServer.lua"]
 MEDIA = (["common/media/textures/Item_%s.png" % MANUAL] + ["common/media/textures/printMedia/" + png for _i, png, _t, _p in SPREADS]
          + ["common/media/textures/CRVGen1_ManualPrev.png", "common/media/textures/CRVGen1_ManualNext.png"])

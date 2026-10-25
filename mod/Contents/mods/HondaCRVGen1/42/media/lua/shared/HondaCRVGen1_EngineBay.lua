@@ -42,20 +42,28 @@ local function now()
     return getTimestampMs()
 end
 
--- the hood leaves the bay in view: missing, or its door open
-function Bay.hoodOpen(vehicle)
-    local hood = vehicle:getPartById(Bay.HOOD)
+-- the hood leaves the bay in view: missing, or its door open. e (optional): the car's entry, which keeps the hood
+-- part and its door (perf 2026-10-24: looked up once per part init, not on every pass)
+function Bay.hoodOpen(vehicle, e)
+    local hood, door
+    if e and e.hood ~= nil then
+        hood, door = e.hood or nil, e.door or nil
+    else
+        hood = vehicle:getPartById(Bay.HOOD)
+        door = hood and hood:getDoor()
+        if e then e.hood, e.door = hood or false, door or false end
+    end
     if not hood or not hood:getInventoryItem() then return true end
-    local door = hood:getDoor()
     return door ~= nil and door:isOpen()
 end
 
 -- the drawing side's entry for a car (a new BaseVehicle under the same id starts afresh)
-local function entry(vehicle)
-    local id = vehicle:getId()
+local function entry(vehicle, id)
+    id = id or vehicle:getId()
     local e = Bay.cars[id]
     if not e or e.vehicle ~= vehicle then
-        e = { vehicle = vehicle, full = nil, open = Bay.hoodOpen(vehicle), opening = 0, hold = 0 }
+        e = { vehicle = vehicle, full = nil, opening = 0, hold = 0 }
+        e.open = Bay.hoodOpen(vehicle, e)
         Bay.cars[id] = e
     end
     return e
@@ -64,20 +72,20 @@ end
 -- show exactly one of the two models; only on a change (no setModelVisible on idle ticks)
 local function show(vehicle, e, full)
     if e.full == full then return end
-    local part = vehicle:getPartById(Bay.PART)
+    local part = e.bay or vehicle:getPartById(Bay.PART)
     if not part then return end
     part:setModelVisible(Bay.MODELS.full, full)
     part:setModelVisible(Bay.MODELS.low, not full)
     e.full = full
 end
 
--- one car, dt ms of unpaused time since the last pass
-function Bay.update(vehicle, dt)
-    local e = entry(vehicle)
+-- one car, dt ms of unpaused time since the last pass (e: its entry, when the caller has it)
+function Bay.update(vehicle, dt, e)
+    e = e or entry(vehicle)
     dt = dt or 0
     if e.opening > 0 then e.opening = math.max(0, e.opening - dt) end
     if e.hold > 0 then e.hold = math.max(0, e.hold - dt) end
-    local open = Bay.hoodOpen(vehicle)
+    local open = Bay.hoodOpen(vehicle, e)
     if open then
         e.opening = 0                    -- the door state carries it from here
     elseif e.open then
@@ -93,30 +101,69 @@ function Bay.Init(vehicle, part)
     if isServer() or not vehicle then return end
     local e = entry(vehicle)
     e.full = nil                         -- the part's models were just (re)made: apply afresh
-    e.open = Bay.hoodOpen(vehicle)       -- a car loaded with the hood shut shows the stand-in at once
-    Bay.update(vehicle, 0)
+    e.hood, e.door, e.bay = nil, nil, nil   -- look the parts up again
+    e.open = Bay.hoodOpen(vehicle, e)    -- a car loaded with the hood shut shows the stand-in at once
+    Bay.update(vehicle, 0, e)
 end
+
+local last = nil                         -- the clock at the last tick that read it (Bay.OnTick)
 
 -- this side started opening the hood (ISOpenVehicleDoor:start, before the clip plays)
 function Bay.opening(vehicle)
     if isServer() or not vehicle or not vehicle:getPartById(Bay.PART) then return end
     local e = entry(vehicle)
     e.opening = Bay.OPEN_GRACE
-    Bay.update(vehicle, 0)
+    if last == nil then last = now() end -- idle ticks leave the clock unread: the grace counts from now
+    Bay.update(vehicle, 0, e)
 end
 
-local last = nil
+-- perf (2026-10-24): every car every tick was ~8 game calls a car a tick for a hood that is shut nearly always.
+-- A car whose hold or grace runs (a hood opening or closing here: the timers must count down smoothly) is updated
+-- every tick; every car, including those, every Bay.EVERY ticks, which is when a door state another side changed
+-- (another player's hood, a loaded car) is noticed: at most ~1/6 s late, well inside the hood's 2 s swing. An idle
+-- car's timers are 0, so it needs no dt; a busy one is updated on every tick with that tick's dt
+-- perf (2026-10-24, second pass): the hood, its door and the bay part are kept in the car's entry (Bay.Init drops
+-- them); a tick with no hood moving and no full pass reads neither the clock nor the pause state (nothing counts
+-- down); on a full pass a car no local player is within Bay.NEAR tiles of is looked at every Bay.SLOW-th full pass
+-- (State.due: ~2/3 s; nobody there sees the bay). A hood moving here is always near the player who moves it.
+Bay.EVERY = 10
+Bay.NEAR = 50
+Bay.SLOW = 4
+local ticks = 0
 function Bay.OnTick()
+    ticks = ticks + 1
+    local full = ticks % Bay.EVERY == 0
+    if not full then
+        local busy = false
+        for _, e in pairs(Bay.cars) do
+            if e.opening > 0 or e.hold > 0 then
+                busy = true
+                break
+            end
+        end
+        if not busy then
+            last = nil
+            return
+        end
+    end
     local t = now()
     local dt = last and (t - last) or 0
     last = t
     if dt < 0 or isGamePaused() then dt = 0 end
+    local State = HondaCRVGen1.State
     for id, e in pairs(Bay.cars) do
-        local v = e.vehicle
-        if v == nil or v:isRemovedFromWorld() or v:getId() ~= id or not v:getPartById(Bay.PART) then
-            Bay.cars[id] = nil
-        else
-            Bay.update(v, dt)
+        local moving = e.opening > 0 or e.hold > 0
+        if full then
+            local v = e.vehicle
+            if e.bay == nil and v ~= nil then e.bay = v:getPartById(Bay.PART) or false end
+            if v == nil or v:isRemovedFromWorld() or v:getId() ~= id or not e.bay then
+                Bay.cars[id] = nil
+            elseif moving or not State or State.due(e, v, Bay.NEAR, Bay.SLOW, ticks) then
+                Bay.update(v, dt, e)
+            end
+        elseif moving then
+            local v = e.vehicle
+            if v ~= nil and not v:isRemovedFromWorld() then Bay.update(v, dt, e) end
         end
     end
 end

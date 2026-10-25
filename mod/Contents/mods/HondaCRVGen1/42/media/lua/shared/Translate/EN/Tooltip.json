@@ -1,6 +1,8 @@
 {
     "Tooltip_CRV_GateClosed": "Open the tailgate first",
-    "Tooltip_CRV_Armour_Magazine": "Welded plate, expanded-metal mesh and arch guards for the Honda CRV: teaches how to make every piece of CRV survival armour.",
+    "Tooltip_CRV_BedHint": "A good bed: sit in a front seat and Sleep (V)",
+    "Tooltip_CRV_NoFrontSeat": "Both front seats are taken",
+    "Tooltip_CRV_Armour_Magazine": "Welded plate, expanded-metal mesh and arch guards for the Honda CRV: teaches how to make every piece of CRV survival armor.",
     "Tooltip_CRV_Awning_Item": "A roll-out side awning for the CRV's roof rails.<br>Rolled out beside a parked car, it keeps the rain off whoever stands under it.",
     "Tooltip_CRV_Awning_EngineOn": "Turn the engine off first",
     "Tooltip_CRV_Awning_Moving": "The car must be standing still",
@@ -8,7 +10,7 @@
     "Tooltip_CRV_Awning_Inside": "Get out of the car first",
     "Tooltip_Recipe_HondaCRVKnowHow": "How the first CRV goes together: more Mechanics experience from work on a CRV.",
     "Tooltip_CRV_Function_Manual": "Honda's owner's manual for the first CRV.<br>Reading it teaches Basic Mechanics, and how this car goes together:<br>more Mechanics experience from work on a CRV.",
-    "Tooltip_CRV_Lift_Kit": "A 3 in. suspension lift for the Honda CRV: longer springs, spacers, shocks, four 30x9.50R15 all-terrain tyres and a set of black steel wheels.",
+    "Tooltip_CRV_Lift_Kit": "A 3 in. suspension lift for the Honda CRV: longer springs, spacers, shocks, four 30x9.50R15 all-terrain tires and a set of black steel wheels.",
     "Tooltip_CRV_Lift_Magazine": "Teaches how to build a lift kit for a compact SUV.",
     "Tooltip_CRV_Lift_Needs": "Needs: ",
     "Tooltip_CRV_Lift_NeedKit": "a CRV lift kit",

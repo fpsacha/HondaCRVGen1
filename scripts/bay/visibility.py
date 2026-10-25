@@ -30,9 +30,11 @@ from mathutils.bvhtree import BVHTree
 OCCLUDERS = ("bay_walls",)
 GLASS_MATS = ("Vitre", "Vitre_noir")
 PARALLEL = [(e, 5) for e in (26.0, 30.0, 34.0)] + [(e, 10) for e in (1.5, 4.0, 10.0, 17.0, 45.0, 60.0, 75.0, 89.0)]
-# (distance past the car's box, eye height) metres, every RING_AZ degrees: kneeling at the bumper to standing
-# over the open bay, and further out
-RING = [(d, h) for d in (0.25, 0.8, 2.0) for h in (0.5, 0.95, 1.35, 1.70)]
+# (distance past the car's box, eye height) metres, every RING_AZ degrees: lying by the car (0.25 m: bug wave 3,
+# IMP-VP-1, a Project Viewpoint camera low behind the car sees the strip under the rear off-road bumper and the
+# hitch, which prune_hidden dropped with 0.5 m the lowest eye) and kneeling at the bumper to standing over the
+# open bay, and further out
+RING = [(d, h) for d in (0.25, 0.8, 2.0) for h in (0.25, 0.5, 0.95, 1.35, 1.70)]
 RING_AZ = 10
 LIFT = 0.0006
 

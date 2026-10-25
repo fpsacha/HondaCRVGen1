@@ -157,6 +157,19 @@ MAX_LAYERS = 3
 # inside a panel. Ranked, the proud trim moves instead.
 FOLD_RANK = {"Body": 0, "Body_plastique": 1}
 
+# --- A3 rigid groups (bug wave 3, H-VP-1, 2026-10-24) ---------------------------------------------------
+# tris may carry "split" (T,) int and "group" (T,) int (-1: none; bake_atlas.shell_tris gives the D-pillar lens
+# faces of each side a group, split 1 for the tail zone, 2 for the stop zone). Faces of different split values
+# never share an island or a fallback chart. Every chart (island or fallback chart) of one group is packed as ONE
+# rigid xatlas chart: _group_layout lays its pieces out in one block per split value (pieces GROUP_SPACING apart),
+# the blocks GROUP_GAP apart, and dummy triangles over the group's box tie them together and keep every other
+# chart out of the box. So the tail and stop parts of a lens sit >= GROUP_GAP x the pack's scale apart on the
+# sheet whatever the packing does: compose_textures.lamp_guard wraps each lit lens in whole 8 px blocks (the 256
+# cap) plus a ring of them, and two lamp zones whose lit blocks lie 3 blocks apart never meet in one block, ring
+# or bilinear footprint at any cap (a gap of 23 px or more does that from any alignment).
+GROUP_SPACING = 16                    # px between the pieces of one group (>= GAP_MIN after the pack's shrink)
+GROUP_GAP = 40                        # px between the split blocks of one group (>= 23 at the pack's floor scale 0.8)
+
 ISLAND_FALLBACK, ISLAND_DARK, ISLAND_SWATCH = -1, -2, -3
 KIND_PLANAR, KIND_FALLBACK, KIND_DARK, KIND_SWATCH = 0, 1, 2, 3
 JITTER = (1.0 / 1031.0, 1.0 / 2053.0)  # sample offset: no sample sits exactly on a shared edge
@@ -510,12 +523,15 @@ def fold_layers(uv, rank, mat):
     return layer
 
 
-def build_islands(ax, glass, obj, fn, area, pos, pairs, tpc_px, rank, mat):
+def build_islands(ax, glass, obj, fn, area, pos, pairs, tpc_px, rank, mat, split=None):
     """Islands (A2.3-4): list of dicts (faces, axis, dir, u, v, layer 1..3, object, glass), and the
-    faces that leave for fallback with their reason. rank: FOLD_RANK per face; mat: material id."""
+    faces that leave for fallback with their reason. rank: FOLD_RANK per face; mat: material id;
+    split: optional int per face, faces of different values never share an island (rigid groups)."""
     n = len(ax)
     a, b = pairs[:, 0], pairs[:, 1]
     tie = (ax[a] >= 0) & (ax[a] == ax[b]) & (obj[a] == obj[b]) & (glass[a] == glass[b])
+    if split is not None:
+        tie &= split[a] == split[b]
     lab = np.where(ax >= 0, components(n, np.stack([a[tie], b[tie]], axis=1)), -1)
     pa, pb = a[tie], b[tie]                      # pairs inside one first-cut island, grouped by it
     o = np.argsort(lab[pa], kind="stable")
@@ -586,14 +602,16 @@ def match_corners(ind, vmap, oind):
     return out, bad
 
 
-def chart_fallback(faces, obj, w, wid, wpos, run_job, tpc_px):
-    """xatlas charts of the fallback faces (A3.1): mesh groups by (object, quantised weight), positions
-    x weight, resolution 0 at tpc_px texels per metre (charting and parametrisation only). Returns
-    the chart vertices' texel UVs (V, 2), each face's corners as indices into them (n, 3), a chart
-    label per face (charts never share a vertex) and the job's numbers."""
+def chart_fallback(faces, obj, w, wid, wpos, run_job, tpc_px, split=None):
+    """xatlas charts of the fallback faces (A3.1): mesh groups by (object, quantised weight, split),
+    positions x weight, resolution 0 at tpc_px texels per metre (charting and parametrisation only).
+    Returns the chart vertices' texel UVs (V, 2), each face's corners as indices into them (n, 3), a
+    chart label per face (charts never share a vertex) and the job's numbers."""
     payload = {"mode": "chart", "tpu": float(tpc_px)}
     groups = []
     key = obj[faces].astype(np.int64) * 1000 + np.round(w[faces] * 64).astype(np.int64)
+    if split is not None:
+        key = key + np.asarray(split, dtype=np.int64)[faces] * 1_000_000_000
     for _k, sel in _groups(np.unique(key, return_inverse=True)[1].reshape(-1)):
         fs = faces[sel]
         vids, ind = np.unique(wid[fs], return_inverse=True)
@@ -645,10 +663,105 @@ def _cells(kind, on, mn, zn):
     return cells
 
 
-def _pack(islands, wid, wpos, tpc0, fb, fverts, fcorner, fchart, cells, n, size, planar_tpc, fallback_tpc, run_job):
+def _group_layout(units, spacing=GROUP_SPACING, gap=GROUP_GAP):
+    """Offsets laying out the charts of one rigid group. units: [(split, lo (2,), hi (2,))] texel boxes. Every
+    split value is its own block of shelves (tallest first, pieces `spacing` apart, rows about 1.5 x the
+    block's square side wide), the blocks stacked `gap` apart, lowest split first. Returns [(dx, dy)]."""
+    off = [None] * len(units)
+    y = 0.0
+    for s in sorted({u[0] for u in units}):
+        idx = sorted((i for i, u in enumerate(units) if u[0] == s), key=lambda i: -(units[i][2][1] - units[i][1][1]))
+        ext = [np.asarray(units[i][2], dtype=np.float64) - np.asarray(units[i][1], dtype=np.float64) for i in idx]
+        area = sum(float((e + spacing).prod()) for e in ext)
+        width = max(max(float(e[0]) for e in ext), 1.5 * area ** 0.5)
+        x, row = 0.0, 0.0
+        for i, e in zip(idx, ext):
+            if x > 0.0 and x + e[0] > width:
+                y += row + spacing
+                x, row = 0.0, 0.0
+            off[i] = (x - float(units[i][1][0]), y - float(units[i][1][1]))
+            x += float(e[0]) + spacing
+            row = max(row, float(e[1]))
+        y += row + gap
+    return off
+
+
+def _group_charts(group, split, chart_id, face_slot, U, I, M, FX, nchart):
+    """Rigid groups (see GROUP_GAP): moves each group's charts into _group_layout's places in U (in place),
+    gives all their rows one packing material and adds the dummy triangles (fan over the group's box from one
+    chart's vertex, one triangle from every other chart's vertex to the anchor and a box corner) that make
+    xatlas pack them as one chart. Returns (U, I, M, FX, groups) with the dummies appended; groups: [(anchor
+    vertex, [(chart's first vertex, its offset from the anchor in texels)])] for _check_groups."""
+    if group is None:
+        return U, I, M, FX, []
+    out = []
+    add_u, add_i, add_m = [], [], []
+    nv = len(U)
+    gid = int(M.max()) + 1 if len(M) else nchart
+    for g in np.unique(group[(group >= 0) & (face_slot >= 0)]):
+        faces = np.nonzero((group == g) & (face_slot >= 0))[0]
+        units = []
+        for c in np.unique(chart_id[faces]):
+            f = faces[chart_id[faces] == c]
+            s = np.unique(split[f]) if split is not None else np.zeros(1, dtype=np.int64)
+            if len(s) != 1:
+                raise RuntimeError("rigid group %d: chart %d mixes split values %s" % (g, c, s.tolist()))
+            verts = np.unique(I[face_slot[f]])
+            units.append((int(s[0]), verts, U[verts].min(axis=0), U[verts].max(axis=0), face_slot[f]))
+        off = _group_layout([(s, lo, hi) for s, _v, lo, hi, _r in units])
+        for (_s, verts, _lo, _hi, rows), d in zip(units, off):
+            U[verts] += np.array(d)
+            M[rows] = gid
+        allv = np.concatenate([u[1] for u in units])
+        lo, hi = U[allv].min(axis=0) - 1.0, U[allv].max(axis=0) + 1.0
+        corners = np.array([(lo[0], lo[1]), (hi[0], lo[1]), (hi[0], hi[1]), (lo[0], hi[1])])
+        ci = nv + np.arange(4)
+        add_u.append(corners)
+        nv += 4
+        anchor = int(units[0][1][0])
+        tris = [(anchor, ci[k], ci[(k + 1) % 4]) for k in range(4)]
+        links = []
+        for _s, verts, _lo, _hi, _r in units[1:]:
+            v = int(verts[0])
+            a2 = [abs(tri_area2d(np.array([U[v], U[anchor], corners[k]]))) for k in range(4)]
+            tris.append((v, anchor, ci[int(np.argmax(a2))]))
+            links.append((v, U[v] - U[anchor]))
+        add_i.append(np.array(tris, dtype=np.int64))
+        add_m.append(np.full(len(tris), gid, dtype=np.int64))
+        out.append((anchor, links))
+        gid += 1
+    if not out:
+        return U, I, M, FX, []
+    U = np.concatenate([U] + add_u)
+    I = np.concatenate([I] + add_i)
+    M = np.concatenate([M] + add_m)
+    FX = np.concatenate([FX, np.zeros(nv - len(FX), dtype=bool)])
+    return U, I, M, FX, out
+
+
+def _check_groups(groups, vmap, ouv, scale, size):
+    """Every chart of a rigid group kept its offset from the group's anchor (x the pack's scale, a 90-degree
+    turn or transpose allowed): xatlas packed the group as one chart."""
+    if not groups:
+        return
+    first = {}
+    for j, v in enumerate(vmap.tolist()):
+        first.setdefault(v, j)
+    for anchor, links in groups:
+        qa = ouv[first[anchor]] * size
+        for v, d in links:
+            q = ouv[first[v]] * size - qa
+            if abs(np.linalg.norm(q) - scale * np.linalg.norm(d)) > 2.0:
+                raise RuntimeError("rigid group split by the packing: a chart moved %.1f px from its place (%.1f px)"
+                                   % (np.linalg.norm(q), scale * np.linalg.norm(d)))
+
+
+def _pack(islands, wid, wpos, tpc0, fb, fverts, fcorner, fchart, cells, n, size, planar_tpc, fallback_tpc, run_job,
+          group=None, split=None):
     """One add_uv_mesh of the islands, the fallback charts and the cells (A3.4), vertex indices unique
-    per chart. Returns uv (n, 3, 2) normalised (cells' faces on CELL_TRI, each cell's rect set),
-    the chart id per face, the chart count, the scale the pack reached and xatlas's utilization."""
+    per chart; the charts of each rigid group (group >= 0, see GROUP_GAP) as one. Returns uv (n, 3, 2)
+    normalised (cells' faces on CELL_TRI, each cell's rect set), the chart id per face, the chart count,
+    the scale the pack reached and xatlas's utilization."""
     uvs, inds, fixed = [], [], []
     face_slot = np.full(n, -1, dtype=np.int64)      # row of the face in the packed index array
     rows = 0
@@ -698,6 +811,7 @@ def _pack(islands, wid, wpos, tpc0, fb, fverts, fcorner, fchart, cells, n, size,
     M[face_slot[has_slot]] = chart_id[has_slot]
     for j, c in enumerate(cells):
         M[cell_rows + 2 * j:cell_rows + 2 * j + 2] = chart_id[c["faces"][0]]
+    U, I, M, FX, groups = _group_charts(group, split, chart_id, face_slot, U, I, M, FX, nchart)
     floor = max(TPC_FLOOR[0] / planar_tpc, TPC_FLOOR[1] / fallback_tpc)
     res = run_job({"mode": "pack", "uv": U.astype(np.float32), "ind": I.astype(np.uint32), "mat": M.astype(np.uint32),
                    "fixed": FX, "size": size, "padding": PACK_PADDING, "step": PACK_STEP, "min_scale": floor})
@@ -712,9 +826,10 @@ def _pack(islands, wid, wpos, tpc0, fb, fverts, fcorner, fchart, cells, n, size,
     ov, bad = match_corners(I, vmap, oind)
     if bad:
         raise RuntimeError("xatlas changed %d packed corners" % bad)
-    puv = ouv[ov]                                          # (F, 3, 2) normalised, per input corner
     if width != size or height != size:                    # xatlas normalises by its own page size
-        puv = puv * np.array([width / size, height / size])
+        ouv = ouv * np.array([width / size, height / size])
+    _check_groups(groups, vmap, ouv, scale, size)
+    puv = ouv[ov]                                          # (F, 3, 2) normalised, per input corner (dummies last)
     uv = np.zeros((n, 3, 2))
     uv[has_slot] = puv[face_slot[has_slot]]
     tri = np.array(CELL_TRI, dtype=np.float64)
@@ -743,6 +858,8 @@ def unwrap(tris, run_job, size=SIZE, planar_tpc=PLANAR_TPC, fallback_tpc=FALLBAC
     mn = np.array(tris["mat_names"])[np.asarray(tris["mat"])]
     zn = np.array(tris["zone_names"])[np.asarray(tris["zone"])]
     n = len(pos)
+    split = np.asarray(tris["split"], dtype=np.int64) if "split" in tris else None      # rigid groups (GROUP_GAP)
+    group = np.asarray(tris["group"], dtype=np.int64) if "group" in tris else None
     cr = np.cross(pos[:, 1] - pos[:, 0], pos[:, 2] - pos[:, 0])
     ln = np.linalg.norm(cr, axis=1)
     area = ln / 2.0
@@ -764,7 +881,7 @@ def unwrap(tris, run_job, size=SIZE, planar_tpc=PLANAR_TPC, fallback_tpc=FALLBAC
     tpc0 = planar_tpc * 100.0
     rank = np.array([FOLD_RANK.get(m, len(FOLD_RANK)) for m in mn.tolist()], dtype=np.int64)
     islands, leave, why = build_islands(np.where(kind == KIND_PLANAR, ax, -1), glass, obj, fn, area, pos, pairs, tpc0, rank,
-                                        np.asarray(tris["mat"], dtype=np.int64))
+                                        np.asarray(tris["mat"], dtype=np.int64), split)
     for i, r in zip(leave.tolist(), why):
         kind[i] = KIND_FALLBACK
         reason[i] = r
@@ -790,7 +907,7 @@ def unwrap(tris, run_job, size=SIZE, planar_tpc=PLANAR_TPC, fallback_tpc=FALLBAC
     # fallback charts; the tiny ones of swatch materials and the starved ones become swatches (A1),
     # starvation predicted where xatlas will put the chart (predicted_starvation)
     fb = np.nonzero(kind == KIND_FALLBACK)[0]
-    fverts, fcorner, fchart, finfo = chart_fallback(fb, obj, w, wid, wpos, run_job, fallback_tpc * 100.0)
+    fverts, fcorner, fchart, finfo = chart_fallback(fb, obj, w, wid, wpos, run_job, fallback_tpc * 100.0, split)
     n_tiny = 0
     if len(fb):
         fuv = fverts[fcorner]
@@ -827,7 +944,7 @@ def unwrap(tris, run_job, size=SIZE, planar_tpc=PLANAR_TPC, fallback_tpc=FALLBAC
         island[kind == KIND_SWATCH] = ISLAND_SWATCH
         cells = _cells(kind, on, mn, zn)
         uv, chart_id, nchart, scale, util = _pack(islands, wid, wpos, tpc0, fb, fverts, fcorner, fchart, cells, n, size,
-                                                  planar_tpc, fallback_tpc, run_job)
+                                                  planar_tpc, fallback_tpc, run_job, group, split)
         if attempt:
             break
         late = starved_charts(uv[fb] * size, fchart) if len(fb) else {}
@@ -847,7 +964,10 @@ def unwrap(tris, run_job, size=SIZE, planar_tpc=PLANAR_TPC, fallback_tpc=FALLBAC
         fb, fcorner, fchart = fb[~to_sw], fcorner[~to_sw], fchart[~to_sw]
 
     meta = {"islands": [], "dark_blocks": [], "swatches": [], "planar_tpc": round(planar_tpc * scale, 4),
-            "fallback_tpc": round(fallback_tpc * scale, 4), "size": size}
+            "fallback_tpc": round(fallback_tpc * scale, 4), "size": size,
+            # rigid groups packed (GROUP_GAP): compose_textures.lens_groups reads it (0: the lens is one island)
+            "rigid_groups": int(len(np.unique(group[(group >= 0) & ((kind == KIND_PLANAR) | (kind == KIND_FALLBACK))])))
+            if group is not None else 0}
     for k, isl in enumerate(islands):
         meta["islands"].append({"id": k, "axis": AXES[isl["axis"]], "dir": [round(float(x), 5) for x in isl["dir"]],
                                 "layer": isl["layer"], "object": str(tris["obj_names"][isl["object"]]),

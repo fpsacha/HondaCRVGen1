@@ -65,7 +65,20 @@ end
 -- ItemContainer.getMaxWeight / getCapacity is the container's own capacity field (0 = full, nothing fits)
 function Inv:getMaxWeight() return self.capacity or 0 end
 function Inv:getCapacityWeight() return self.weight or 0 end
-function Inv:hasRoomFor(w) return (self.weight or 0) + w <= (self.capacity or 0) end
+-- hasRoomFor(weight) or, as ItemContainer.hasRoomFor(character, item) (42.21), the item's weight (.weight, 0)
+function Inv:hasRoomFor(a, b)
+    local w = a
+    if b ~= nil then w = type(b) == "number" and b or (b.weight or 0) end
+    return (self.weight or 0) + w <= (self.capacity or 0)
+end
+-- instanceItem (LuaManager.GlobalObject): a new item not in any container; WEIGHTS[type] its weight
+WEIGHTS = {}
+function instanceItem(t)
+    local it = newItem((t:gsub("^Base%.", "")))
+    it.weight = WEIGHTS[it.type] or 0
+    return it
+end
+function Player:getCurrentSquare() return getSquare(self.x, self.y, 0) end
 NET_INV = { removed = 0, added = 0 }
 function sendRemoveItemFromContainer(c, it) NET_INV.removed = NET_INV.removed + 1 end
 function sendAddItemToContainer(c, it) NET_INV.added = NET_INV.added + 1 end
@@ -224,8 +237,11 @@ TO_PLAYER = {}
 local serverCommand = sendServerCommand
 function sendServerCommand(a, b, c, d)
     if type(a) == "table" and getmetatable(a) == Player then
-        if ROLE == "server" then TO_PLAYER[#TO_PLAYER + 1] = { player = a.name, module = b, command = c, args = d } end
-        return
+        if ROLE == "server" and b ~= "HondaCRVGen1" then
+            TO_PLAYER[#TO_PLAYER + 1] = { player = a.name, module = b, command = c, args = d }
+            return
+        end
+        return serverCommand(a, b, c, d)          -- HondaCRVGen1.State's "changed" (sent per player in range): the net
     end
     return serverCommand(a, b, c)
 end
@@ -276,6 +292,7 @@ function Veh:transmitEngine() self.sent = self.sent + 1 end
 function Veh:transmitRust() self.sent = self.sent + 1 end
 function Veh:transmitColorHSV() self.sent = self.sent + 1 end
 function Veh:transmitSkinIndex() self.sent = self.sent + 1 end
+function Veh:updateSkin() end                                  -- (rebinds the model: SKIN_FAKE below)
 
 -- addVehicleDebug (GlobalObject 42.21): a new car of `script` at the square's INTEGER corner (setX(sq.x)),
 -- physics seeded there, yaw jittered, the create hooks' random parts (their items' capacities written into
@@ -513,6 +530,28 @@ def single_player():
     return sp
 
 
+def full_inventory():
+    """I-PLAY-1 (2026-10-24): lowering a lifted car gives the kit back; with no room for it in the inventory it went
+    in anyway (inv:AddItem, over capacity). Now, as vanilla's uninstall (ISUninstallVehiclePart:complete: hasRoomFor
+    -> AddItem, else AddWorldInventoryItem on the player's square), it lands at the player's feet."""
+    sp = side("sp")
+    sp.run("v = scenario(1); kitUp(PLAYER, false); PLAYER.mech = 5")
+    sp.run("v0 = newCRV(5, 'Base.HondaCRVGen1LiftSteel'); WEIGHTS.CRVGen1_LiftKit = 12")
+    sp.run("inv = PLAYER:getInventory(); inv.capacity, inv.weight = 15, 14")       # nearly full: 12 kg will not fit
+    sp.run("c = ISCRVLiftConvert:new(PLAYER, v0, 'stock'); c:perform(); done = c:complete(); n = SPAWNED[#SPAWNED]")
+    check(sp.eval("done") is True and sp.eval("n:getScriptName()") == "Base.HondaCRVGen1", "lowered to stock")
+    check(sp.eval("PLAYER:getInventory():getFirstTypeRecurse('Base.CRVGen1_LiftKit')") is None,
+          "a full inventory does not take the kit")
+    ground = sp.eval("(function() local t = {} for _, it in ipairs(getSquare(PLAYER.x, PLAYER.y, 0).ground) do "
+                     "t[#t + 1] = it.type end return table.concat(t, ',') end)()")
+    check(ground == "CRVGen1_LiftKit", "the kit is on the ground at the player's feet (%r)" % ground)
+    sp.run("inv.weight = 0; v1 = newCRV(6, 'Base.HondaCRVGen1LiftAlloy'); "
+           "c = ISCRVLiftConvert:new(PLAYER, v1, 'stock'); c:perform(); c:complete()")
+    check(sp.eval("PLAYER:getInventory():getFirstTypeRecurse('Base.CRVGen1_LiftKit')") is not None,
+          "with room, the kit goes into the inventory")
+    print("LIFT full inventory: the removed kit drops at the player's feet, as a vanilla uninstall does")
+
+
 def xp_farming():
     """Repeating swaps (or fit / remove) on one car pays once per kind of work per in-game day."""
     sp = side("sp")
@@ -739,8 +778,178 @@ def multiplayer():
     print("LIFT multiplayer: client action rebuilt by name on the server, converted there, state reaches both clients")
 
 
+SKIN_FAKE = r'''
+-- 42.21 bytecode, modelled (the hunt's probe_lift_skin_sp.py): createPhysics rolls a random skin and
+-- ModelManager.addVehicle builds the model with the skin of that moment (v.bound); it is rebuilt only when a
+-- model's visibility actually changes; setSkinIndex writes the field alone; updateSkin rebinds
+local spawn0 = addVehicleDebug
+function addVehicleDebug(script, dir, skin, sq)
+    local v = spawn0(script, dir, skin, sq)
+    v.skin = 6
+    v.bound = v.skin
+    return v
+end
+local smv0, sii0 = Part.setModelVisible, Part.setInventoryItem
+function Part:setModelVisible(id, vis)
+    local was = self.visible[id] and true or false
+    smv0(self, id, vis)
+    if was ~= (vis and true or false) and self.vehicle then self.vehicle.bound = self.vehicle.skin end
+end
+function Part:setInventoryItem(item, skill)
+    local before = {}
+    for _, m in ipairs(self.models or {}) do before[m] = self.visible[m] and true or false end
+    sii0(self, item, skill)
+    for _, m in ipairs(self.models or {}) do
+        if before[m] ~= (self.visible[m] and true or false) and self.vehicle then self.vehicle.bound = self.vehicle.skin end
+    end
+end
+function Veh:updateSkin() self.bound = self.skin end
+'''
+
+
+def skin_rebind():
+    """H-LUA-2 (2026-10-24): single player, a converted plain car (nothing whose models the re-init toggles) kept
+    the spawn's random paint until a reload: Lift.restore set the skin index but nothing rebound the model. It calls
+    updateSkin now, as vanilla ISVehicleColor does after its setSkinIndex."""
+    sp = side("sp")
+    sp.run(SKIN_FAKE)
+    sp.run("v = scenario(1); kitUp(PLAYER, true); v.parts.CRVRoofRack.item = nil; "
+           "a = ISCRVLiftConvert:new(PLAYER, v, 'alloy'); a:start(); a:perform(); done = a:complete(); n = SPAWNED[#SPAWNED]")
+    check(sp.eval("done") is True and sp.eval("n.skin") == 3, "converted, skin index carried (%s)" % sp.eval("n.skin"))
+    check(sp.eval("n.bound") == 3, "the model is drawn with the carried skin, not the spawn's (%s)" % sp.eval("n.bound"))
+    print("LIFT skin: the new car's model rebinds to the carried paint at once (updateSkin)")
+
+
+KEYS_FAKE = r'''
+-- the fresh car's spawn key wherever BaseVehicle.addKeyToWorld may put it (42.21): its glove box, a container of an
+-- object near, a zombie's inventory, the ground; plus the player's real key to the old car and an unrelated key
+function Item:getKeyId() return self.keyId end
+function instanceof(o, cls) return type(o) == "table" and o.class == cls end
+local function jlist(t) return { size = function() return #t end, get = function(_, i) return t[i + 1] end } end
+local sq0 = getSquare
+function getSquare(x, y, z)
+    local s = sq0(x, y, z)
+    s.wobs, s.objs, s.mobs = s.wobs or {}, s.objs or {}, s.mobs or {}
+    local idx = getmetatable(s).__index
+    idx.getWorldObjects = function(q) return jlist(q.wobs) end
+    idx.getObjects = function(q) return jlist(q.objs) end
+    idx.getMovingObjects = function(q) return jlist(q.mobs) end
+    idx.transmitRemoveItemFromSquare = function(q, wo)
+        for i, w in ipairs(q.wobs) do if w == wo then table.remove(q.wobs, i); REMOVED_GROUND = (REMOVED_GROUND or 0) + 1 return end end
+    end
+    return s
+end
+function key(id) local k = newItem("CarKey"); k.keyId = id; return k end
+function onGround(x, y, item) table.insert(getSquare(x, y, 0).wobs, { getItem = function() return item end, item = item }) end
+CRATE = newInv()
+function crateAt(x, y) table.insert(getSquare(x, y, 0).objs, { getContainerCount = function() return 1 end,
+                                                               getContainerByIndex = function() return CRATE end }) end
+ZOMBIE = { class = "IsoZombie", inv = newInv(), getInventory = function(z) return z.inv end }
+local spawn0 = addVehicleDebug
+function addVehicleDebug(script, dir, skin, sq)
+    local v = spawn0(script, dir, skin, sq)
+    if SCATTER then                                        -- the spawn key, its id 999 (the fake's fresh key id)
+        SCATTER = false
+        v.parts.GloveBox.cont:AddItem(key(999))
+        onGround(sq:getX() + 4, sq:getY() - 3, key(999))
+        CRATE:AddItem(key(999))
+        ZOMBIE.inv:AddItem(key(999))
+    end
+    return v
+end
+function keysOf(id)
+    local n = 0
+    local function inv(c) for _, it in ipairs(c.list) do if it.keyId == id then n = n + 1 end end end
+    for _, s in pairs(SQUARES) do
+        for _, w in ipairs(s.wobs or {}) do if w.item.keyId == id then n = n + 1 end end
+    end
+    inv(CRATE); inv(ZOMBIE.inv)
+    for _, v in ipairs(SPAWNED) do
+        if not v.removed then for _, pid in ipairs(v.order) do local c = v.parts[pid].cont; if c and c.list then inv(c) end end end
+    end
+    return n
+end
+'''
+
+
+def stray_keys():
+    """H-FEATURES-4 (2026-10-24): addToWorld's trySpawnKey can put the fresh car's key in its glove box, a container
+    or a zombie within 10 tiles, or on the ground there; the restore then gives the car the OLD key id, so that key
+    opened nothing. Every key with the new car's own id is removed from the car and the squares around it; the
+    player's keys to the car (the old id) and other keys stay."""
+    sp = side("sp")
+    sp.run(KEYS_FAKE)
+    sp.run("v = scenario(1); kitUp(PLAYER, true); local x, y = math.floor(v.x), math.floor(v.y); "
+           "onGround(x + 1, y, key(1234)); onGround(x - 2, y + 2, key(555)); crateAt(x - 5, y + 6); "
+           "ZOMBIE.x = x + 3; table.insert(getSquare(x + 3, y - 8, 0).mobs, ZOMBIE); SCATTER = true")
+    check(sp.eval("keysOf(999)") == 0, "before: no key of the fresh car yet")
+    sp.run("a = ISCRVLiftConvert:new(PLAYER, v, 'alloy'); a:start(); a:perform(); done = a:complete(); n = SPAWNED[#SPAWNED]")
+    check(sp.eval("done") is True and sp.eval("n.keyId") == 1234, "converted, the old key id restored")
+    check(sp.eval("keysOf(999)") == 0, "no stray key of the fresh car left anywhere (%d)" % sp.eval("keysOf(999)"))
+    check(sp.eval("REMOVED_GROUND") == 1 and sp.eval("CRATE:count()") == 0 and sp.eval("ZOMBIE.inv:count()") == 0,
+          "taken off the ground, out of the crate and the zombie")
+    check(sp.eval("keysOf(1234)") == 1 and sp.eval("keysOf(555)") == 1, "the player's key to the car and another key stay")
+    print("LIFT keys: the fresh car's spawn key is removed from its glove box, the ground, a crate and a zombie near")
+
+
+def reach_at_complete():
+    """H-LUA-I3 (2026-10-24): the server never runs isValid for a client's action: a player who walked off (or a
+    lagging client) still converted the car. Lift.convert re-checks Lift.near; the player is told it failed."""
+    sp = side("sp")
+    sp.run("v = scenario(1); kitUp(PLAYER, true); a = ISCRVLiftConvert:new(PLAYER, v, 'alloy'); a:start(); a:perform(); "
+           "PLAYER.x = v.x + HondaCRVGen1.Lift.REACH + 1; n0 = #SPAWNED; HALOS = {}")
+    check(sp.eval("a:complete()") is False and sp.eval("v.removed") is False and sp.eval("#SPAWNED") == sp.eval("n0"),
+          "walked off: nothing converted, the old car untouched")
+    check(sp.eval("HALOS[#HALOS].text") == "IGUI_CRV_Lift_Failed" and sp.eval("HALOS[#HALOS].colour") == "bad",
+          "the player is told it failed")
+    check(sp.eval("PLAYER:getInventory():getFirstTypeRecurse('Base.CRVGen1_LiftKit') ~= nil"), "the kit is kept")
+    print("LIFT reach: complete() refuses a player who is no longer at the car")
+
+
+def actions_outcome():
+    """H-LUA-I3 / I4 (2026-10-24) for the function feature's actions (ISCRVFoldSeats, ISCRVFunctionLiftFloor, on
+    test_function_lua's fake game): complete() re-checks the player is at the car (State.near), perform() shows no
+    success of its own, the authoritative side reports the outcome through Lift.report (a halo in single player, the
+    "result" command to the acting client in multiplayer, with the refusal's reason)."""
+    import test_function_lua as TF
+    sp = TF.side("sp", player="tester")
+    sp.run("v = newCRV(1); PLAYER.area = 'TruckBed'; HALO = {}")
+    sp.run("f = ISCRVFoldSeats:new(PLAYER, v, true, 'cargo'); f:perform()")
+    check(sp.eval("#HALO") == 0, "fold perform(): no halo before complete()")
+    sp.run("PLAYER.x = 100 + HondaCRVGen1.State.REACH + 1")
+    check(sp.eval("f:complete()") is False and not sp.eval("HondaCRVGen1.Shared.isFolded(v)") and sp.eval("#HALO") == 0,
+          "fold: the player walked off, refused")
+    sp.run("PLAYER.x = 100")
+    check(sp.eval("f:complete()") is True and sp.eval("HALO[#HALO]") == "IGUI_CRV_SeatsFoldedFlat", "fold: done, the halo")
+    sp.run("v.parts.TrunkDoor.door.open = true; l = ISCRVFunctionLiftFloor:new(PLAYER, v); l:perform()")
+    check(sp.eval("HALO[#HALO]") == "IGUI_CRV_SeatsFoldedFlat", "lift floor perform(): no halo of its own")
+    sp.run("PLAYER.y = 100 - HondaCRVGen1.State.REACH - 1")
+    check(sp.eval("l:complete()") is False and not sp.eval("HondaCRVGen1.Function.isFloorFound(v)"), "lift floor: too far, refused")
+    sp.run("PLAYER.y = 100")
+    check(sp.eval("l:complete()") is True and sp.eval("HALO[#HALO]") == "IGUI_CRV_Function_FloorFound", "lift floor: found, the halo")
+    # multiplayer: the server refuses an unfold over a loaded floor and says why, then folds it up
+    net = TF.Net()
+    server = TF.side("server", net, seed=41)
+    a = TF.side("client", net, player="alice", seed=42)
+    server.run("newPlayer('alice'); v = newCRV(1); HondaCRVGen1.Shared.setFold(v, true, 'cargo'); v.parts.CRVFunctionCargo.cont.items = 2")
+    a.run("v = newCRV(1); RESULTS = {}; Events.OnServerCommand.Add(function(m, c, args) if m == HondaCRVGen1.Lift.COMMAND then "
+          "RESULTS[#RESULTS + 1] = tostring(args.ok) .. ':' .. tostring(args.key) end end)")
+    net.pump()
+    a.run("HALO = {}; u = ISCRVFoldSeats:new(PLAYER, v, false); u:perform()")
+    check(a.eval("#HALO") == 0, "alice's perform(): no 'seats up' before the server decides")
+    server.run("su = ISCRVFoldSeats:new(PLAYERS.alice, v, false)")
+    check(server.eval("su:complete()") is False, "server: a loaded floor, refused")
+    server.run("v.parts.CRVFunctionCargo.cont.items = 0")
+    check(server.eval("su:complete()") is True, "server: emptied, the seats go up")
+    net.pump()
+    check(a.eval("table.concat(RESULTS, ',')") == "false:IGUI_CRV_Function_CargoNotEmpty,true:IGUI_CRV_SeatsUp",
+          "alice hears the reason, then the success (%s)" % a.eval("table.concat(RESULTS, ',')"))
+    print("ACTIONS outcome: fold / lift floor re-check the reach at complete() and report the authoritative outcome")
+
+
 def main():
     single_player()
+    full_inventory()
     refusals()
     spawn_failures()
     xp_farming()
@@ -748,6 +957,10 @@ def main():
     busy()
     menu()
     multiplayer()
+    skin_rebind()
+    stray_keys()
+    reach_at_complete()
+    actions_outcome()
     print("LIFT LUA TESTS OK")
 
 

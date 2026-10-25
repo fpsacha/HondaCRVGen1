@@ -13,7 +13,8 @@ POWER = ("shared/HondaCRVGen1_Power.lua",)
 # a stand-in car: script engine force, saved quality / loudness / power
 CAR = r'''
 function makeCar(force, quality, power)
-    local car = { q = quality, l = 80, p = power, calls = 0 }
+    local car = { q = quality, l = 80, p = power, calls = 0, md = {} }
+    function car:getModData() return self.md end
     function car:getScript() return { getEngineForce = function() return force end } end
     function car:getEngineQuality() return self.q end
     function car:getEngineLoudness() return self.l end
@@ -68,7 +69,30 @@ def main():
     srv.run(CAR)
     srv.run("C = makeCar(3850, 80, 4800)")
     check(srv.eval("HondaCRVGen1.Power.fix(C)") is True, "server lowers it")
+    check(c.eval("C.md.crvPowerChecked") is None, "the client sets no flag")
+    once_per_car()
     print("POWER LUA TESTS OK")
+
+
+def once_per_car():
+    """H-SAVES-I2: Power.fix ran on every load forever, undoing a power another mod (or an admin) raised later. Now each
+    car is checked once (flag crvPowerChecked in its mod data, set whether or not the check changed anything)."""
+    s = Side("sp")
+    s.load(*POWER)
+    s.run(CAR)
+    s.run("C = makeCar(3850, 100, 3850)")
+    check(s.eval("HondaCRVGen1.Power.fix(C)") is False and s.eval("C.md.crvPowerChecked") is True,
+          "a new car: unchanged, but checked")
+    s.run("C.p = 6000")                                     # another mod tunes the engine up
+    check(s.eval("HondaCRVGen1.Power.fix(C)") is False and s.eval("C.p") == 6000, "the next load leaves the raised power")
+    s.run("C = makeCar(3850, 100, 4800)")
+    check(s.eval("HondaCRVGen1.Power.fix(C)") is True and s.eval("C.p") == 3850 and s.eval("C.md.crvPowerChecked") is True,
+          "an old car: lowered once, flagged")
+    s.run("C.p = 5000")
+    check(s.eval("HondaCRVGen1.Power.fix(C)") is False and s.eval("C.p") == 5000, "then left alone")
+    s.run("C = makeCar(0, 100, 4800)")                      # no script force readable: no check made
+    check(s.eval("HondaCRVGen1.Power.fix(C)") is False and s.eval("C.md.crvPowerChecked") is None, "no check, no flag")
+    print("POWER ONCE: each car checked once (flag in its mod data), a power raised afterwards stays")
 
 
 if __name__ == "__main__":

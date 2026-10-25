@@ -6,8 +6,7 @@ mod/Contents/mods/HondaCRVGen1/42/media/sound by default. Deterministic (fixed s
 
   CRVGen1_EngineLow.ogg   B20B layer at 1800 rpm (pitched 0.4-1.9x by the Lua: idle to ~3400 rpm)
   CRVGen1_EngineHigh.ogg  B20B layer at 4800 rpm with the light whine (pitched 0.55-1.5x: ~2600-7200 rpm)
-  CRVGen1_Horn.ogg        90s Honda dual-tone horn, a seamless sustain loop (416 + 520 Hz)
-  (the doors, gate and hood use the vanilla sounds since 2026-10-22: no door clips here)
+  (the doors, gate and hood use the vanilla sounds since 2026-10-22, the horn since 2026-10-24: no clips here)
 
 The engine loops are seamless because every component sits on the loop's frequency grid (2 s loop:
 every frequency a multiple of 0.5 Hz) and the noise is made in the frequency domain on that grid.
@@ -79,24 +78,6 @@ def engine_loop(rpm, whine, seed, seconds=2.0):
     return x * 0.7
 
 
-def horn_loop(seconds=1.0):
-    """A 90s car horn: two tones about a major third apart (416 / 520 Hz), each a small disc diaphragm.
-    The spectrum falls off fast (k^-1.6 over 8 harmonics), no clipping, a soft top end (about 3 kHz) and
-    a short trumpet resonance near 1.6 kHz. The first version (a buzzing saw clipped with tanh over 21
-    harmonics) sounded harsh in game (2026-10-15). A whole number of cycles per second, so it loops."""
-    n = int(SR * seconds)
-    t = np.arange(n) / SR
-    x = np.zeros(n)
-    for f0, a0 in ((416.0, 1.0), (520.0, 0.8)):
-        assert abs(f0 * seconds - round(f0 * seconds)) < 1e-9
-        for k in range(1, 9):
-            f = f0 * k
-            form = 1.0 + 0.9 * np.exp(-((f - 1600) / 450) ** 2)
-            x += a0 * form * k ** -1.6 * np.sin(2 * np.pi * f * t)
-    x = _lowpass_periodic(x, 3000)
-    return 0.75 * x / np.abs(x).max()
-
-
 def _write_ogg(x, path):
     pcm = (np.clip(x, -1, 1) * 32767).astype(np.int16)
     tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
@@ -122,7 +103,6 @@ def build(out=OUT):
     clips = {
         "CRVGen1_EngineLow.ogg": engine_loop(1800, 0.15, 1),
         "CRVGen1_EngineHigh.ogg": engine_loop(4800, 1.0, 2),
-        "CRVGen1_Horn.ogg": horn_loop(),
     }
     for name, x in clips.items():
         _write_ogg(x, os.path.join(out, name))

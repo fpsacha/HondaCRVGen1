@@ -253,13 +253,13 @@ def BAKE_PAINT(decal_dir):
 
 ITEMS_SPEC = [
     # item, weight (kg: updateTotalMass adds it to the car), English name, icon mesh, azimuth, elevation
-    ("CRVGen1_ArmourDoorFront", 22.0, "CRV Front Door Armour Plate", "acc_armour_door_fr", 0.0, 10.0),
-    ("CRVGen1_ArmourDoorRear", 19.0, "CRV Rear Door Armour Plate", "acc_armour_door_rr", 0.0, 10.0),
+    ("CRVGen1_ArmourDoorFront", 22.0, "CRV Front Door Armor Plate", "acc_armour_door_fr", 0.0, 10.0),
+    ("CRVGen1_ArmourDoorRear", 19.0, "CRV Rear Door Armor Plate", "acc_armour_door_rr", 0.0, 10.0),
     ("CRVGen1_ArmourArchFront", 6.0, "CRV Front Wheel Arch Guard", "acc_armour_arch_fr", 0.0, 10.0),
     ("CRVGen1_ArmourArchRear", 4.5, "CRV Rear Wheel Arch Guard", "acc_armour_arch_rr", 0.0, 10.0),
-    ("CRVGen1_ArmourMeshFront", 9.0, "CRV Front Window Armour Mesh", "acc_armour_mesh_fr", 0.0, 8.0),
-    ("CRVGen1_ArmourMeshRear", 8.0, "CRV Rear Window Armour Mesh", "acc_armour_mesh_rr", 0.0, 8.0),
-    ("CRVGen1_ArmourRearPlate", 16.0, "CRV Rear Glass Armour Plate", "acc_armour_rear_plate", 270.0, 22.0),
+    ("CRVGen1_ArmourMeshFront", 9.0, "CRV Front Window Armor Mesh", "acc_armour_mesh_fr", 0.0, 8.0),
+    ("CRVGen1_ArmourMeshRear", 8.0, "CRV Rear Window Armor Mesh", "acc_armour_mesh_rr", 0.0, 8.0),
+    ("CRVGen1_ArmourRearPlate", 16.0, "CRV Rear Glass Armor Plate", "acc_armour_rear_plate", 270.0, 22.0),
 ]
 MAGAZINE = "CRVGen1_ArmourMagazine"
 RECIPE_OF = {item: "CRVGen1_Make" + item[len("CRVGen1_"):] for item, *_r in ITEMS_SPEC}
@@ -270,7 +270,7 @@ for _item, _w, _name, _o, _az, _el in ITEMS_SPEC:
                     "DisplayName": _name, "Icon": _item, "ConditionMax": 100, "ChanceToSpawnDamaged": 20,
                     "MechanicsItem": True, "Tags": "base:hasmetal"}
 ITEMS[MAGAZINE] = {"DisplayCategory": "RecipeResource", "ItemType": "base:literature", "Weight": 0.5,
-                   "DisplayName": "Survival Armour: Steel for Your CRV", "Icon": MAGAZINE,
+                   "DisplayName": "Survival Armor: Steel for Your CRV", "Icon": MAGAZINE,
                    "BoredomChange": -20, "StressChange": -15,
                    "LearnedRecipes": ";".join(RECIPE_OF[i] for i, *_r in ITEMS_SPEC),
                    "Tooltip": "Tooltip_CRV_Armour_Magazine", "StaticModel": "Magazine",
@@ -446,12 +446,12 @@ RECIPES = [
 
 SIDE_NAME = {"FrontLeft": "Front Left", "FrontRight": "Front Right", "RearLeft": "Rear Left", "RearRight": "Rear Right"}
 TRANSLATIONS = {
-    "IG_UI": dict([("IGUI_VehiclePartCRVArmourDoor" + p, "%s Door Armour Plate" % SIDE_NAME[p]) for _t, p, _a, _f in DOORS] +
+    "IG_UI": dict([("IGUI_VehiclePartCRVArmourDoor" + p, "%s Door Armor Plate" % SIDE_NAME[p]) for _t, p, _a, _f in DOORS] +
                   [("IGUI_VehiclePartCRVArmourArch" + p, "%s Wheel Arch Guard" % SIDE_NAME[p]) for _t, p, _a, _f in DOORS] +
-                  [("IGUI_CRV_Armour_WindowShut", "The armour holds this window shut"),
-                   ("IGUI_CRV_Armour_PlateFirst", "Take the door's armour plate off first")]),
+                  [("IGUI_CRV_Armour_WindowShut", "The armor holds this window shut"),
+                   ("IGUI_CRV_Armour_PlateFirst", "Take the door's armor plate off first")]),
     "Tooltip": {"Tooltip_CRV_Armour_Magazine": "Welded plate, expanded-metal mesh and arch guards for the Honda CRV: "
-                                               "teaches how to make every piece of CRV survival armour."},
+                                               "teaches how to make every piece of CRV survival armor."},
     # 42.21 looks a craftRecipe's name up by its bare id (CraftRecipe.Load -> Translator.getRecipeName(name);
     # vanilla Recipes.json: "MakeMetalSheet": ...): no "Recipe_" prefix
     "Recipes": {RECIPE_OF[i]: "Make " + n for i, _w, n, *_r in ITEMS_SPEC},
@@ -459,19 +459,19 @@ TRANSLATIONS = {
 
 SANDBOX = [
     {"name": "ArmourStrength", "type": "double", "default": 1.0, "min": 0.1, "max": 10.0,
-     "label": "CRV armour strength",
-     "tooltip": "How long the CRV's survival armour lasts. 1 = a plate or mesh takes as much damage as the door "
-                "or window under it, so that part lasts about twice as long; 2 = the armour lasts twice as long; "
+     "label": "CRV armor strength",
+     "tooltip": "How long the CRV's survival armor lasts. 1 = a plate or mesh takes as much damage as the door "
+                "or window under it, so that part lasts about twice as long; 2 = the armor lasts twice as long; "
                 "0.5 = half."},
 ]
 
 DISTRIBUTIONS = []
 for _list, _w in (("GarageMechanics", 0.4), ("CrateMechanics", 0.4), ("MechanicSpecial", 0.6),
-                  ("GarageMetalwork", 0.3), ("ArmyHangarMechanics", 0.8), ("PoliceStorageMechanics", 0.5)):
+                  ("GarageMetalwork", 0.3), ("ArmySurplusTools", 0.8), ("PoliceStorageMechanics", 0.5)):
     for _item, *_r in ITEMS_SPEC:
         DISTRIBUTIONS.append({"list": _list, "item": "Base." + _item, "weight": round(_w * (0.5 if "Door" in _item or "Plate" in _item else 1.0), 2)})
-for _list, _w in (("CarSupplyMagazines", 0.8), ("BookstoreAutomotive", 0.8), ("MagazineRackMixed", 0.1),
-                  ("CrateMagazines", 0.3), ("ArmySurplusMisc", 0.5), ("ArmyHangarMechanics", 0.4)):
+for _list, _w in (("CarSupplyLiterature", 0.8), ("BookstoreAutomotive", 0.8), ("MagazineRackMixed", 0.1),
+                  ("CrateMagazines", 0.3), ("ArmySurplusMisc", 0.5), ("ArmySurplusLiterature", 0.4)):
     DISTRIBUTIONS.append({"list": _list, "item": "Base." + MAGAZINE, "weight": _w})
 
 LUA = ["shared/HondaCRVGen1_Armour.lua", "server/Vehicles/HondaCRVGen1_ArmourServer.lua"]

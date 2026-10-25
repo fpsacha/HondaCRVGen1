@@ -33,12 +33,18 @@ does nothing outside a server); and fake objects with the Java methods the mod c
                                       undisplay (.slices = { text, texture, fn, args, n }); :texts() :find(prefix)
                                       :pick(slice)
     VANILLA_RADIAL_OUTSIDE(player)    vanilla's ISVehicleMenu.showRadialMenuOutside, its shape (for the stubs)
+    VANILLA_RADIAL_INSIDE(player)     vanilla's ISVehicleMenu.showRadialMenu from a seat, its shape (Sleep slice)
+    sleep                             Player:isAsleep/setBedType/getBedType/getStats/getMoodles..., getServerOptions
+                                      (SERVER_OPTIONS), Veh:isStopped/isSeatInstalled/getCharacter
     viewpointRadial(player, vehicle)  the radial as Project Viewpoint's quick-interact list harvests it
 
 Mod data sync: a server's transmitPartModData(part) queues a copy of that part's mod data for every
 client (VehicleUpdatePacket's VehiclePartModData); Net.pump replaces the client part's mod data with
 it, as the packet does. Net.sync_item(vehicle_id, part_id) sends a part's item the same way
 (transmitPartItem): the client's part gets a new item object and shows all its models.
+sendServerCommand(player, ...) reaches only the client whose player has that name. Net.pump(reorder=fn)
+delivers the server's packets in another order the real net allows (Net.take / Net.deliver /
+Net.legal_orders: the commands are unordered, the mod data packets keep their order).
 """
 import os
 
@@ -84,10 +90,12 @@ function sendClientCommand(player, module, command, args)
 end
 function sendServerCommand(module, command, args, extra)
     if ROLE ~= "server" then return end
+    local to = nil
     if type(module) ~= "string" then                      -- the game's per-player form: (player, module, command, args)
-        module, command, args = command, args, extra      -- (delivered to every client here: the harness has no addressing)
+        to = module and module.name                       -- delivered to the client whose player has that name
+        module, command, args = command, args, extra
     end
-    PY_SEND_SERVER(module, command, args or {})
+    PY_SEND_SERVER(module, command, args or {}, to)
 end
 
 Item = {}
@@ -151,6 +159,10 @@ function Veh:transmitPartItem(p) SENT.transmitItem = SENT.transmitItem + 1 end
 function Veh:doDamageOverlay() end
 function Veh:isInArea(area, chr) return chr.area == area end
 function Veh:isSeatOccupied(seat) return self.occupied[seat] or false end
+-- .seatGone[seat] = true: that seat's part removed; .chars[seat] = the character in it; .moving = true: not stopped
+function Veh:isSeatInstalled(seat) return not (self.seatGone and self.seatGone[seat]) end
+function Veh:getCharacter(seat) return self.chars and self.chars[seat] or nil end
+function Veh:isStopped() return not self.moving end
 
 Player = {}
 Player.__index = Player
@@ -165,6 +177,29 @@ function Player:getY() return self.y end
 function Player:getVehicle() return self.vehicle end
 function Player:getUsername() return self.name end
 function Player:isLocalPlayer() return true end
+-- sleep: the bed type (IsoGameCharacter, default "averageBed"), asleep, and what vanilla's sleep checks read
+-- (.fatigue default 0.6: tired enough; .zombies; .moodles = { PAIN = n, PANIC = n }; .hours / .lastSlept; .tablet)
+CharacterStat = { FATIGUE = "FATIGUE" }
+MoodleType = { PAIN = "PAIN", PANIC = "PANIC" }
+SERVER_OPTIONS = { SleepAllowed = true, SleepNeeded = true }
+function getServerOptions() return { getBoolean = function(_, k) return SERVER_OPTIONS[k] == true end } end
+function Player:isAsleep() return self.asleep == true end
+function Player:setAsleep(b) self.asleep = b end
+function Player:getBedType() return self.bedType or "averageBed" end
+function Player:setBedType(t) self.bedType = t end
+function Player:getStats()
+    local p = self
+    return { get = function(_, stat) if stat == "FATIGUE" then return p.fatigue or 0.6 end return 0 end,
+             getNumVisibleZombies = function() return p.zombies or 0 end,
+             getNumChasingZombies = function() return 0 end, getNumVeryCloseZombies = function() return 0 end }
+end
+function Player:getMoodles()
+    local p = self
+    return { getMoodleLevel = function(_, m) return (p.moodles or {})[m] or 0 end }
+end
+function Player:getHoursSurvived() return self.hours or 100 end
+function Player:getLastHourSleeped() return self.lastSlept or 0 end
+function Player:getSleepingTabletEffect() return self.tablet or 0 end
 
 -- radial menus: newRadial() records every addSlice(text, texture, fn, ...) in order, shown by addToUIManager and
 -- closed by undisplay (ISRadialMenu); radial:texts() is "text,text!,..." (! = no command, a blocked slice);
@@ -176,6 +211,7 @@ function Radial:addSlice(text, texture, fn, ...)
     table.insert(self.slices, { text = text, texture = texture, fn = fn, args = { ... }, n = select("#", ...) })
 end
 function Radial:clear() self.slices = {} end
+function Radial:setSliceText(i, text) if self.slices[i] then self.slices[i].text = text end end
 function Radial:isEmpty() return #self.slices == 0 end
 function Radial:isReallyVisible() return self.shown end
 function Radial:addToUIManager() self.shown = true end
@@ -204,6 +240,25 @@ function VANILLA_RADIAL_OUTSIDE(playerObj)
     local vehicle = ISVehicleMenu.getVehicleToInteractWith(playerObj)
     if vehicle then menu:addSlice("VANILLA_MECHANICS", "media/ui/vehicles/vehicle_repair.png", VANILLA_MECHANICS, playerObj, vehicle) end
     if menu:isEmpty() then return end
+    menu:addToUIManager()
+end
+
+-- vanilla's ISVehicleMenu.showRadialMenu (42.21) from a seat, its shape: outside a car it hands over to the
+-- outside menu; clear, the key closes an open menu; the switch-seat slice, the Sleep slice (when sleep is offered:
+-- SleepAllowed, stopped, tired), exit; show
+function VANILLA_SWITCH() end
+function VANILLA_SLEEP() end
+function VANILLA_RADIAL_INSIDE(playerObj)
+    local vehicle = playerObj:getVehicle()
+    if not vehicle then return ISVehicleMenu.showRadialMenuOutside(playerObj) end
+    local menu = getPlayerRadialMenu(playerObj:getPlayerNum())
+    menu:clear()
+    if menu:isReallyVisible() then menu:undisplay(); return end
+    menu:addSlice(getText("IGUI_SwitchSeat"), "media/ui/vehicles/vehicle_changeseats.png", VANILLA_SWITCH, playerObj, vehicle)
+    if vehicle:isStopped() then
+        menu:addSlice(getText("ContextMenu_Sleep"), "media/ui/vehicles/vehicle_sleep.png", VANILLA_SLEEP, playerObj, vehicle)
+    end
+    menu:addSlice(getText("IGUI_ExitVehicle"), "media/ui/vehicles/vehicle_exit.png", VANILLA_SWITCH, playerObj)
     menu:addToUIManager()
 end
 
@@ -282,8 +337,8 @@ class Side:
         else:
             self.net.to_server.append((player.name if player is not None else None, module, command, _plain(args)))
 
-    def _send_server(self, module, command, args):
-        self.net.to_clients.append((module, command, _plain(args)))
+    def _send_server(self, module, command, args, to=None):
+        self.net.to_clients.append((module, command, _plain(args), to))
 
     def _transmit(self, vehicle_id, part_id, md):
         self.net.moddata.append((vehicle_id, part_id, _plain(md)))
@@ -312,9 +367,16 @@ class Net:
         elif side.role == "client":
             self.clients.append(side)
 
-    def pump(self):
+    def pump(self, reorder=None, between=None):
         """Deliver everything queued: client commands to the server (its own player object for the
-        sender), then the server's commands and part mod data to every client. Returns the count."""
+        sender), then the server's commands (to every client, or the one addressed: sendServerCommand(player,
+        ...)) and part mod data to every client. Returns the count.
+
+        reorder: the real net's delivery order instead of the send order. Server commands are RELIABLE but
+        UNORDERED in 42.21 (PacketTypes.ClientCommand, reliability 2), the part mod data rides VehicleUpdate
+        (RELIABLE_ORDERED): a callable taking the queued server -> client packets (Net.take's labelled list)
+        and returning them in the order to deliver (Net.legal_orders lists every order the net allows).
+        between(packet): called after each server -> client packet (a client's poll between packets)."""
         n = 0
         while self.to_server or self.to_clients or self.moddata:
             while self.to_server:
@@ -322,20 +384,61 @@ class Net:
                 player = self.server.eval("PLAYERS")[name] if name else None
                 self.server.trigger("OnClientCommand", module, command, player, self.server.table(args))
                 n += 1
-            while self.to_clients:
-                module, command, args = self.to_clients.pop(0)
+            packets = self.take()
+            if reorder is not None:
+                packets = list(reorder(packets))
+            n += self.deliver(packets, between)
+        return n
+
+    def take(self):
+        """Remove and return the queued server -> client packets in send order, each labelled:
+        ("cmd", (module, command, args, to)) or ("md", (vehicle_id, part_id, moddata)). Commands queued
+        before mod data in the same pump go first, as pump has always delivered them."""
+        out = [("cmd", x) for x in self.to_clients] + [("md", x) for x in self.moddata]
+        self.to_clients.clear()
+        self.moddata.clear()
+        return out
+
+    def deliver(self, packets, between=None):
+        """Deliver labelled server -> client packets (Net.take) in the given order; returns the count."""
+        n = 0
+        for kind, p in packets:
+            if kind == "cmd":
+                module, command, args = p[0], p[1], p[2]
+                to = p[3] if len(p) > 3 else None
                 if not self.drop_commands:
                     for c in self.clients:
-                        c.trigger("OnServerCommand", module, command, c.table(args))
-                n += 1
-            while self.moddata:
-                vid, pid, md = self.moddata.pop(0)
+                        if to is None or c.player == to:
+                            c.trigger("OnServerCommand", module, command, c.table(args))
+            else:
+                vid, pid, md = p
                 for c in self.clients:
                     v = c.eval("VEHICLES")[vid]
                     if v is not None and v.parts[pid] is not None:
                         v.parts[pid].md = c.table(md)                # the packet replaces the part's mod data
-                n += 1
+            n += 1
+            if between is not None:
+                between((kind, p))
         return n
+
+    @staticmethod
+    def legal_orders(packets):
+        """Every delivery order of labelled packets (Net.take) the 42.21 net allows: the mod data packets
+        (VehicleUpdate, RELIABLE_ORDERED, one channel) keep their relative order, the commands (ClientCommand,
+        RELIABLE, unordered) go anywhere. Yields lists; duplicates (identical packets swapped) are skipped."""
+        import itertools
+        n = len(packets)
+        md_idx = [i for i, (k, _) in enumerate(packets) if k == "md"]
+        seen = set()
+        for perm in itertools.permutations(range(n)):
+            pos = [perm.index(i) for i in md_idx]
+            if pos != sorted(pos):
+                continue
+            key = tuple(repr(packets[i]) for i in perm)
+            if key in seen:
+                continue
+            seen.add(key)
+            yield [packets[i] for i in perm]
 
     def sync_item(self, vehicle_id, part_id):
         """The server's transmitPartItem: every client's part gets a fresh item of the same type

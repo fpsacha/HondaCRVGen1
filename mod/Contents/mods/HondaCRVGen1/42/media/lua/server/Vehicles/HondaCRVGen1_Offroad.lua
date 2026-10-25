@@ -165,6 +165,8 @@ end
 
 function Offroad.UninstallComplete(vehicle, part, item)
     vehicle:doDamageOverlay()
+    -- the bumper: the protection loop lists its protectors again at once (it asks their items only now and then)
+    if part:getId() == Offroad.BUMPER and Acc and Acc.dirty then Acc.dirty(vehicle) end
 end
 
 -- the rack's item changed under a client, or the can's: draw the can again

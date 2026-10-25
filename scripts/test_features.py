@@ -28,7 +28,7 @@ MOD42 = os.path.join(CHECKOUT, "mod", "Contents", "mods", "HondaCRVGen1", "42")
 GENERATED = ["scripts/items/HondaCRVGen1_items.txt", "scripts/vehicles/HondaCRVGen1.txt",
              "lua/shared/Translate/EN/IG_UI.json", "lua/shared/Translate/EN/ItemName.json",
              "lua/shared/Translate/EN/ContextMenu.json", "lua/shared/Translate/EN/Tooltip.json",
-             "lua/shared/Translate/EN/IG_UI_EN.txt"]
+             "lua/shared/Translate/EN/UI.json", "scripts/fixing/HondaCRVGen1_fixing.txt"]
 
 import features  # noqa: E402
 
@@ -152,7 +152,9 @@ def example(tmp, keep):
     check(ui["IGUI_VehiclePartCRVExamplePlate"] == "Example Plate" and "IGUI_VehicleNameHondaCRVGen1" in ui, "IG_UI")
     check(list(ui)[0] == "IGUI_VehicleNameHondaCRVGen1", "core keys first")
     check(names["Base.CRVGen1_ExamplePlate"] == "CR-V Example Plate", "ItemName from the item's DisplayName")
-    check('IGUI_VehiclePartCRVExamplePlate = "Example Plate"' in read(os.path.join(tr, "IG_UI_EN.txt")), "IG_UI_EN.txt")
+    check(not os.path.exists(os.path.join(tr, "IG_UI_EN.txt")), "no IG_UI_EN.txt (42.21 reads the JSON files)")
+    fix = read(os.path.join(m, "scripts", "fixing", "HondaCRVGen1_fixing.txt"))
+    check("Base.CRVGen1_ExamplePlate" in fix, "the feature's repairable part item has a fixing")
     check(json.load(open(os.path.join(tr, "ContextMenu.json"), encoding="utf-8"))["ContextMenu_CRV_Example_Paint"], "ContextMenu")
     for fname in ("Tooltip", "Recipes", "Sandbox"):
         check(os.path.exists(os.path.join(tr, fname + ".json")), "%s.json" % fname)

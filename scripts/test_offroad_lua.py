@@ -237,6 +237,16 @@ def rear_bumper():
     sp.run("w = car(31); w.parts.CRVOffroadRearBumper:setInventoryItem(newItem('CRVGen1_OffroadRearBumper')); "
            "O.Init(w, w.parts.CRVOffroadRearBumper)")
     check(sp.eval("HondaCRVGen1.Acc.watch[31] ~= nil"), "init watches a fitted bumper")
+    # I-DIFF-1 (mutation offroad-dirty): its uninstall complete tells the protection loop (Acc.dirty), which between
+    # two sweeps never asks the bumper for its item: the car leaves the watch on the next pass, not ITEM_EVERY later
+    sp.run("HondaCRVGen1.Acc.ITEM_EVERY = 1000; u = car(33); ub = u.parts.CRVOffroadRearBumper; "
+           "ub:setInventoryItem(newItem('CRVGen1_OffroadRearBumper')); O.InstallComplete(u, ub); TICK(3)")
+    check(sp.eval("HondaCRVGen1.Acc.watch[33] ~= nil and #HondaCRVGen1.Acc.watch[33].list == 1"), "the bumper is listed")
+    sp.run("local it = ub:getInventoryItem(); ub:setInventoryItem(nil); O.UninstallComplete(u, ub, it)")
+    check(sp.eval("HondaCRVGen1.Acc.watch[33].list") is None, "the uninstall drops the protector list (Acc.dirty)")
+    sp.run("TICK(3)")
+    check(sp.eval("HondaCRVGen1.Acc.watch[33] == nil"), "nothing left fitted: off the watch on the next pass")
+    sp.run("HondaCRVGen1.Acc.ITEM_EVERY = 8")
     # a multiplayer client never restores anything (the server does; the condition reaches the client)
     c = side("client", Net(), player="alice")
     c.run("v = car(32); b = v.parts.CRVOffroadRearBumper; b:setInventoryItem(newItem('CRVGen1_OffroadRearBumper')); "

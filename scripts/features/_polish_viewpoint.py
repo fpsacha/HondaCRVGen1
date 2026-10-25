@@ -21,7 +21,8 @@ import shutil
 import bpy
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-MOD = os.path.join(os.path.dirname(os.path.dirname(HERE)), "mod", "Contents", "mods", "HondaCRVGen1")
+ROOT = os.environ.get("CRV_ROOT") or os.path.dirname(os.path.dirname(HERE))   # a scratch build writes its own mod\
+MOD = os.path.join(ROOT, "mod", "Contents", "mods", "HondaCRVGen1")
 SRC = os.path.join(MOD, "common", "media", "models_X", "WorldItems", "CRVGen1_TableStand.fbx")
 TEX = os.path.join(MOD, "common", "media", "textures", "WorldItems", "CRVGen1_TableStand.png")
 OUT = os.path.join(MOD, "common", "media", "viewpoint", "table")

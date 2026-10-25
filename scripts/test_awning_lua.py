@@ -25,7 +25,8 @@ from features import awning
 from lua_harness import Net, Side
 
 STATE = ("shared/HondaCRVGen1_State.lua", "server/HondaCRVGen1_StateServer.lua", "client/HondaCRVGen1_StateClient.lua")
-FILES = STATE + ("shared/HondaCRVGen1_Awning.lua", "shared/TimedActions/ISCRVAwning.lua", "server/HondaCRVGen1_AwningRain.lua")
+FILES = STATE + ("shared/HondaCRVGen1_Awning.lua", "shared/HondaCRVGen1_Lift.lua", "shared/TimedActions/ISCRVAwning.lua",
+                 "server/HondaCRVGen1_AwningRain.lua")
 MENU = ("client/HondaCRVGen1_AwningMenu.lua",)
 
 # what the harness does not fake: timed actions, the car's frame and engine, players' wetness, the climate
@@ -40,7 +41,7 @@ function ISBaseTimedAction:perform() self.performed = true end
 function ISBaseTimedAction:stop() self.stopped = true end
 function ISBaseTimedAction:setActionAnim(a) self.anim = a end
 HALO = {}
-HaloTextHelper = { addText = function(c, t) HALO[#HALO + 1] = t end }
+HaloTextHelper = { addText = function(c, t) HALO[#HALO + 1] = t end, addBadText = function(c, t) HALO[#HALO + 1] = "BAD:" .. t end }
 VehicleUtils = { createPartInventoryItem = function(part) local it = newItem("Base.CRVGen1_Awning"); part:setInventoryItem(it); return it end }
 
 -- joml Vector3f and the car's frame: the car faces north (-y), its left is west (-x); local units = mesh metres x scale
@@ -195,10 +196,11 @@ def single_player():
     sp.run("act = ISCRVAwning:new(PLAYER, v, true)")
     check(sp.eval("act.character == PLAYER and act.vehicle == v and act.on == true"), "new() keeps character, vehicle, on")
     check(sp.eval("act:isValid()") is True, "the action is valid")
-    sp.run("act:start(); act:perform()")
-    check(sp.eval("A.isDeployed(v)") is False and sp.eval("HALO[#HALO]") == "IGUI_CRV_Awning_Deployed",
-          "perform(): feedback, no state")
+    sp.run("HALO = {}; act:start(); act:perform()")
+    check(sp.eval("A.isDeployed(v)") is False and sp.eval("#HALO") == 0,
+          "perform(): no state, no outcome text yet (the authoritative side may still refuse)")
     check(sp.eval("act:complete()") is True and sp.eval("A.isDeployed(v)") is True, "complete(): rolled out")
+    check(sp.eval("HALO[#HALO]") == "IGUI_CRV_Awning_Deployed", "complete(): the player is told it is out")
     check(sp.eval("vis(v)") == "BCP", "rolled out: bag, canopy, poles (%s)" % sp.eval("vis(v)"))
     check(sp.eval("v.parts.CRVAwning.md.crv_awning_deployed") is True, "the state is in the part's mod data")
     # the footprint and the cut-away: the Lua's AREA is the canopy features/awning.py builds (footprint())
@@ -370,10 +372,143 @@ def multiplayer():
           "engine started: rolled up on the server, every client hides it")
 
 
+def reach_and_outcome():
+    """H-LUA-I3 / I4 (2026-10-24): the server never runs isValid for a client's action, so complete() re-checks the
+    player is at the car (State.near); and perform() no longer shows "rolled out" before the authoritative side has
+    decided: complete() reports the outcome (Lift.report: a halo in single player, the server's "result" command to
+    the acting client in multiplayer)."""
+    print("-- reach and outcome")
+    sp = side("sp")
+    sp.run("PLAYER = newPlayer('sam', 100, 100); LOCAL = { PLAYER }; v = car(1); A.Init(v, v.parts.CRVAwning); "
+           "v.parts.CRVAwning:setInventoryItem(newItem('Base.CRVGen1_Awning')); A.InstallComplete(v, v.parts.CRVAwning)")
+    sp.run("HALO = {}; act = ISCRVAwning:new(PLAYER, v, true); act:start(); act:perform(); PLAYER.x = 100 + HondaCRVGen1.State.REACH + 1")
+    check(sp.eval("act:complete()") is False and sp.eval("A.isDeployed(v)") is False and sp.eval("#HALO") == 0,
+          "the player walked off before complete(): refused, nothing said, nothing rolled out")
+    sp.run("PLAYER.x = 100; v.running = true")
+    check(sp.eval("act:complete()") is False and sp.eval("HALO[#HALO]") == "BAD:Tooltip_CRV_Awning_EngineOn",
+          "refused at complete(): the reason, as a bad halo (%s)" % sp.eval("HALO[#HALO]"))
+    sp.run("v.running = false")
+    check(sp.eval("act:complete()") is True and sp.eval("HALO[#HALO]") == "IGUI_CRV_Awning_Deployed", "done: the halo")
+    # multiplayer: ann's client performs, the server decides and answers her client only with the outcome
+    net = Net()
+    server = side("server", net)
+    a = side("client", net, player="ann")
+    server.run("ANN = newPlayer('ann', 100, 100); ONLINE = { ANN }; v = car(1); A.Init(v, v.parts.CRVAwning); "
+               "v.parts.CRVAwning:setInventoryItem(newItem('Base.CRVGen1_Awning')); A.InstallComplete(v, v.parts.CRVAwning)")
+    a.run("v = car(1); v.parts.CRVAwning:setInventoryItem(newItem('Base.CRVGen1_Awning')); A.Init(v, v.parts.CRVAwning); "
+          "RESULTS = {}; Events.OnServerCommand.Add(function(m, c, args) if m == HondaCRVGen1.Lift.COMMAND then "
+          "RESULTS[#RESULTS + 1] = tostring(args.ok) .. ':' .. tostring(args.key) end end)")
+    a.run("HALO = {}; act = ISCRVAwning:new(PLAYER, v, true); act:perform()")
+    check(a.eval("#HALO") == 0, "ann's perform(): no 'rolled out' halo before the server decides")
+    server.run("ANN.x = 100 + HondaCRVGen1.State.REACH + 2; sact = ISCRVAwning:new(ANN, v, true)")
+    check(server.eval("sact:complete()") is False and server.eval("A.isDeployed(v)") is False, "server: ann too far, refused")
+    server.run("ANN.x = 100; v.running = true")
+    check(server.eval("sact:complete()") is False, "server: the engine runs, refused")
+    server.run("v.running = false")
+    check(server.eval("sact:complete()") is True, "server: rolled out")
+    net.pump()
+    check(a.eval("table.concat(RESULTS, ',')") == "false:Tooltip_CRV_Awning_EngineOn,true:IGUI_CRV_Awning_Deployed",
+          "ann's client hears the refusal's reason and the success (%s)" % a.eval("table.concat(RESULTS, ',')"))
+    print("REACH / OUTCOME: complete() re-checks the reach; the outcome comes from the authoritative side")
+
+
+def prune_client():
+    """H-LUA-3 (2026-10-24): Awning.shown (and, on a client, Awning.out: the cut-away's list, which only the server's
+    tick pruned) kept every CR-V a client drew; the State poll / the cut-away tick now drop the cars that left."""
+    print("-- caches")
+    c = side("client", Net(), player="bob")
+    c.run("LOCAL = { PLAYER }; for id = 1, 40 do local v = car(id); v.parts.CRVAwning.item = newItem('Base.CRVGen1_Awning'); "
+          "v.parts.CRVAwning.md.crv_awning_deployed = true; A.Init(v, v.parts.CRVAwning) end")
+    count = "(function() local n, m = 0, 0 for _ in pairs(A.shown) do n = n + 1 end for _ in pairs(A.out) do m = m + 1 end return n .. '/' .. m end)()"
+    check(c.eval(count) == "40/40", "40 rolled-out awnings drawn (%s)" % c.eval(count))
+    c.run("for id = 1, 40 do VEHICLES[id].removed = true; VEHICLES[id] = nil end; TICK(HondaCRVGen1.State.POLL)")
+    check(c.eval(count) == "0/0", "they left the world: shown / out empty (%s)" % c.eval(count))
+
+
+def _reorder_run(order_of, strip_seq=False):
+    """The hunt's probe (H-MP-1): ann's client sees the awning rolled out (C1 command, U1 mod data), then the driver
+    starts the engine and the server stows it (C2, U2). Every server -> client packet of the two changes is delivered
+    in the order order_of(packets) picks, the client polling between packets. Returns (client, server) deployed.
+    strip_seq: the announcements without their numbers (the pre-fix client), to show what the test catches."""
+    net = Net()
+    server = side("server", net)
+    a = side("client", net, player="ann")
+    server.run("ANN = newPlayer('ann', 100, 100); ONLINE = { ANN }")
+    for s in (server, a):
+        s.run("v = car(1); A.Init(v, v.parts.CRVAwning)")
+    a.run("LOCAL = { PLAYER }")
+    server.run("v.parts.CRVAwning:setInventoryItem(newItem('Base.CRVGen1_Awning')); A.InstallComplete(v, v.parts.CRVAwning)")
+    net.sync_item(1, "CRVAwning")
+    net.pump()
+    a.run("TICK(30)")
+    server.run("sact = ISCRVAwning:new(ANN, v, true); assert(sact:complete())")
+    first = net.take()
+    server.run("v.running = true; TICK(20)")
+    packets = first + net.take()
+    if strip_seq:
+        packets = [(k, (p[0], p[1], {x: y for x, y in p[2].items() if x not in ("seq", "session")}) + tuple(p[3:]))
+                   if k == "cmd" else (k, p) for k, p in packets]
+    net.deliver(order_of(packets), between=lambda pk: a.run("TICK(30)"))
+    a.run("TICK(300)")
+    return a.eval("A.isDeployed(v)"), server.eval("A.isDeployed(v)"), packets
+
+
+def reordered_delivery():
+    """H-MP-1 (2026-10-24): server commands are RELIABLE but UNORDERED in 42.21 (PacketTypes.ClientCommand), the part
+    mod data rides the ORDERED VehicleUpdate: a resent old "changed" landing after a newer one used to write the old
+    value into the client's mod data for good (the hunt: a late C1 left ann's client drawing the awning out after the
+    server stowed it). State numbers every announcement; the client drops one older than what it applied. Every
+    delivery order the net allows (Net.legal_orders) must leave the client where the server is."""
+    print("-- multiplayer: every delivery order of two quick changes")
+    _, _, packets = _reorder_run(lambda p: p)
+    cmds = [p for k, p in packets if k == "cmd" and p[0] == "HondaCRVGen1" and p[1] == "changed"]
+    check(len(cmds) == 2 and all(isinstance(c[2].get("seq"), (int, float)) for c in cmds)
+          and cmds[0][2]["seq"] < cmds[1][2]["seq"] and cmds[0][2]["session"] == cmds[1][2]["session"],
+          "the two announcements carry rising numbers of one server run (%s)" % [c[2] for c in cmds])
+    orders = list(Net.legal_orders(packets))
+    check(len(orders) >= 12, "%d packets, %d legal delivery orders" % (len(packets), len(orders)))
+    bad, bad_old = 0, 0
+    for i in range(len(orders)):
+        cl, sv, _ = _reorder_run(lambda p, i=i: list(Net.legal_orders(p))[i])
+        bad += cl != sv
+        cl, sv, _ = _reorder_run(lambda p, i=i: list(Net.legal_orders(p))[i], strip_seq=True)
+        bad_old += cl != sv
+    check(bad == 0, "%d of %d legal delivery orders leave the client wrong for good" % (bad, len(orders)))
+    check(bad_old > 0, "the test catches the bug: without the numbers %d of %d orders desync" % (bad_old, len(orders)))
+
+
+def towing():
+    """H-MP-I2 (2026-10-24): a hitched car (towing or towed: BaseVehicle.getVehicleTowing / getVehicleTowedBy) cannot
+    roll the awning out, and the authoritative side rolls one up that is out when the car gets hitched (a towed car
+    moves without its engine and could be under its tear speed, so the speed test alone left it out)."""
+    print("-- towing")
+    sp = side("sp", player="tester")
+    sp.run("v = car(1); A.Init(v, v.parts.CRVAwning); v.parts.CRVAwning:setInventoryItem(newItem('Base.CRVGen1_Awning')); "
+           "A.InstallComplete(v, v.parts.CRVAwning); other = newVehicle(9, {}, 'Base.SUV')")
+    sp.run("function Veh:getVehicleTowing() return self.towing end; function Veh:getVehicleTowedBy() return self.towedBy end")
+    for field in ("towing", "towedBy"):
+        sp.run("v.%s = other; ok, why = A.canSet(v, PLAYER, true)" % field)
+        check(sp.eval("ok") is False and sp.eval("why") == "Tooltip_CRV_Lift_Trailer", "%s: rolling out refused (%s)"
+              % (field, sp.eval("why")))
+        sp.run("v.%s = nil" % field)
+    check(sp.eval("(A.canSet(v, PLAYER, true))") is True, "unhitched: allowed")
+    sp.run("sact = ISCRVAwning:new(PLAYER, v, true); assert(sact:complete())")
+    check(sp.eval("A.isDeployed(v)") is True, "rolled out")
+    sp.run("v.towedBy = other; TICK(A.EVERY)")
+    check(sp.eval("A.isDeployed(v)") is False and sp.eval("v.parts.CRVAwning:getCondition()") == 100,
+          "towed away (standing still, engine off): rolled up by the car, not torn")
+    sp.run("v.towedBy = nil; sact = ISCRVAwning:new(PLAYER, v, true); assert(sact:complete()); v.towing = other; TICK(A.EVERY)")
+    check(sp.eval("A.isDeployed(v)") is False, "hitched to a trailer with it out: rolled up")
+
+
 def main():
     single_player()
     menus()
     multiplayer()
+    reach_and_outcome()
+    prune_client()
+    reordered_delivery()
+    towing()
     print("\n%d FAIL" % len(FAILS) if FAILS else "\nALL OK")
     return 1 if FAILS else 0
 

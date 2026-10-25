@@ -137,6 +137,7 @@ def engine_bay_part():
 # copied). Each is a removable bodywork part whose model the game shows only while an item is
 # installed. Window guards ride the door bones and must come off before their glass.
 ACC_LUA = "HondaCRVGen1.Acc"
+TRUNK_LUA = "HondaCRVGen1.Trunk"      # 42/media/lua/shared/HondaCRVGen1_Trunk.lua: the trunk, the picnic table's tests
 ACC_ITEMS = [
     # item, weight, extra item fields, English name
     ("CRVGen1_Bullbar", 16.0, (), "CRV Bull Bar"),
@@ -359,9 +360,10 @@ def _require_uninstalled(glass_part, indent=3):
                        "%s\trequireUninstalled = %s," % (t, GUARD_OF[glass_part]), "%s}" % t])
 
 
-def _tool_table(kind, tool, time, level, extra=(), lua=ACC_LUA):
+def _tool_table(kind, tool, time, level, extra=(), lua=ACC_LUA, test=None):
     """A part's install / uninstall table: the tool (a tag, kept and equipped), the time, the Mechanics
-    level (with Basic Mechanics), vanilla's test and `lua`.InstallComplete / UninstallComplete."""
+    level (with Basic Mechanics), the test (default vanilla's Vehicles.<Kind>Test.Default) and
+    `lua`.InstallComplete / UninstallComplete."""
     t = "\t\t\t"
     verb = "Install" if kind == "install" else "Uninstall"
     lines = ["%stable %s" % (t, kind), "%s{" % t]
@@ -375,7 +377,7 @@ def _tool_table(kind, tool, time, level, extra=(), lua=ACC_LUA):
     lines.append("%s\ttime = %d," % (t, time))
     if level:
         lines += ["%s\tskills = Mechanics:%d," % (t, level), "%s\trecipes = Basic Mechanics," % t]
-    lines += ["%s\ttest = Vehicles.%sTest.Default," % (t, verb),
+    lines += ["%s\ttest = %s," % (t, test or "Vehicles.%sTest.Default" % verb),
               "%s\tcomplete = %s.%sComplete," % (t, lua, verb)]
     lines += ["%s\t%s = %s," % (t, k, v) for k, v in extra]
     lines.append("%s}" % t)
@@ -400,15 +402,48 @@ def rear_seat_parts():
     return "\n".join(out)
 
 
+# Standard-car install rules (H-DATA-1, 2026-10-24). `template! = SUV` loads the SUV template's body into ours
+# (VehicleScript.Load runs it in place), and its wildcard blocks raise the parts it shares with every car to
+# heavy-duty rules: Seat* Mechanics 2, GasTank 7, Brake* / Suspension* 6, and Intermediate Mechanics on those and
+# the Muffler. Our mechanicType is 1 (standard), so the rules go back to the vanilla part templates' (template_seat,
+# _gastank, _muffler, _brake, _suspension: what CarNormal and every standard car end up with): Basic Mechanics and
+# the level below. VehicleScript.LoadTable merges a re-declared table's keys, so only these two keys change.
+# (Doors, windows, windshields, hood and gate are re-copied whole by PART_TEMPLATES after the SUV, copyPartsFrom
+# replacing the part, so they already carry the standard rules; scripts/test_gamedata.py replays the merge.)
+WHEEL_SIDES = ("FrontLeft", "FrontRight", "RearLeft", "RearRight")
+STANDARD_MECHANICS = (
+    [("Seat" + s, 1) for s in WHEEL_SIDES] + [("GasTank", 5), ("Muffler", 5)]
+    + [("Brake" + s, 3) for s in WHEEL_SIDES] + [("Suspension" + s, 3) for s in WHEEL_SIDES])
+STANDARD_RECIPES = "Basic Mechanics"
+
+
+def standard_mechanics_parts():
+    out = []
+    for part, level in STANDARD_MECHANICS:
+        lines = ["\t\tpart %s" % part, "\t\t{"]
+        for kind in ("install", "uninstall"):
+            lines += ["\t\t\ttable %s" % kind, "\t\t\t{", "\t\t\t\tskills = Mechanics:%d," % level,
+                      "\t\t\t\trecipes = %s," % STANDARD_RECIPES, "\t\t\t}"]
+        out.append("\n".join(lines + ["\t\t}"]))
+    return "\n".join(out)
+
+
+# the picnic table lies under the cargo floor behind the gate: the mechanics screen takes it out or puts it back only
+# with the gate open or gone (HondaCRVGen1_Trunk.lua), like the take-out menu
+PART_TESTS = {"CRVPicnicTable": ("%s.TableInstallTest" % TRUNK_LUA, "%s.TableUninstallTest" % TRUNK_LUA)}
+
+
 def accessory_part(part, geo, item, area, parent=None, require_installed=None, tool=None, time=500, level=0,
-                   lua=ACC_LUA, models=(), keys=(), container=None, uninstall=(), category="bodywork", durability=5):
+                   lua=ACC_LUA, models=(), keys=(), container=None, uninstall=(), category="bodywork", durability=5,
+                   tests=(None, None), repair=True):
     """One removable part block: the game shows its models only while its item is installed. The
     first model is `part` on mesh object `geo` (model block acc_model_name(geo)); `models` adds more
     (model id, geo) blocks on the same part (static variants the Lua toggles with setModelVisible).
     `keys` are extra (key, value) lines, `container` a list of (key, value) lines for a container
     block, `uninstall` extra (key, value) lines in the uninstall table. Install / uninstall need
     `tool` (a tag such as base:wrench, or None), `time`, Mechanics `level`; the Lua namespace `lua`
-    provides Create, Init, InstallComplete and UninstallComplete."""
+    provides Create, Init, InstallComplete and UninstallComplete. repair = False: no Repair in the mechanics screen (a
+    vanilla item as the part, e.g. the jerry cans: its fixing would change that item everywhere, gen_scripts.FIXINGS)."""
     lines = ["\t\tpart %s" % part, "\t\t{",
              "\t\t\tmodel %s" % part, "\t\t\t{",
              "\t\t\t\tfile = %s," % _acc_model_name(geo), "\t\t\t}"]
@@ -420,7 +455,7 @@ def accessory_part(part, geo, item, area, parent=None, require_installed=None, t
               "\t\t\tspecificItem = false,",
               "\t\t\titemType = Base.%s," % item,
               "\t\t\tmechanicRequireKey = false,",
-              "\t\t\trepairMechanic = true,",
+              "\t\t\trepairMechanic = %s," % ("true" if repair else "false"),
               "\t\t\tdurability = %s," % durability]
     lines += ["\t\t\t%s = %s," % kv for kv in keys]
     if parent:
@@ -428,8 +463,8 @@ def accessory_part(part, geo, item, area, parent=None, require_installed=None, t
     if container is not None:
         lines += ["\t\t\tcontainer", "\t\t\t{"] + ["\t\t\t\t%s = %s," % kv for kv in container] + ["\t\t\t}"]
     lines.append(_tool_table("install", tool, time, level, (("requireInstalled", require_installed),) if require_installed else (),
-                             lua=lua))
-    lines.append(_tool_table("uninstall", tool, time, level, tuple(uninstall), lua=lua))
+                             lua=lua, test=tests[0]))
+    lines.append(_tool_table("uninstall", tool, time, level, tuple(uninstall), lua=lua, test=tests[1]))
     lines += ["\t\t\tlua", "\t\t\t{",
               "\t\t\t\tcreate = %s.Create," % lua,
               "\t\t\t\tinit = %s.Init," % lua,
@@ -462,7 +497,8 @@ def accessory_parts():
         if _guard_variants(part):            # bolted armour steel (and the bars): wrench + screwdriver (roadmap)
             tool = (("base:wrench", "primary"), (tool, None))
         out.append(accessory_part(part, geo, item, area, parent=parent, require_installed=req, tool=tool, time=tm,
-                                  level=sk, models=models, container=container, uninstall=uninstall))
+                                  level=sk, models=models, container=container, uninstall=uninstall,
+                                  tests=PART_TESTS.get(part, (None, None))))
     return "\n".join(out)
 
 
@@ -547,7 +583,9 @@ AREAS = [
 # Vanilla part templates, listed exactly as vehicle_car_modern_martin.txt does. These carry the
 # door {} block, itemType, install/uninstall tables and the open/close sounds; without them a
 # `part DoorFrontLeft` is just a name with a model hanging off it.
-TRUNK_ITEM = "Base.BigTrunk"          # the trunk's item family (vehicle_script: part TruckBed): BigTrunk1 = 70
+# the trunk's item families (part TruckBed): BigTrunk1 = 70 first, what HondaCRVGen1.Trunk.Create gives a new car;
+# NormalTrunk1 = 55 (the SUV template's family, what cars made before 0.4.4 carry) still fits, as any standard trunk
+TRUNK_ITEMS = "Base.BigTrunk;Base.NormalTrunk"
 PART_TEMPLATES = [
     "Door/part/DoorFrontLeft", "Door/part/DoorFrontRight",
     "Door/part/DoorRearLeft", "Door/part/DoorRearRight",
@@ -803,13 +841,21 @@ def vehicle_section(name=VEHICLE, mechanic_type=1, off_road="1.05", engine_repai
         "\t\t}",
         "",
         # the trunk (template SUV -> Trunk/part/TruckBed, item family Base.NormalTrunk: 55 at our mechanicType 1)
-        # takes the big-trunk family (2026-10-22, feedback "increase the trunk space, it has a lot of room"):
+        # takes the big-trunk family too (2026-10-22, feedback "increase the trunk space, it has a lot of room"):
         # BigTrunk1 = 70, re-declared the way vanilla's vans do it (vehicle_van_*: part TruckBed { itemType =
-        # Base.BigTrunk }; VehicleScript.LoadPart merges the key). A car already in a save keeps the trunk item it
-        # has until that is replaced
+        # Base.BigTrunk }; VehicleScript.LoadPart merges the key). Both families fit (a car saved before 0.4.4 can
+        # refit its NormalTrunk1); the item a part's capacity follows is the installed one (VehiclePart
+        # .getContainerCapacity reads the item's MaxCapacity), so a new car must GET the big one: vanilla's create
+        # would roll either family (VehicleUtils.createPartInventoryItem), ours names BigTrunk1 first, and the init
+        # upgrades a pre-0.4.4 car's NormalTrunk1 once (HondaCRVGen1_Trunk.lua)
         "\t\tpart TruckBed",
         "\t\t{",
-        "\t\t\titemType = %s," % TRUNK_ITEM,
+        "\t\t\titemType = %s," % TRUNK_ITEMS,
+        "\t\t\tlua",
+        "\t\t\t{",
+        "\t\t\t\tcreate = %s.Create," % TRUNK_LUA,
+        "\t\t\t\tinit = %s.Init," % TRUNK_LUA,
+        "\t\t\t}",
         "\t\t}",
         "",
         "\t\tpart WindshieldRear",
@@ -844,6 +890,8 @@ def vehicle_section(name=VEHICLE, mechanic_type=1, off_road="1.05", engine_repai
         door_parts(),
         "",
         rear_seat_parts(),
+        "",
+        standard_mechanics_parts(),
         "",
         accessory_parts(),
         "",
@@ -1066,9 +1114,67 @@ def _loot_lua_rarity(rows, opt):
         "    end",
         "end",
         "",
-        "-- OnFillContainer(roomName, containerType, container): drop the share of our items the slider takes away",
+        "-- the procedural lists we add to, and the container types whose procList names one of them (Distributions:",
+        "-- room -> container type -> { procList = { { name = list }, ... } }), read once at the first fill (after the",
+        "-- merge); false when there is no distribution table to read (then every container is scanned).",
+        "-- Loot.fallback: room name -> its table, for the rooms whose \"other\" or \"all\" entry names one of our lists",
+        "-- (H-DIFF-1, 2026-10-24): ItemPickerJava.fillContainerInternal (42.21) fills a container type the room has no",
+        "-- entry for from the room's \"other\" (else \"all\") entry and fires OnFillContainer with the REAL type, which",
+        "-- then is not in Loot.types (a hall's sidetable, a closet's wardrobe ... filled from MechanicSpecial)",
+        "Loot.lists = {}",
+        "for _, e in ipairs(LOOT) do Loot.lists[e.list] = true end",
+        "",
+        "local function ours(c)",
+        "    if type(c) ~= \"table\" or type(c.procList) ~= \"table\" then return false end",
+        "    for _, p in ipairs(c.procList) do",
+        "        if type(p) == \"table\" and Loot.lists[p.name] then return true end",
+        "    end",
+        "    return false",
+        "end",
+        "",
+        "function Loot.containerTypes()",
+        "    if Loot.types ~= nil then return Loot.types end",
+        "    Loot.fallback = {}",
+        "    local dists = {}",
+        "    if type(Distributions) == \"table\" then",
+        "        for _, d in ipairs(Distributions) do",
+        "            if type(d) == \"table\" then dists[#dists + 1] = d end",
+        "        end",
+        "    end",
+        "    if #dists == 0 and type(SuburbsDistributions) == \"table\" then dists[1] = SuburbsDistributions end",
+        "    if #dists == 0 then",
+        "        Loot.types = false",
+        "        return false",
+        "    end",
+        "    local types = {}",
+        "    for _, d in ipairs(dists) do",
+        "        for name, room in pairs(d) do",
+        "            if type(room) == \"table\" then",
+        "                for ctype, c in pairs(room) do",
+        "                    if ours(c) then",
+        "                        types[ctype] = true",
+        "                        if ctype == \"other\" or ctype == \"all\" then Loot.fallback[name] = room end",
+        "                    end",
+        "                end",
+        "            end",
+        "        end",
+        "    end",
+        "    Loot.types = types",
+        "    return types",
+        "end",
+        "",
+        "-- OnFillContainer(roomName, containerType, container): drop the share of our items the slider takes away.",
+        "-- Every procedural fill in the world fires it: a container type none of our lists fills returns at once",
+        "-- (perf 2026-10-24: the item scan ran on every container; the game also fires it for a zombie's bag with",
+        "-- the bag's picker table as `container`) unless the room filled it from its \"other\" / \"all\" entry",
+        "-- (Loot.fallback); an unknown type is scanned",
         "function Loot.thin(roomName, containerType, container)",
         "    if isClient() or not container then return 0 end",
+        "    local types = Loot.containerTypes()",
+        "    if types and containerType ~= nil and not types[containerType] then",
+        "        local room = Loot.fallback[roomName]",
+        "        if not room or room[containerType] ~= nil then return 0 end",
+        "    end",
         "    local items = container:getItems()",
         "    if not items then return 0 end",
         "    local drop = {}",
@@ -1084,6 +1190,86 @@ def _loot_lua_rarity(rows, opt):
         "Events.OnPreDistributionMerge.Add(Loot.add)",
         "Events.OnFillContainer.Add(Loot.thin)",
         ""])
+
+
+# Repairs (H-DATA-2, 2026-10-24): a part with repairMechanic = true offers "Repair" in the mechanics screen only
+# for an item some fixing script names (FixingManager.getFixes; vanilla generated/vehicles/vehiclesfixing.txt).
+# Every such part item of every CR-V script gets one, modelled on vanilla's: steel is welded (BlowTorch + sheet
+# metal, MetalWelding as vanilla's doors / gas tank for the heavy pieces, as the hood / trunk lid for the light
+# ones), light bolted steel can also be patched with sheet metal and screws (vanilla's Fix Hood), and the canvas and
+# vinyl pieces take duct tape, glue or a tarp (vanilla's car seat / glove box fixes). Never a vanilla item: a fixing
+# for one would change that item everywhere in the game, so a part whose item is vanilla's (the jerry cans) is not
+# repairMechanic (accessory_part repair=False), and fixing_section refuses one that is. The picnic table (I-DIFF-2,
+# 2026-10-24) is light folding furniture, not steel bodywork: duct tape, glue or screws like vanilla's glove box / car
+# seat fixes (a fixing script has no tool slot -- Fixing.Load reads Require / Fixer / GlobalItem / ConditionModifier
+# only, 42.21 bytecode -- and a GlobalItem is used up, so a screwdriver cannot be asked for).
+FIXING_OUT = ("scripts", "fixing", "%s_fixing.txt" % VEHICLE)      # under <42>/media
+FIX_FABRIC = {"Base.CRVGen1_Awning", "Base.CRVGen1_SpareCover"}     # canvas awning, vinyl spare cover
+FIX_TABLE = {"Base.CRVGen1_PicnicTable"}                          # folding table: tape / glue / screws, no welding
+FIX_HEAVY_KG = 14.0                                                 # bull bar, rack, windshield guard, plates, bumper
+FIXINGS = [
+    # name, which group, ConditionModifier, GlobalItem, fixers
+    ("Fix CRV Heavy Steel Welding", "heavy", "1.2", "Base.BlowTorch=2",
+     ["Base.SheetMetal; MetalWelding=3;Mechanics=2", "Base.SmallSheetMetal=2; MetalWelding=3;Mechanics=2"]),
+    ("Fix CRV Light Steel Welding", "light", "1.2", "Base.BlowTorch=2",
+     ["Base.SheetMetal; MetalWelding=1;Mechanics=2", "Base.SmallSheetMetal=2; MetalWelding=1;Mechanics=2"]),
+    ("Fix CRV Light Steel", "bolted", "0.5", "Base.Screws=8", ["Base.SmallSheetMetal; Mechanics=2"]),
+    ("Fix CRV Canvas And Vinyl", "fabric", "0.8", None,
+     ["Base.DuctTape=2; Mechanics=1", "Base.Glue=2; Mechanics=1", "Base.Tarp; Tailoring=1"]),
+    ("Fix CRV Picnic Table", "table", "1.0", None,
+     ["Base.DuctTape=2; Mechanics=1", "Base.Glue=2; Mechanics=1", "Base.Screws=4; Mechanics=1"]),
+]
+
+
+def repair_items(vehicle_texts):
+    """The item types of every repairMechanic part in these vehicle script texts, in order."""
+    import audit_mod
+    out = []
+    for text in vehicle_texts:
+        for mod in audit_mod.parse(text).children:
+            for v in mod.all("vehicle"):
+                for p in v.all("part"):
+                    if (p.get("repairMechanic") or "").lower() == "true":
+                        for it in (p.get("itemType") or "").split(";"):
+                            it = it.strip()
+                            if it and it not in out:
+                                out.append(it)
+    return out
+
+
+def fixing_section(vehicle_texts, items_text):
+    """media/scripts/fixing/HondaCRVGen1_fixing.txt: FIXINGS over repair_items(vehicle_texts). Our own items are
+    heavy or light by their Weight in items_text; a repairable part item that is not ours stops the build."""
+    import audit_mod
+    weight = {}
+    for mod in audit_mod.parse(items_text).children:
+        for it in mod.all("item"):
+            weight["Base." + it.name] = float(it.get("Weight") or 0)
+    groups = {"heavy": [], "light": [], "bolted": [], "fabric": [], "table": []}
+    for it in repair_items(vehicle_texts):
+        if it not in weight:
+            raise SystemExit("gen_scripts: part item %s is repairMechanic but not one of ours: a fixing would change "
+                             "the vanilla item everywhere (accessory_part repair=False)" % it)
+        if it in FIX_FABRIC:
+            groups["fabric"].append(it)
+        elif it in FIX_TABLE:
+            groups["table"].append(it)
+        elif it in weight and weight[it] >= FIX_HEAVY_KG:
+            groups["heavy"].append(it)
+        else:
+            groups["light"].append(it)
+            groups["bolted"].append(it)
+    out = ["/* " + GENERATED + " */", "module Base", "{"]
+    for name, group, mod_, glob, fixers in FIXINGS:
+        if not groups[group]:
+            continue
+        lines = ["\tfixing %s" % name, "\t{", "\t\tRequire = %s," % ";".join(groups[group])]
+        if glob:
+            lines.append("\t\tGlobalItem = %s," % glob)
+        lines.append("\t\tConditionModifier = %s," % mod_)
+        lines += ["\t\tFixer = %s," % f for f in fixers]
+        out += lines + ["\t}", ""]
+    return "\n".join(out + ["}", ""])
 
 
 def vehicles_lua(names):
@@ -1112,8 +1298,8 @@ def translation_file(key):
 
 
 def translations(translate_dir=None):
-    """B42.21 reads JSON (media/lua/shared/Translate/EN/*.json); the old IG_UI_EN.txt stays for
-    builds that still read it. The features' TRANSLATIONS join these files (IG_UI, ItemName,
+    """B42.21 reads JSON (media/lua/shared/Translate/EN/*.json) only: the old IG_UI_EN.txt is not written
+    (main removes a stale one). The features' TRANSLATIONS join these files (IG_UI, ItemName,
     ContextMenu) or make their own <file>.json (Tooltip, Recipes, Sandbox...); an ITEMS table with a
     DisplayName gets its ItemName entry unless the feature wrote one. This folder is generated: a
     .json the build no longer writes is removed."""
@@ -1125,9 +1311,10 @@ def translations(translate_dir=None):
     ui["IGUI_VehiclePart%s" % CABIN_PART] = "Cabin"                # nodisplay too
     items ={"Base.%s" % item: name for item, _w, _e, name in ACC_ITEMS}
     items["Base." + TABLE_ITEM] = "CRV Picnic Table"
-    ui.update({"IGUI_CRV_SeatsFolded": "Rear seats folded flat into a bed",
+    # the bed's halo texts carry the hint how to use it (sleeping on the bed was undiscoverable)
+    ui.update({"IGUI_CRV_SeatsFolded": "Rear seats folded flat into a bed: sit in a front seat and Sleep (V)",
                "IGUI_CRV_SeatsFoldedFlat": "Rear seats folded flat: more room for cargo",
-               "IGUI_CRV_BedMade": "Bed made up on the folded seats",
+               "IGUI_CRV_BedMade": "Bed made up on the folded seats: sit in a front seat and Sleep (V)",
                "IGUI_CRV_BedCleared": "Bed cleared: the load floor is free",
                "IGUI_CRV_SeatsUp": "Rear seats put back",
                "IGUI_CRV_NoRearSeats": "Both rear seats must be fitted",
@@ -1139,9 +1326,18 @@ def translations(translate_dir=None):
             "ContextMenu_CRV_FoldBed": "Fold the rear seats into a bed",
             "ContextMenu_CRV_MakeBed": "Make up the bed",
             "ContextMenu_CRV_ClearBed": "Clear the bed for cargo",
-            "ContextMenu_CRV_UnfoldBed": "Put the rear seats back up"}
-    tips = {"Tooltip_CRV_GateClosed": "Open the tailgate first"}
-    tables = {"IG_UI": ui, "ItemName": items, "ContextMenu": menu, "Tooltip": tips}
+            "ContextMenu_CRV_UnfoldBed": "Put the rear seats back up",
+            "ContextMenu_CRV_SleepInBed": "Sleep in the bed",
+            "ContextMenu_CRV_SleepOnBed": "Sleep on the folded bed (good bed)"}
+    tips = {"Tooltip_CRV_GateClosed": "Open the tailgate first",
+            "Tooltip_CRV_BedHint": "A good bed: sit in a front seat and Sleep (V)",
+            "Tooltip_CRV_NoFrontSeat": "Both front seats are taken"}
+    # the player's own options (Options > Mods; client/HondaCRVGen1_Polish.lua)
+    options = {"UI_CRV_Options_Name": "Honda CRV",
+               "UI_CRV_Options_EngineVolume": "CRV engine sound volume (%)",
+               "UI_CRV_Options_EngineVolume_Info": "The CRV's own engine sound, for you only: 0 turns it off, 100 is "
+                                                   "the recorded level. The server's sandbox volume still applies."}
+    tables = {"IG_UI": ui, "ItemName": items, "ContextMenu": menu, "Tooltip": tips, "UI": options}
     extra = features.translations()
     for _f, name, fields in features.item_tables():
         if "DisplayName" in fields and "Base." + name not in extra.get("ItemName", {}):
@@ -1168,10 +1364,6 @@ def translations(translate_dir=None):
             json.dump(table, f, indent=4, ensure_ascii=False)
             f.write("\n")
         paths.append(path)
-    path = os.path.join(translate_dir, "IG_UI_EN.txt")
-    with open(path, "w", encoding="utf-8", newline="\n") as f:
-        f.write("IG_UI_EN = {\n" + "".join('\t%s = "%s",\n' % kv for kv in ui.items()) + "}\n")
-    paths.append(path)
     for fn in sorted(os.listdir(translate_dir)):
         if fn.endswith(".json") and fn[:-5] not in tables:
             os.remove(os.path.join(translate_dir, fn))
@@ -1228,11 +1420,13 @@ def main(mod42=None):
     os.makedirs(out, exist_ok=True)
     os.makedirs(items_out, exist_ok=True)
     ipath = os.path.join(items_out, "%s_items.txt" % VEHICLE)
+    items_text = items_section()
     with open(ipath, "w", encoding="utf-8", newline="\n") as f:
-        f.write(items_section())
+        f.write(items_text)
     print("WROTE %s" % ipath)
     for tp in translations(translate):
         print("WROTE %s" % tp)
+    _write_or_remove(os.path.join(translate, "IG_UI_EN.txt"), None)      # 42.21 reads the JSON files only
     body = "\n".join([
         "module Base",
         "{",
@@ -1247,11 +1441,14 @@ def main(mod42=None):
     print("WROTE %s (%d lines)" % (path, body.count("\n") + 1))
     # the features' second vehicle scripts, one file each; a HondaCRVGen1*.txt no feature declares any more goes
     extra = features.vehicle_scripts()
+    vehicle_texts = [body]
     for name, (feat, fn) in extra.items():
         text = fn(_gen()) if callable(fn) else fn
         if "vehicle %s" % name not in text:
             raise SystemExit("gen_scripts: feature %s's VEHICLE_SCRIPTS[%s] text has no 'vehicle %s' block" % (feat, name, name))
         _write_or_remove(os.path.join(out, "%s.txt" % name), text)
+        vehicle_texts.append(text)
+    _write_or_remove(os.path.join(mod42, "media", *FIXING_OUT), fixing_section(vehicle_texts, items_text))
     for fn in sorted(os.listdir(out)):
         if fn.startswith(VEHICLE) and fn.endswith(".txt") and fn[:-4] != VEHICLE and fn[:-4] not in extra:
             _write_or_remove(os.path.join(out, fn), None)

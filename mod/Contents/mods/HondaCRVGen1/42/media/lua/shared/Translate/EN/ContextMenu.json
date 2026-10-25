@@ -6,6 +6,8 @@
     "ContextMenu_CRV_MakeBed": "Make up the bed",
     "ContextMenu_CRV_ClearBed": "Clear the bed for cargo",
     "ContextMenu_CRV_UnfoldBed": "Put the rear seats back up",
+    "ContextMenu_CRV_SleepInBed": "Sleep in the bed",
+    "ContextMenu_CRV_SleepOnBed": "Sleep on the folded bed (good bed)",
     "ContextMenu_CRV_Awning_Deploy": "Roll out the awning",
     "ContextMenu_CRV_Awning_Stow": "Roll up the awning",
     "ContextMenu_CRV_Function_LiftFloor": "Lift the cargo floor",

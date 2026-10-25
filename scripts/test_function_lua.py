@@ -23,7 +23,7 @@ from lua_harness import LUA_DIR, Net, Side
 
 STATE = ("shared/HondaCRVGen1_State.lua", "server/HondaCRVGen1_StateServer.lua", "client/HondaCRVGen1_StateClient.lua")
 FUNC = ("shared/HondaCRVGen1_Shared.lua", "server/Vehicles/HondaCRVGen1Accessories.lua", "shared/HondaCRVGen1_Function.lua",
-        "shared/TimedActions/ISCRVFoldSeats.lua", "shared/TimedActions/ISCRVFunctionLiftFloor.lua",
+        "shared/HondaCRVGen1_Lift.lua", "shared/TimedActions/ISCRVFoldSeats.lua", "shared/TimedActions/ISCRVFunctionLiftFloor.lua",
         "server/HondaCRVGen1_FunctionServer.lua")
 LOOT = os.path.join(LUA_DIR, "server", "Items", "HondaCRVGen1_Loot.lua")
 
@@ -45,12 +45,18 @@ HaloTextHelper = { addText = function(c, t) HALO[#HALO + 1] = t end, addBadText 
 XP = {}
 Perks = { Mechanics = "Mechanics" }
 function addXp(c, perk, amount) XP[#XP + 1] = { c = c:getUsername(), perk = perk, amount = amount } end
+-- the game clock (GameTime.getCalender().getTimeInMillis()): GAME_MS, moved by the tests
+GAME_MS = 1000000000
+DAY_MS = 86400000
+function getGameTime() return { getCalender = function() return { getTimeInMillis = function() return GAME_MS end } end } end
 function ZombRandFloat(a, b) return a + math.random() * (b - a) end
 
 ISInstallVehiclePart = { complete = function(self)
     if self.fail then return true end
     self.part:setInventoryItem(self.item); return true end }
-ISUninstallVehiclePart = { complete = function(self) self.part:setInventoryItem(nil); return true end }
+ISUninstallVehiclePart = { complete = function(self)
+    if self.fail then return true end
+    self.part:setInventoryItem(nil); return true end }
 ISRepairEngine = { complete = function(self) self.part:setCondition(self.part:getCondition() + 10); return true end }
 
 Item.nextId = 100
@@ -215,7 +221,10 @@ PLAYER.mech = { [it:getID() .. "4242" .. "1"] = true }
 seat.item = nil
 ISInstallVehiclePart.complete(a)                                 -- already done once: nothing
 a.fail = true; seat.item = nil
-ISInstallVehiclePart.complete(a)                                 -- a failure: the failure bonus
+ISInstallVehiclePart.complete(a)                                 -- a failure on an item already done here: nothing (H-FEATURES-9)
+local it2 = newItem("Base.NormalCarSeat1")
+local b = { character = PLAYER, vehicle = v, part = seat, item = it2, fail = true }
+ISInstallVehiclePart.complete(b)                                 -- a failure, first try of that item: the failure bonus
 ISUninstallVehiclePart.complete({ character = PLAYER, vehicle = v, part = v.parts.SeatRearRight })   -- first uninstall
 ISRepairEngine.complete({ character = PLAYER, vehicle = v, part = v.parts.Engine })                  -- first repair
 local suv = newVehicle(9, { "SeatRearLeft" }, "Base.SUV")
@@ -223,8 +232,21 @@ ISUninstallVehiclePart.complete({ character = PLAYER, vehicle = suv, part = suv.
 ''')
     xp = [e["amount"] for e in (dict(x.items()) for x in sp.eval("XP").values())]
     check(xp == [3, 1, 2, 2], "manual XP bonuses %s" % xp)
-    print("SP MANUAL XP: reader on a CR-V: install +3 (first time only), failure +1, uninstall +2, repair +2; "
-          "non-readers and other cars nothing")
+    # an uninstall that fails: the bonus only while the item has not been taken off this car (the success rule); a day
+    # later (the failure bonus on this part was paid above, H-PLAY-2: once per part and day)
+    sp.run(r'''
+XP = {}
+GAME_MS = GAME_MS + DAY_MS
+local p = v.parts.SeatRearLeft
+p.item = newItem("Base.NormalCarSeat1")
+ISUninstallVehiclePart.complete({ character = PLAYER, vehicle = v, part = p, fail = true })   -- first try fails: +1
+PLAYER.mech[p.item:getID() .. "4242" .. "0"] = true
+ISUninstallVehiclePart.complete({ character = PLAYER, vehicle = v, part = p, fail = true })   -- already done once: nothing
+''')
+    xp = [e["amount"] for e in (dict(x.items()) for x in sp.eval("XP").values())]
+    check(xp == [1], "failed uninstall bonuses %s (want [1])" % xp)
+    print("SP MANUAL XP: reader on a CR-V: install +3 (first time only), failure +1 (first time only), uninstall +2, "
+          "repair +2; non-readers and other cars nothing")
     return sp
 
 
@@ -525,15 +547,31 @@ def seats_look():
 
 
 UI = r'''
+SWITCHED, SLEEP_DIALOG = nil, 0
 ISVehicleMenu = { FillMenuOutsideVehicle = function(player, context, vehicle, test) return "vanilla" end,
                   onEnter = function(playerObj, vehicle, seat) ENTERED = seat end,
+                  onSwitchSeat = function(playerObj, seatTo) SWITCHED = seatTo end,
+                  onSleep = function(playerObj, vehicle) SLEEP_DIALOG = SLEEP_DIALOG + 1 end,
                   showRadialMenuOutside = VANILLA_RADIAL_OUTSIDE,
+                  showRadialMenu = VANILLA_RADIAL_INSIDE,
                   getVehicleToInteractWith = function(playerObj) return playerObj:getVehicle() or RADIAL_TARGET end }
+-- 42.21 ISVehiclePartMenu.toPlayerInventory: a transfer into the main inventory when the item sits elsewhere
+ISVehiclePartMenu = { toPlayerInventory = function(playerObj, item)
+    if item and item.bag then QUEUE[#QUEUE + 1] = { transfer = item } end end }
 RADIAL = newRadial()
 function getPlayerRadialMenu(n) return RADIAL end
 function getTexture(path) return path end
 function Player:getPlayerNum() return 0 end
-ISWorldObjectContextMenu = { addToolTip = function() return {} end, getBedQuality = function() return "badBed" end }
+-- vanilla's onSleepWalkToComplete, its end: the bed type the client works out, asleep (the client's own copy), and
+-- on a server the onVehicleSleep command carrying the asleep flag only
+VANILLA_SLEEP_CMDS = 0
+ISWorldObjectContextMenu = { addToolTip = function() return {} end, getBedQuality = function() return "badBed" end,
+    onSleepWalkToComplete = function(player, bed)
+        local p = getSpecificPlayer(player)
+        p:setBedType(ISWorldObjectContextMenu.getBedQuality(p, bed))
+        p:setAsleep(true)
+        if isClient() and p:getVehicle() then VANILLA_SLEEP_CMDS = VANILLA_SLEEP_CMDS + 1 end
+    end }
 ISEnterVehicle = { isValid = function(self) return true end }
 ISSwitchVehicleSeat = { isValid = function(self) return true end }
 ISInstallVehiclePart.new = function(self, ...) return {} end
@@ -552,7 +590,7 @@ function ISModalRichText:removeFromUIManager() self.shown = false end
 function getCore() return { getScreenWidth = function() return 1920 end, getScreenHeight = function() return 1080 end } end
 function newContext()
     local c = { options = {} }
-    function c:addOption(name, target, fn, a1, a2) local o = { name = name, target = target, fn = fn, a1 = a1, a2 = a2 }
+    function c:addOption(name, target, fn, a1, a2, a3) local o = { name = name, target = target, fn = fn, a1 = a1, a2 = a2, a3 = a3 }
         self.options[#self.options + 1] = o; return o end
     return c
 end
@@ -596,8 +634,8 @@ def client_menus():
     check(c.eval(same) is True, "the cargo floor slice queues the option's walk and ISCRVFunctionLiftFloor")
     c.run("QUEUE = {}")
     c.run("HondaCRVGen1.Shared.setBed(v, true); v.parts.CRVFunctionCargo.cont.items = 1")
-    check(c.eval(menu) == "ContextMenu_CRV_ClearBed,ContextMenu_CRV_UnfoldBed!,ContextMenu_CRV_Function_LiftFloor", "folded, loaded: %s" % c.eval(menu))
-    check(c.eval(radial) == "VANILLA_MECHANICS,ContextMenu_CRV_ClearBed,ContextMenu_CRV_UnfoldBed [IGUI_CRV_Function_CargoNotEmpty]!,"
+    check(c.eval(menu) == "ContextMenu_CRV_ClearBed,ContextMenu_CRV_UnfoldBed!,ContextMenu_CRV_SleepInBed,ContextMenu_CRV_Function_LiftFloor", "folded, loaded: %s" % c.eval(menu))
+    check(c.eval(radial) == "VANILLA_MECHANICS,ContextMenu_CRV_ClearBed,ContextMenu_CRV_UnfoldBed [IGUI_CRV_Function_CargoNotEmpty]!,ContextMenu_CRV_SleepInBed,"
           "ContextMenu_CRV_Function_LiftFloor", "radial, folded, loaded: %s" % c.eval(radial))
     c.run("PLAYER.vehicle = v")
     check(c.eval(radial) == "", "no outside radial from inside the car")
@@ -755,7 +793,7 @@ end
 
 def bed_quality():
     """Sleeping in a folded CR-V: a good bed; a pillow counts in hand, in the sleeper's seat container (as vanilla's
-    vehicle branch does), on the folded bed floor (CRVFunctionCargo) or the cargo deck (TruckBed); upright seats and
+    vehicle branch does) or on the cargo deck (TruckBed; not the folded load floor, shut while a bed); upright seats and
     other cars keep the game's answer. The client file runs the same on a multiplayer client (it reads only synced
     state: the fold flag and the containers the game syncs)."""
     for role in ("sp", "client"):
@@ -779,15 +817,16 @@ def bed_quality():
         check(c.eval(q) == "goodBedPillow", "%s: pillow in the sleeper's seat container" % role)
         c.run("SEAT_OF[PLAYER] = 1")
         check(c.eval(q) == "goodBed", "%s: a pillow in another seat's container does not count" % role)
-        c.run("putIn(v.parts.CRVFunctionCargo.cont, newPillow())")
-        check(c.eval(q) == "goodBedPillow", "%s: pillow on the folded bed floor" % role)
-        c.run("v.parts.CRVFunctionCargo.cont.list = {}; putIn(v.parts.TruckBed.cont, newPillow())")
+        # I-DIFF-3: the folded load floor is shut and empty while it is a bed: not a pillow spot
+        check(c.eval("#HondaCRVGen1.Function.BED_PILLOW_PARTS == 1 and HondaCRVGen1.Function.BED_PILLOW_PARTS[1] == 'TruckBed'"),
+              "%s: the pillow spots on the bed are the cargo deck only" % role)
+        c.run("putIn(v.parts.TruckBed.cont, newPillow())")
         check(c.eval(q) == "goodBedPillow", "%s: pillow on the cargo deck" % role)
         c.run("v.parts.TruckBed.cont.list = {}; v.parts.CRVFunctionCargo = nil; v.parts.TruckBed = nil; SEAT_OF[PLAYER] = nil")
         check(c.eval(q) == "goodBed", "%s: no seat (-1), no bed containers: goodBed, nothing raises" % role)
         c.run("PLAYER.vehicle = newVehicle(9, {}, 'Base.SUV')")
         check(c.eval(q) == "badBed", "%s: another car: the game's answer" % role)
-    print("BED QUALITY: folded = goodBed, pillow in hand / own seat container / bed floor / cargo deck = goodBedPillow, "
+    print("BED QUALITY: folded = goodBed, pillow in hand / own seat container / cargo deck = goodBedPillow, "
           "upright seats and other cars unchanged (single player and a multiplayer client)")
 
 
@@ -822,8 +861,8 @@ def fold_modes():
     check(sp.eval("%s.CargoAccess(v, v.parts.CRVFunctionCargo, PLAYER)" % F) is True, "cargo: the load floor opens at the gate")
     check(sp.eval("HondaCRVGen1.Acc.RearSeatAccess(v, v.parts.SeatRearLeft, PLAYER)") is False, "cargo: rear seats refuse items")
     check(sp.eval("ISEnterVehicle.isValid({ seat = 2, vehicle = v })") is False, "cargo: nobody sits in the back")
-    sp.run("HALO = {}; FLAT:perform()")
-    check(sp.eval("HALO[1]") == "IGUI_CRV_SeatsFoldedFlat", "the fold-flat halo")
+    sp.run("FLAT:perform()")                     # (the outcome text comes from complete(), the authoritative side)
+    check(sp.eval("HALO[#HALO]") == "IGUI_CRV_SeatsFoldedFlat", "the fold-flat halo")
     check(sp.eval(menu) == "ContextMenu_CRV_MakeBed,ContextMenu_CRV_UnfoldBed", "cargo menu: %s" % sp.eval(menu))
     # sleeping on the load floor: no bed, vanilla's answer (the stub's badBed)
     sp.run("v:addPart('SeatFrontLeft').cont = newContainer(50, 0); PLAYER.vehicle = v; SEAT_OF[PLAYER] = 0")
@@ -842,11 +881,11 @@ def fold_modes():
           "ContextMenu_CRV_UnfoldBed [IGUI_CRV_Function_CargoNotEmpty]!", "radial, loaded: %s" % sp.eval(radial))
     sp.run("v.parts.CRVFunctionCargo.cont.items = 0")
     check(sp.eval("mk:isValid()") and sp.eval("mk:complete()") is True and sp.eval("%s.isBed(v)" % S), "empty: the bed made up")
-    sp.run("HALO = {}; mk:perform()")
-    check(sp.eval("HALO[1]") == "IGUI_CRV_BedMade", "the make-up halo")
+    sp.run("mk:perform()")
+    check(sp.eval("HALO[#HALO]") == "IGUI_CRV_BedMade", "the make-up halo")
     check(shown(sp) == (False, True, True), "bed: the folded bench and the bedding (%s)" % (shown(sp),))
     check(sp.eval("%s.CargoAccess(v, v.parts.CRVFunctionCargo, PLAYER)" % F) is False, "bed: the load floor is shut")
-    check(sp.eval(menu) == "ContextMenu_CRV_ClearBed,ContextMenu_CRV_UnfoldBed", "bed menu: %s" % sp.eval(menu))
+    check(sp.eval(menu) == "ContextMenu_CRV_ClearBed,ContextMenu_CRV_UnfoldBed,ContextMenu_CRV_SleepInBed", "bed menu: %s" % sp.eval(menu))
     sp.run("PLAYER.vehicle = v")
     check(sp.eval(q) == "goodBed", "bed: a good bed")
     sp.run("PLAYER.secondary = newPillow()")
@@ -856,8 +895,8 @@ def fold_modes():
     sp.run("cl = ISCRVFoldSeats:new(PLAYER, v, true, 'cargo')")
     check(sp.eval("cl.maxTime") == 80 and sp.eval("cl:isValid()") and sp.eval("cl:complete()") is True and sp.eval("%s.isCargo(v)" % S),
           "the bed cleared for cargo")
-    sp.run("HALO = {}; cl:perform()")
-    check(sp.eval("HALO[1]") == "IGUI_CRV_BedCleared", "the clear halo")
+    sp.run("cl:perform()")
+    check(sp.eval("HALO[#HALO]") == "IGUI_CRV_BedCleared", "the clear halo")
     check(shown(sp) == (False, True, False), "cleared: the bedding gone")
     # back up from cargo: the mode back to the default; the next plain fold is a bed
     sp.run("up = ISCRVFoldSeats:new(PLAYER, v, false, 'cargo')")
@@ -936,6 +975,688 @@ def fold_modes():
           "alone; the mode is server-only")
 
 
+def bench_and_caches():
+    """H-FEATURES-7: with both rear seats taken out the bench (CRVFunctionSeats' models) was still drawn: hidden
+    while neither seat is fitted, drawn again when one is (the State poll's watchPart, every client). H-LUA-3: the
+    drawing cache F.seatsShown dropped the cars that left the world, as State.tracked does."""
+    sp = side("sp", player="tester")
+    sp.run("v = newCRV(1); HondaCRVGen1.Function.Init(v, v.parts.CRVFunctionSeats)")
+    check(shown(sp) == (True, False, False), "upright with both seats fitted")
+    sp.run("v.parts.SeatRearLeft:setInventoryItem(nil); TICK(60)")
+    check(shown(sp) == (True, False, False), "one seat left: the bench stays")
+    sp.run("v.parts.SeatRearRight:setInventoryItem(nil); TICK(60)")
+    check(shown(sp) == (False, False, False), "both rear seats removed: no bench drawn (%s)" % (shown(sp),))
+    sp.run("v.parts.SeatRearRight:setInventoryItem(newItem('Base.NormalCarSeat1')); TICK(60)")
+    check(shown(sp) == (True, False, False), "a seat fitted again: the bench is back")
+    sp.run("w = newCRV(2); w.parts.SeatRearLeft.md.crv_function_folded = true; w.parts.SeatRearLeft.item = nil; "
+           "w.parts.SeatRearRight.item = nil; HondaCRVGen1.Function.Init(w, w.parts.CRVFunctionSeats)")
+    check(shown(sp, "w") == (False, False, False), "a folded car loaded without its rear seats: nothing drawn")
+    # MP: the server takes the seats out; each client's poll sees the item packet and hides the bench
+    net = Net()
+    server = side("server", net, seed=41)
+    a = side("client", net, player="alice", seed=42)
+    for s in (server, a):
+        s.run("v = newCRV(1); HondaCRVGen1.Function.Init(v, v.parts.CRVFunctionSeats)")
+    for pid in ("SeatRearLeft", "SeatRearRight"):
+        server.run("v.parts.%s:setInventoryItem(nil)" % pid)
+        net.sync_item(1, pid)
+    a.run("TICK(60)")
+    check(shown(a) == (False, False, False), "alice: both seats removed on the server, no bench drawn")
+    server.run("v.parts.SeatRearLeft:setInventoryItem(newItem('Base.NormalCarSeat1'))")
+    net.sync_item(1, "SeatRearLeft")
+    a.run("TICK(60)")
+    check(shown(a) == (True, False, False), "alice: a seat fitted on the server, the bench is back")
+    check(server.eval("v.parts.CRVFunctionSeats.calls") == 0, "the server draws nothing")
+    print("BENCH: hidden with both rear seats out, back with one (single player, a client through the poll)")
+
+    # the drawing cache: cars that left the world are dropped
+    c = side("client", Net(), player="bob")
+    c.run("""for vid = 1, 20 do
+                 local v = newCRV(vid)
+                 HondaCRVGen1.Function.Init(v, v.parts.CRVFunctionSeats)
+                 if vid <= 15 then v.removed = true; VEHICLES[vid] = nil end
+             end
+             TICK(120)""")
+    left = c.eval("(function() local n, k = 0, 0 for _, e in pairs(HondaCRVGen1.Function.seatsShown) do "
+                  "n = n + 1; if e.vehicle.removed then k = k + 1 end end return n, k end)()")
+    check(tuple(left) == (5, 0), "seatsShown keeps the 5 cars still in the world, none removed (%s)" % (left,))
+    c.run("v2 = newCRV(16); HondaCRVGen1.Function.Init(v2, v2.parts.CRVFunctionSeats); TICK(60)")
+    check(c.eval("HondaCRVGen1.Function.seatsShown[16].vehicle == v2"), "a car streamed in again under the same id: kept")
+    print("CACHE: F.seatsShown drops the cars that left the world")
+
+
+def table_and_floor():
+    """I-FEATURES-3: the picnic table is the cargo floor's panel: taking it out (the vanilla uninstall, authoritative
+    side) also reveals the under-floor storage on every client."""
+    sp = side("sp", player="tester")
+    sp.run("v = newCRV(1); v:addPart('CRVPicnicTable').item = newItem('Base.CRVGen1_PicnicTable')")
+    F = "HondaCRVGen1.Function"
+    sp.run("ISUninstallVehiclePart.complete({ character = PLAYER, vehicle = v, part = v.parts.CRVPicnicTable, fail = true })")
+    check(not sp.eval("%s.isFloorFound(v)" % F), "a failed removal reveals nothing")
+    sp.run("ISUninstallVehiclePart.complete({ character = PLAYER, vehicle = v, part = v.parts.CRVPicnicTable })")
+    check(sp.eval("%s.isFloorFound(v)" % F), "the table taken out: the storage found")
+    sp.run("PLAYER.area = 'TruckBed'; v.parts.TrunkDoor.door.open = true")
+    check(sp.eval("%s.UnderfloorAccess(v, v.parts.CRVFunctionUnderfloor, PLAYER)" % F), "open at the tailgate")
+    sp.run("o = newVehicle(5, { 'CRVPicnicTable', 'CRVFunctionUnderfloor' }, 'Base.SUV'); o.parts.CRVPicnicTable.item = newItem('x'); "
+           "ISUninstallVehiclePart.complete({ character = PLAYER, vehicle = o, part = o.parts.CRVPicnicTable })")
+    check(sp.eval("o.parts.CRVFunctionUnderfloor.md.crv_function_floorFound") is None, "another car: nothing")
+    net = Net()
+    server = side("server", net, seed=51)
+    a = side("client", net, player="alice", seed=52)
+    server.run("newPlayer('alice')")
+    for s in (server, a):
+        s.run("v = newCRV(1); v:addPart('CRVPicnicTable').item = newItem('Base.CRVGen1_PicnicTable'); "
+              "v.parts.TrunkDoor.door.open = true")
+    a.run("ISUninstallVehiclePart.complete({ character = PLAYER, vehicle = v, part = v.parts.CRVPicnicTable })")
+    check(not a.eval("%s.isFloorFound(v)" % F) and a.eval("SENT.transmitModData") == 0, "a client changes nothing itself")
+    server.run("ISUninstallVehiclePart.complete({ character = PLAYERS.alice, vehicle = v, part = v.parts.CRVPicnicTable })")
+    net.pump()
+    a.run("PLAYER.area = 'TruckBed'; PLAYER.vehicle = nil")
+    check(a.eval("%s.isFloorFound(v)" % F) and a.eval("%s.UnderfloorAccess(v, v.parts.CRVFunctionUnderfloor, PLAYER)" % F),
+          "the server took the table out: alice reaches the storage")
+    print("TABLE: taking the picnic table out reveals the under-floor storage (single player, the server -> clients)")
+
+
+def menu_side(role="sp", net=None, player="tester", seed=7):
+    c = side(role, net, player=player, seed=seed)
+    c.run(UI)
+    c.run(BED)
+    c.load("client/HondaCRVGen1_Menu.lua", "client/HondaCRVGen1_FunctionMenu.lua")
+    return c
+
+
+def car_menus():
+    """H-FEATURES-3 (the table from a bag), H-FEATURES-6 (switching into a folded rear seat), I-FEATURES-2 (the fold
+    actions on the in-car radial), I-FEATURES-1 (the in-car Sleep slice names the good bed; the hints)."""
+    c = menu_side()
+    c.run("v = newCRV(1); PLAYER.area = 'TruckBed'; v:addPart('CRVPicnicTable')")
+    # the table in a bag: into the main inventory first, then the walk and the install
+    c.run("""TABLE_ITEM = newItem('Base.CRVGen1_PicnicTable'); TABLE_ITEM.bag = true
+             function Player:getInventory() return { getFirstTypeRecurse = function() return TABLE_ITEM end } end
+             v.parts.TrunkDoor.door.open = true
+             QUEUE = {}
+             local ctx = newContext(); ISVehicleMenu.FillMenuOutsideVehicle(0, ctx, v, false)
+             for _, o in ipairs(ctx.options) do if o.name == 'ContextMenu_CRV_PutTable' then o.fn(o.target, o.a1, o.a2, o.a3) end end""")
+    check(c.eval("#QUEUE") == 3 and c.eval("QUEUE[1].transfer == TABLE_ITEM") and c.eval("QUEUE[2].path") is not None,
+          "the table from a bag: transfer to the main inventory, walk, install (%s actions)" % c.eval("#QUEUE"))
+    c.run("function Player:getInventory() return { getFirstTypeRecurse = function() return nil end } end; QUEUE = {}")
+    # the fold hint on the fold-into-a-bed option
+    c.run("CTX = newContext(); ISVehicleMenu.FillMenuOutsideVehicle(0, CTX, v, false)")
+    check(c.eval("(function() for _, o in ipairs(CTX.options) do if o.name == 'ContextMenu_CRV_FoldBed' then "
+                 "return o.toolTip and o.toolTip.description end end end)()") == "Tooltip_CRV_BedHint"
+          and c.eval("(function() for _, o in ipairs(CTX.options) do if o.name == 'ContextMenu_CRV_FoldBed' then "
+                     "return o.notAvailable == nil end end end)()"), "the fold-into-a-bed option carries the hint, available")
+    # in the car: the fold actions on the radial (no walk), the Sleep slice
+    c.run("v:addPart('SeatFrontLeft').cont = newContainer(50, 0); PLAYER.vehicle = v; SEAT_OF[PLAYER] = 0")
+    inside = "(function() RADIAL = newRadial(); ISVehicleMenu.showRadialMenu(PLAYER); return RADIAL:texts() end)()"
+    check(c.eval(inside) == "IGUI_SwitchSeat,ContextMenu_Sleep,IGUI_ExitVehicle,ContextMenu_CRV_FoldFlat,ContextMenu_CRV_FoldBed",
+          "in-car radial, seats up: %s" % c.eval(inside))
+    c.run("ISVehicleMenu.showRadialMenu(PLAYER)")
+    check(c.eval("RADIAL.shown") is False and c.eval("#RADIAL.slices") == 0, "V again closes it, nothing added")
+    c.run("QUEUE = {}; RADIAL = newRadial(); ISVehicleMenu.showRadialMenu(PLAYER); RADIAL:pick(RADIAL:find('ContextMenu_CRV_FoldBed'))")
+    check(c.eval("#QUEUE") == 1 and c.eval("getmetatable(QUEUE[1]) == ISCRVFoldSeats and QUEUE[1].mode == 'bed' and QUEUE[1].on"),
+          "folding from a seat: the action alone, no walk")
+    check(c.eval("QUEUE[1]:waitToStart()") is False, "from a seat: no turning to face the car")
+    c.run("QUEUE[1].anim = nil; function ISCRVFoldSeats:setActionAnim(a) self.anim = a end; QUEUE[1]:start()")
+    check(c.eval("QUEUE[1].anim") is None, "from a seat: no standing loot animation")
+    c.run("QUEUE[1]:complete(); QUEUE = {}")
+    check(c.eval("HondaCRVGen1.Shared.isBed(v)"), "folded into a bed from the front seat")
+    check(c.eval(inside) == "IGUI_SwitchSeat,ContextMenu_CRV_SleepOnBed,IGUI_ExitVehicle,ContextMenu_CRV_ClearBed,"
+                           "ContextMenu_CRV_UnfoldBed", "in-car radial, bed: the good-bed Sleep slice (%s)" % c.eval(inside))
+    check(c.eval("RADIAL:find('ContextMenu_CRV_SleepOnBed').fn == VANILLA_SLEEP"), "the relabelled slice still runs vanilla's sleep")
+    c.run("v.parts.CRVFunctionCargo.cont.items = 0; ISCRVFoldSeats:new(PLAYER, v, true, 'cargo'):complete()")
+    check(c.eval(inside) == "IGUI_SwitchSeat,ContextMenu_Sleep,IGUI_ExitVehicle,ContextMenu_CRV_MakeBed,ContextMenu_CRV_UnfoldBed",
+          "in-car radial, load floor: vanilla's Sleep, make the bed (%s)" % c.eval(inside))
+    c.run("v.parts.CRVFunctionCargo.cont.items = 2")
+    check(c.eval(inside) == "IGUI_SwitchSeat,ContextMenu_Sleep,IGUI_ExitVehicle,"
+                           "ContextMenu_CRV_MakeBed [IGUI_CRV_Function_CargoNotEmpty]!,ContextMenu_CRV_UnfoldBed [IGUI_CRV_Function_CargoNotEmpty]!",
+          "loaded floor: both blocked with the reason (%s)" % c.eval(inside))
+    c.run("v.parts.CRVFunctionCargo.cont.items = 0")
+    c.run("PLAYER.vehicle = newVehicle(9, {}, 'Base.SUV')")
+    check(c.eval(inside) == "IGUI_SwitchSeat,ContextMenu_Sleep,IGUI_ExitVehicle", "another car: vanilla's radial only")
+    # switching into a folded rear seat says why
+    c.run("PLAYER.vehicle = v; SWITCHED = nil; HALO = {}; ISVehicleMenu.onSwitchSeat(PLAYER, 3)")
+    check(c.eval("SWITCHED") is None and c.eval("HALO[1]") == "IGUI_CRV_Function_SeatsAreFolded",
+          "switching into a folded rear seat: refused with the reason")
+    c.run("ISVehicleMenu.onSwitchSeat(PLAYER, 1)")
+    check(c.eval("SWITCHED") == 1, "the front passenger seat as usual")
+    c.run("ISCRVFoldSeats:new(PLAYER, v, false, 'cargo'):complete(); SWITCHED = nil; ISVehicleMenu.onSwitchSeat(PLAYER, 3)")
+    check(c.eval("SWITCHED") == 3, "seats up: the rear seat as usual")
+    print("CAR MENUS: table from a bag, the bed hint, fold / bed / unfold on the in-car radial (no walk, no anim), the "
+          "good-bed Sleep slice, switching into a folded seat refused with the reason")
+
+
+def sleep_in_bed():
+    """I-FEATURES-1: "Sleep in the bed" from outside (context menu and V): a free front seat, then the game's own
+    sleep with its checks; offered only folded into a bed, greyed with vanilla's reasons."""
+    c = menu_side()
+    c.run("v = newCRV(1); PLAYER.area = 'TruckBed'; v.parts.TrunkDoor.door.open = true; HondaCRVGen1.Shared.setBed(v, true)")
+    menu = "(function() local ctx = newContext(); ISVehicleMenu.FillMenuOutsideVehicle(0, ctx, v, false); return optionNames(ctx) end)()"
+    radial = "viewpointRadial(PLAYER, v):texts()"
+    check("ContextMenu_CRV_SleepInBed," in c.eval(menu) + "," and "ContextMenu_CRV_SleepInBed!" not in c.eval(menu),
+          "bed: Sleep in the bed offered (%s)" % c.eval(menu))
+    check("ContextMenu_CRV_SleepInBed," in c.eval(radial) + ",", "and on the outside radial (%s)" % c.eval(radial))
+    for setup, why in (("PLAYER.fatigue = 0.2", "IGUI_Sleep_NotTiredEnough"), ("v.moving = true", "IGUI_PlayerText_CanNotSleepInMovingCar"),
+                       ("PLAYER.zombies = 2", "IGUI_Sleep_NotSafe"), ("PLAYER.lastSlept = 99.5", "ContextMenu_NoSleepTooEarly"),
+                       ("PLAYER.moodles = { PANIC = 1 }", "ContextMenu_PanicNoSleep"),
+                       ("PLAYER.moodles = { PAIN = 2 }; PLAYER.fatigue = 0.5", "ContextMenu_PainNoSleep"),
+                       ("v.chars = { [0] = 'x', [1] = 'y' }; v.occupied = { [0] = true, [1] = true }", "Tooltip_CRV_NoFrontSeat")):
+        c.run(setup)
+        check("ContextMenu_CRV_SleepInBed!" in c.eval(menu) and "ContextMenu_CRV_SleepInBed [%s]!" % why in c.eval(radial),
+              "%s: greyed, %s (%s)" % (setup, why, c.eval(radial)))
+        c.run("PLAYER.fatigue = nil; v.moving = nil; PLAYER.zombies = nil; PLAYER.lastSlept = nil; PLAYER.moodles = nil; "
+              "v.chars = nil; v.occupied = {}")
+    c.run("PLAYER.moodles = { PAIN = 2 }; PLAYER.fatigue = 0.9")
+    check("ContextMenu_CRV_SleepInBed!" not in c.eval(menu), "in pain but very tired: allowed, as vanilla")
+    c.run("PLAYER.moodles = nil; PLAYER.fatigue = nil; PLAYER.tablet = 3000; PLAYER.moodles = { PANIC = 2 }")
+    check("ContextMenu_CRV_SleepInBed!" not in c.eval(menu), "sleeping pills: panic does not stop it, as vanilla")
+    c.run("PLAYER.moodles = nil; PLAYER.tablet = nil")
+    # picking it: into the free front seat (the driver's taken), then the game's sleep once seated
+    c.run("""v.chars = { [0] = 'x' }; v.occupied = { [0] = true }; ENTERED = nil
+             ISTimedActionQueue.queues = { [PLAYER] = { queue = { 'walk', 'enter' } } }
+             local m = viewpointRadial(PLAYER, v); m:pick(m:find('ContextMenu_CRV_SleepInBed'))""")
+    check(c.eval("ENTERED") == 1, "into the free front passenger seat (%s)" % c.eval("ENTERED"))
+    c.run("TICK(30)")
+    check(c.eval("SLEEP_DIALOG") == 0 and c.eval("HondaCRVGen1.Menu.pendingSleep[0] ~= nil"), "walking: no sleep yet")
+    c.run("PLAYER.vehicle = v; TICK(5)")
+    check(c.eval("SLEEP_DIALOG") == 0, "seated but still getting in (the queue busy): not yet")
+    c.run("ISTimedActionQueue.queues[PLAYER].queue = {}; TICK(1)")
+    check(c.eval("SLEEP_DIALOG") == 1 and c.eval("HondaCRVGen1.Menu.pendingSleep[0] == nil"), "seated: the game's sleep dialog")
+    # zombies turned up on the way: the game's reason, no dialog
+    c.run("""PLAYER.vehicle = nil; ISTimedActionQueue.queues[PLAYER].queue = { 'walk' }
+             local ctx = newContext(); ISVehicleMenu.FillMenuOutsideVehicle(0, ctx, v, false)
+             for _, o in ipairs(ctx.options) do if o.name == 'ContextMenu_CRV_SleepInBed' then o.fn(o.target, o.a1) end end
+             PLAYER.zombies = 1; PLAYER.vehicle = v; ISTimedActionQueue.queues[PLAYER].queue = {}; HALO = {}; TICK(1)""")
+    check(c.eval("SLEEP_DIALOG") == 1 and c.eval("HALO[1]") == "IGUI_Sleep_NotSafe", "zombies on the way: refused with vanilla's reason")
+    c.run("PLAYER.zombies = nil; PLAYER.vehicle = nil")
+    # a walk that was cancelled: nothing later
+    c.run("""local ctx = newContext(); ISVehicleMenu.FillMenuOutsideVehicle(0, ctx, v, false)
+             for _, o in ipairs(ctx.options) do if o.name == 'ContextMenu_CRV_SleepInBed' then o.fn(o.target, o.a1) end end
+             ISTimedActionQueue.queues[PLAYER].queue = {}; TICK(10); PLAYER.vehicle = v; TICK(10)""")
+    check(c.eval("SLEEP_DIALOG") == 1 and c.eval("HondaCRVGen1.Menu.pendingSleep[0] == nil"), "a cancelled walk: no sleep later")
+    c.run("PLAYER.vehicle = nil; ISCRVFoldSeats:new(PLAYER, v, true, 'cargo'):complete()")
+    check("SleepInBed" not in c.eval(menu), "a load floor: no bed to sleep in")
+    # a multiplayer client on a server without sleep: not offered
+    mc = menu_side("client", Net(), player="mia")
+    mc.run("v = newCRV(1); v.parts.SeatRearLeft.md = { crv_function_folded = true }; SERVER_OPTIONS.SleepAllowed = false")
+    check("SleepInBed" not in mc.eval(menu), "SleepAllowed off on the server: not offered")
+    mc.run("SERVER_OPTIONS.SleepAllowed = true")
+    check("SleepInBed" in mc.eval(menu), "SleepAllowed on: offered on a client")
+    print("SLEEP IN THE BED: offered on a made-up bed (menu and V), greyed with vanilla's reasons, a free front seat, the "
+          "game's sleep once seated, nothing after a cancelled walk; not on a load floor or without SleepAllowed")
+
+
+def bed_mp():
+    """H-FEATURES-2: in multiplayer the good bed did nothing: the client's setBedType stays on the client, the server
+    (where the sleeper's stats run) kept "averageBed". Now the client tells the server, which re-checks and sets it,
+    and puts the old type back when the sleep is over."""
+    net = Net()
+    server = side("server", net, seed=61)
+    server.run(BED)
+    server.load("server/HondaCRVGen1_BedServer.lua")
+    a = menu_side("client", net, player="alice", seed=62)
+    server.run("newPlayer('alice'); newPlayer('bob')")
+    for s in (server, a):
+        s.run("v = newCRV(1); v:addPart('SeatFrontLeft').cont = newContainer(50, 0); v:addPart('SeatFrontRight').cont = newContainer(50, 0)")
+    server.run("HondaCRVGen1.Shared.setBed(v, true); PLAYERS.alice.vehicle = v; SEAT_OF[PLAYERS.alice] = 0")
+    net.pump()
+    a.run("PLAYER.vehicle = v; SEAT_OF[PLAYER] = 0")
+    check(a.eval("HondaCRVGen1.Shared.isBed(v)"), "alice sees the bed")
+    a.run("ISWorldObjectContextMenu.onSleepWalkToComplete(0, nil)")
+    check(a.eval("PLAYER:getBedType()") == "goodBed" and a.eval("VANILLA_SLEEP_CMDS") == 1, "alice's client: goodBed, vanilla's command")
+    server.run("PLAYERS.alice.asleep = true")           # vanilla's onVehicleSleep
+    net.pump()
+    check(server.eval("PLAYERS.alice:getBedType()") == "goodBed", "the server's alice sleeps in a good bed (%s)"
+          % server.eval("PLAYERS.alice:getBedType()"))
+    server.run("TICK(90)")
+    check(server.eval("PLAYERS.alice:getBedType()") == "goodBed", "kept while she sleeps")
+    server.run("PLAYERS.alice.asleep = false; TICK(30)")
+    check(server.eval("PLAYERS.alice:getBedType()") == "averageBed", "woken up: the server's old bed type back")
+    # a pillow on the bed, as the server sees it
+    server.run("putIn(v.parts.TruckBed.cont, newPillow())")
+    a.run("PLAYER.asleep = false; ISWorldObjectContextMenu.onSleepWalkToComplete(0, nil)")
+    net.pump()
+    check(server.eval("PLAYERS.alice:getBedType()") == "goodBedPillow", "the server's own pillow check: goodBedPillow")
+    server.run("PLAYERS.alice.vehicle = nil; TICK(30)")
+    check(server.eval("PLAYERS.alice:getBedType()") == "averageBed", "out of the car: restored")
+    server.run("v.parts.TruckBed.cont.list = {}")
+    # the server re-checks: not in that car, another car's id, the bed cleared, never fell asleep
+    server.run("SENDER = PLAYERS.alice")
+    bed = "HondaCRVGen1.Function.BedServer"
+    check(server.eval("%s.handle(PLAYERS.alice, { vehicle = 1 })" % bed)[0] is False, "not sitting in the car: refused")
+    server.run("PLAYERS.alice.vehicle = v")
+    check(server.eval("%s.handle(PLAYERS.alice, { vehicle = 7 })" % bed)[0] is False, "another car's id: refused")
+    check(server.eval("%s.handle(PLAYERS.alice, { vehicle = 1 })" % bed)[0] is True, "in the bed car: accepted")
+    server.run("for i = 1, 30 * 25 do triggerEvent('OnTick') end")
+    check(server.eval("PLAYERS.alice:getBedType()") == "averageBed", "never fell asleep: restored after the grace")
+    server.run("HondaCRVGen1.Shared.setFold(v, true, 'cargo')")
+    check(server.eval("%s.handle(PLAYERS.alice, { vehicle = 1 })" % bed)[0] is False and
+          server.eval("PLAYERS.alice:getBedType()") == "averageBed", "a load floor is no bed: refused")
+    check(server.eval("%s.handle(PLAYERS.bob, {})" % bed)[0] is False, "bob outside the car: refused")
+    # single player: no command (the sleeper's own setBedType is the one that counts)
+    sp = menu_side("sp", player="solo")
+    sp.run("v = newCRV(1); v:addPart('SeatFrontLeft').cont = newContainer(50, 0); HondaCRVGen1.Shared.setBed(v, true); "
+           "PLAYER.vehicle = v; SEAT_OF[PLAYER] = 0; ISWorldObjectContextMenu.onSleepWalkToComplete(0, nil)")
+    check(sp.eval("PLAYER:getBedType()") == "goodBed" and len(sp.queue) == 0, "single player: goodBed, no command")
+    print("BED MP: the client's sleep on the bed reaches the server (goodBed / goodBedPillow by the server's own check), "
+          "restored on waking or leaving; refused out of the car, for another car, on a load floor")
+
+
+def know_how_and_texts():
+    """H-DATA-4: the manual's marker recipe is a literature-UI misc recipe (tooltip and icon, vanilla's table shape);
+    the new player-visible keys are in the generated Translate files."""
+    c = menu_side()
+    c.run("ISLiteratureUI = { miscRecipes = { Herbalist = { tooltip = 'Tooltip_Recipe_Herbalist', icon = 'x' } } }; "
+          "triggerEvent('OnGameBoot')")
+    e = c.eval("ISLiteratureUI.miscRecipes.HondaCRVKnowHow")
+    check(e is not None and e["tooltip"] == "Tooltip_Recipe_HondaCRVKnowHow" and e["icon"] == "Item_CRVGen1_OwnersManual"
+          and c.eval("ISLiteratureUI.miscRecipes.Herbalist ~= nil"), "HondaCRVKnowHow registered beside vanilla's")
+    import json
+    tdir = os.path.join(LUA_DIR, "shared", "Translate", "EN")
+    have = {}
+    for fname in ("ContextMenu", "Tooltip", "IG_UI", "UI"):
+        have.update(json.load(open(os.path.join(tdir, fname + ".json"), encoding="utf-8")))
+    want = ["ContextMenu_CRV_SleepInBed", "ContextMenu_CRV_SleepOnBed", "Tooltip_CRV_BedHint", "Tooltip_CRV_NoFrontSeat",
+            "Tooltip_Recipe_HondaCRVKnowHow", "UI_CRV_Options_Name", "UI_CRV_Options_EngineVolume",
+            "UI_CRV_Options_EngineVolume_Info"]
+    missing = [k for k in want if k not in have]
+    check(not missing, "translation keys written (regenerate with gen_scripts.translations): missing %s" % missing)
+    check("Sleep (V)" in have["IGUI_CRV_SeatsFolded"] and "Sleep (V)" in have["IGUI_CRV_BedMade"], "the bed halos carry the hint")
+    print("KNOW-HOW + TEXTS: the marker recipe in ISLiteratureUI.miscRecipes; every new key translated")
+
+
+def xp_failure_farm():
+    """H-PLAY-2 (hunt2_play probe xp_failure_farm): vanilla records a mechanics item only on a success, so a failure
+    retried again and again kept paying the reader's failure bonus. Now once per player and part per in-game day,
+    remembered in the car's mod data; the success bonuses are unchanged."""
+    sp = side("sp", player="tester")
+    sp.run(r'''
+v = newCRV(1)
+PLAYER.known = { HondaCRVKnowHow = true }
+XP = {}
+local seat = v.parts.SeatRearLeft
+seat.item = nil
+local it = newItem("Base.NormalCarSeat1")
+for i = 1, 5 do
+    ISInstallVehiclePart.complete({ character = PLAYER, vehicle = v, part = seat, item = it, fail = true })
+end
+local p = v.parts.SeatRearRight
+for i = 1, 5 do
+    ISUninstallVehiclePart.complete({ character = PLAYER, vehicle = v, part = p, fail = true })
+end
+''')
+    xp = [dict(e.items())["amount"] for e in sp.eval("XP").values()]
+    check(xp == [1, 1], "5 failed installs + 5 failed uninstalls: one failure bonus per part (%s)" % xp)
+    check(sp.eval("type(v.md.crvManualFailXP) == 'table'"), "remembered in the car's mod data")
+    sp.run(r'''
+XP = {}
+GAME_MS = GAME_MS + DAY_MS - 1
+ISInstallVehiclePart.complete({ character = PLAYER, vehicle = v, part = v.parts.SeatRearLeft, item = newItem("Base.NormalCarSeat1"), fail = true })
+''')
+    check(len(list(sp.eval("XP").values())) == 0, "still the same day (a new item too): nothing")
+    sp.run(r'''
+GAME_MS = GAME_MS + 1
+ISInstallVehiclePart.complete({ character = PLAYER, vehicle = v, part = v.parts.SeatRearLeft, item = newItem("Base.NormalCarSeat1"), fail = true })
+ISInstallVehiclePart.complete({ character = PLAYER, vehicle = v, part = v.parts.SeatRearLeft, item = newItem("Base.NormalCarSeat1"), fail = true })
+''')
+    xp = [dict(e.items())["amount"] for e in sp.eval("XP").values()]
+    check(xp == [1], "a day later: one more (%s)" % xp)
+    sp.run(r'''
+XP = {}
+P2 = newPlayer("other"); P2.known = { HondaCRVKnowHow = true }
+ISInstallVehiclePart.complete({ character = P2, vehicle = v, part = v.parts.SeatRearLeft, item = newItem("Base.NormalCarSeat1"), fail = true })
+ISInstallVehiclePart.complete({ character = P2, vehicle = v, part = v.parts.SeatRearLeft, item = newItem("Base.NormalCarSeat1"), fail = true })
+P3 = newPlayer("nonreader")
+ISInstallVehiclePart.complete({ character = P3, vehicle = v, part = v.parts.SeatRearLeft, item = newItem("Base.NormalCarSeat1"), fail = true })
+''')
+    xp = [(dict(e.items())["c"], dict(e.items())["amount"]) for e in sp.eval("XP").values()]
+    check(xp == [("other", 1)], "another reader: their own once; a non-reader nothing (%s)" % xp)
+    sp.run(r'''
+XP = {}
+local seat = v.parts.SeatRearLeft
+seat.item = nil
+ISInstallVehiclePart.complete({ character = PLAYER, vehicle = v, part = seat, item = newItem("Base.NormalCarSeat1") })
+''')
+    xp = [dict(e.items())["amount"] for e in sp.eval("XP").values()]
+    check(xp == [3], "a success right after: the install bonus as before (%s)" % xp)
+    src = open(os.path.join(LUA_DIR, "shared", "HondaCRVGen1_Function.lua"), encoding="utf-8").read()
+    check("retrying a failure cannot farm it" not in src, "the misleading comment is gone")
+    print("MANUAL XP FARM: a retried failure pays once per player and part per in-game day (car mod data); successes "
+          "unchanged")
+
+
+def seats_out_while_folded():
+    """H-PLAY-3 (hunt2_play probe bed_without_bench): folded into a bed, both rear seats could be taken out (vanilla's
+    Default uninstall test), the bench and bedding vanished, yet the good bed and "Sleep in the bed" stayed. Now a
+    rear seat stays in while folded (the uninstall test says no: greyed in the mechanics window with the reason,
+    complete() refuses on the authoritative side), and a car that lost them anyway has no bed."""
+    sp = side("sp", player="tester")
+    sp.run(UI)
+    sp.run(BED)
+    # the mechanics window (42.21 ISVehicleMechanics:doPartContextMenu, reduced to its Uninstall option) and the server
+    # file Vehicles.lua, which loads after the shared Function.lua (wrapped at game start)
+    sp.run(r'''
+ISVehicleMechanics = { bhs = "<RED>", doPartContextMenu = function(self, part, x, y)
+    self.context = newContext()
+    local o = self.context:addOption("IGUI_Uninstall", PLAYER, nil, part)
+    o.toolTip = { description = "Tooltip_craft_Needs : <LINE>" }
+    if not part:getVehicle():canUninstallPart(PLAYER, part) then o.notAvailable = true end
+end }
+function Veh:canUninstallPart(chr, part) return Vehicles.UninstallTest.Default(self, part, chr) end
+''')
+    sp.load("client/HondaCRVGen1_Menu.lua", "client/HondaCRVGen1_FunctionMenu.lua")
+    sp.run(r'''
+VANILLA_UT = 0
+Vehicles = { UninstallTest = { Default = function(vehicle, part, chr) VANILLA_UT = VANILLA_UT + 1; return true end } }
+''')
+    sp.run("triggerEvent('OnGameStart')")
+    check(sp.eval("Vehicles.UninstallTest.Default == HondaCRVGen1.Function.uninstallTest"), "wrapped once Vehicles.lua is there")
+    check(sp.eval("HondaCRVGen1.Function.wrapUninstallTest()") is False, "wrapped once only")
+    sp.run(r'''
+v = newCRV(1); v:addPart('SeatFrontLeft').cont = newContainer(50, 0); v:addPart('SeatFrontRight').cont = newContainer(50, 0)
+PLAYER.area = 'TruckBed'; v.parts.TrunkDoor.door.open = true
+''')
+    ut = "Vehicles.UninstallTest.Default(v, v.parts.%s, PLAYER)"
+    check(sp.eval(ut % "SeatRearLeft") is True and sp.eval("VANILLA_UT") == 1, "seats up: vanilla's test decides")
+    sp.run("HondaCRVGen1.Shared.setFold(v, true, 'bed')")
+    check(sp.eval(ut % "SeatRearLeft") is False and sp.eval(ut % "SeatRearRight") is False, "folded: a rear seat stays in")
+    check(sp.eval(ut % "SeatFrontLeft") is True, "the front seats as usual")
+    sp.run("ISVehicleMechanics.cheat = true")
+    check(sp.eval(ut % "SeatRearLeft") is True, "the mechanics cheat goes through, as vanilla's Default")
+    sp.run("ISVehicleMechanics.cheat = nil")
+    check(sp.eval("Vehicles.UninstallTest.Default(newVehicle(9, { 'SeatRearLeft' }, 'Base.SUV'), "
+                  "VEHICLES[9].parts.SeatRearLeft, PLAYER)") is True, "another car's rear seat as usual")
+    # the authoritative complete() refuses too (a client's isValid never runs on the server)
+    sp.run("RES = ISUninstallVehiclePart.complete({ character = PLAYER, vehicle = v, part = v.parts.SeatRearLeft })")
+    check(sp.eval("RES") is False and sp.eval("v.parts.SeatRearLeft.item ~= nil"), "complete() refuses: the seat is still in")
+    # the mechanics window: Uninstall greyed, the reason on its tooltip
+    sp.run("MECH = setmetatable({}, { __index = ISVehicleMechanics }); MECH:doPartContextMenu(v.parts.SeatRearLeft, 0, 0)")
+    check(sp.eval("MECH.context.options[1].notAvailable") is True
+          and "IGUI_CRV_Function_SeatsAreFolded" in sp.eval("MECH.context.options[1].toolTip.description"),
+          "mechanics window: Uninstall greyed with the reason (%s)" % sp.eval("MECH.context.options[1].toolTip.description"))
+    sp.run("MECH:doPartContextMenu(v.parts.SeatFrontLeft, 0, 0)")
+    check(not sp.eval("MECH.context.options[1].notAvailable")
+          and "SeatsAreFolded" not in sp.eval("MECH.context.options[1].toolTip.description"), "a front seat: untouched")
+    # a car that lost both seats while folded (before this rule): no bench, no bed, no "Sleep in the bed"
+    sp.run("v.parts.SeatRearLeft.item = nil; v.parts.SeatRearRight.item = nil; PLAYER.vehicle = v; SEAT_OF[PLAYER] = 0")
+    check(sp.eval("HondaCRVGen1.Function.benchFitted(v)") is False, "no bench")
+    check(sp.eval("HondaCRVGen1.Function.bedType(PLAYER, v)") is None, "no good bed without the bench")
+    check(sp.eval("ISWorldObjectContextMenu.getBedQuality(PLAYER, nil)") == "badBed", "the game's bad vehicle bed")
+    sp.run("PLAYER.vehicle = nil")
+    menu = "(function() local ctx = newContext(); ISVehicleMenu.FillMenuOutsideVehicle(0, ctx, v, false); return optionNames(ctx) end)()"
+    check("SleepInBed" not in sp.eval(menu), "no Sleep in the bed (%s)" % sp.eval(menu))
+    sp.run("PLAYER.vehicle = v")
+    inside = "(function() RADIAL = newRadial(); ISVehicleMenu.showRadialMenu(PLAYER); return RADIAL:texts() end)()"
+    check("SleepOnBed" not in sp.eval(inside), "the in-car Sleep slice is vanilla's (%s)" % sp.eval(inside))
+    sp.run("v.parts.SeatRearRight.item = newItem('Base.NormalCarSeat1')")
+    check(sp.eval("HondaCRVGen1.Function.bedType(PLAYER, v)") == "goodBed", "a seat back in: the bed again")
+    print("SEATS OUT WHILE FOLDED: a rear seat stays in while folded (uninstall test, greyed with the reason, complete() "
+          "refuses); no bench = no bed, no Sleep in the bed")
+
+
+def seats_cheat_on_server():
+    """H-DIFF-3: the folded rear seats let a mechanics cheat through via ISVehicleMechanics.cheat only, a client/
+    file the dedicated server never loads, so an admin with the cheat on could not take them out in multiplayer. The
+    player's own flag (IsoGameCharacter.isMechanicsCheat, what vanilla's ISUninstallVehiclePart:isValid reads) now
+    counts too, on both sides."""
+    PRE = r'''
+function Player:isMechanicsCheat() return self.mcheat == true end
+VANILLA_UT = 0
+Vehicles = { UninstallTest = { Default = function(vehicle, part, chr) VANILLA_UT = VANILLA_UT + 1; return true end } }
+HondaCRVGen1.Function.wrapUninstallTest()
+'''
+    net = Net()
+    server = side("server", net, seed=61)
+    server.run("ADMIN = newPlayer('admin'); JOE = newPlayer('joe')")
+    server.run(PRE)
+    check(server.eval("ISVehicleMechanics") is None, "the dedicated server has no ISVehicleMechanics (client/ file)")
+    server.run("v = newCRV(1); HondaCRVGen1.Shared.setFold(v, true, 'bed'); ADMIN.mcheat = true")
+    ut = "Vehicles.UninstallTest.Default(v, v.parts.SeatRearLeft, %s)"
+    check(server.eval(ut % "JOE") is False, "server: a player without the cheat is refused while folded")
+    check(server.eval(ut % "ADMIN") is True, "server: the admin's mechanics cheat goes through the uninstall test")
+    server.run("RES = ISUninstallVehiclePart.complete({ character = JOE, vehicle = v, part = v.parts.SeatRearLeft })")
+    check(server.eval("RES") is False and server.eval("v.parts.SeatRearLeft.item ~= nil"), "server: joe's complete() refused")
+    server.run("RES = ISUninstallVehiclePart.complete({ character = ADMIN, vehicle = v, part = v.parts.SeatRearLeft })")
+    check(server.eval("v.parts.SeatRearLeft.item == nil"), "server: the admin's complete() takes the folded seat out")
+    # a client: either flag lets it through (the admin panel sets both, ISAdminPowerUI)
+    c = side("client", net, player="admin", seed=62)
+    c.run(PRE)
+    c.run("v = newCRV(2)")
+    server.run("w = newCRV(2); HondaCRVGen1.Shared.setFold(w, true, 'bed')")
+    net.pump()
+    check(c.eval("HondaCRVGen1.Shared.isFolded(v)") is True, "client: the fold arrived from the server")
+    check(c.eval(ut % "PLAYER") is False, "client: no cheat, refused")
+    c.run("PLAYER.mcheat = true")
+    check(c.eval(ut % "PLAYER") is True, "client: the player's mechanics cheat goes through")
+    c.run("PLAYER.mcheat = false; ISVehicleMechanics = { cheat = true }")
+    check(c.eval(ut % "PLAYER") is True, "client: ISVehicleMechanics.cheat goes through")
+    print("SEATS CHEAT: a mechanics cheat takes folded rear seats out on the dedicated server (chr:isMechanicsCheat) "
+          "and on a client; without it they stay in")
+
+
+def menu_seat_and_mark():
+    """I-DIFF-1 (mutations menu-freeseat, menu-mark): "Sleep in the bed" takes an empty front seat before one that
+    only holds things (Menu.freeFrontSeat's first loop); Menu.markSeatUninstall greys the mechanics window's Uninstall
+    of a folded rear seat itself, with the reason, whatever the window's own test said."""
+    c = menu_side()
+    c.run("v = newCRV(1); v.chars = {}; v.occupied = {}")
+    seat = "HondaCRVGen1.Menu.freeFrontSeat(v)"
+    check(c.eval(seat) == 0, "both front seats empty: the driver's")
+    c.run("v.occupied = { [0] = true }")                       # things on the driver's seat, nobody in it
+    check(c.eval(seat) == 1, "an empty passenger seat before the driver's seat holding things (%s)" % c.eval(seat))
+    c.run("v.occupied = { [0] = true, [1] = true }")
+    check(c.eval(seat) == 0, "both hold things: the driver's (vanilla's onEnter moves them out)")
+    c.run("v.chars = { [0] = PLAYER }")
+    check(c.eval(seat) == 1, "someone in the driver's seat: the passenger seat holding things")
+    c.run("v.chars = { [0] = PLAYER, [1] = PLAYER }")
+    check(c.eval(seat) is None, "both taken: none")
+    c.run("v.chars = {}; v.occupied = {}; v.seatGone = { [0] = true }")
+    check(c.eval(seat) == 1, "the driver's seat removed: the passenger's")
+    # the mark: the window's own option left available (an Uninstall test that did not refuse)
+    c.run(r'''
+v.seatGone = nil
+HondaCRVGen1.Shared.setFold(v, true, 'bed')
+CTX = newContext()
+O = CTX:addOption(getText("IGUI_Uninstall"), PLAYER, nil, v.parts.SeatRearLeft)
+O.toolTip = { description = "Tooltip_craft_Needs : <LINE>" }
+MARKED = HondaCRVGen1.Menu.markSeatUninstall(CTX, v.parts.SeatRearLeft)
+''')
+    check(c.eval("MARKED") is True and c.eval("O.notAvailable") is True, "folded: Uninstall greyed by the mark itself")
+    check("IGUI_CRV_Function_SeatsAreFolded" in c.eval("O.toolTip.description"), "with the reason on its tooltip")
+    c.run("CTX2 = newContext(); FL = v:addPart('SeatFrontLeft'); O2 = CTX2:addOption(getText('IGUI_Uninstall'), PLAYER, nil, FL); "
+          "MARKED2 = HondaCRVGen1.Menu.markSeatUninstall(CTX2, v.parts.SeatFrontLeft)")
+    check(c.eval("MARKED2") is False and not c.eval("O2.notAvailable"), "a front seat is not marked")
+    print("MENU SEATS: Sleep in the bed prefers an empty front seat; the folded rear seats' Uninstall is greyed with "
+          "the reason by the mark")
+
+
+def sleep_split_screen():
+    """I-PLAY-2: Menu.pendingSleep was one slot: a second split-screen player's "Sleep in the bed" replaced the first's.
+    Now one per player number."""
+    c = menu_side()
+    c.run(r'''
+function Player:getPlayerNum() return self.num or 0 end
+P2 = newPlayer("second"); P2.num = 1; PLAYER.num = 0
+v = newCRV(1); v:addPart('SeatFrontLeft').cont = newContainer(50, 0); v:addPart('SeatFrontRight').cont = newContainer(50, 0)
+HondaCRVGen1.Shared.setBed(v, true)
+ISTimedActionQueue.queues = { [PLAYER] = { queue = { 'walk' } }, [P2] = { queue = { 'walk' } } }
+HondaCRVGen1.Menu.onSleepInBed(PLAYER, v)
+v.chars = { [0] = PLAYER }; v.occupied = { [0] = true }
+HondaCRVGen1.Menu.onSleepInBed(P2, v)
+SLEEPERS = {}
+ISVehicleMenu.onSleep = function(p, veh) SLEEP_DIALOG = SLEEP_DIALOG + 1; SLEEPERS[#SLEEPERS + 1] = p:getUsername() end
+''')
+    check(c.eval("HondaCRVGen1.Menu.pendingSleep[0] ~= nil and HondaCRVGen1.Menu.pendingSleep[1] ~= nil"), "both waiting")
+    c.run("PLAYER.vehicle = v; ISTimedActionQueue.queues[PLAYER].queue = {}; P2.vehicle = v; "
+          "ISTimedActionQueue.queues[P2].queue = {}; TICK(1)")
+    sl = sorted(c.eval("SLEEPERS").values())
+    check(sl == ["second", "tester"], "both players' sleep dialogs (%s)" % sl)
+    check(c.eval("HondaCRVGen1.Menu.pendingSleep[0] == nil and HondaCRVGen1.Menu.pendingSleep[1] == nil"), "both done")
+    print("SLEEP SPLIT SCREEN: each player's Sleep in the bed waits for that player")
+
+
+def bed_moving_car():
+    """I-PLAY-3: the good bed is a bed in a parked car: driven or towed away, the sleep goes on in the game's bad vehicle
+    bed, in single player (the client) and on a multiplayer server (BedServer)."""
+    sp = menu_side("sp", player="solo")
+    sp.run("v = newCRV(1); v:addPart('SeatFrontLeft').cont = newContainer(50, 0); HondaCRVGen1.Shared.setBed(v, true); "
+           "PLAYER.vehicle = v; SEAT_OF[PLAYER] = 0")
+    sp.run("v.moving = true")
+    check(sp.eval("HondaCRVGen1.Function.bedType(PLAYER, v)") is None, "a moving car is no good bed")
+    sp.run("v.moving = false; ISWorldObjectContextMenu.onSleepWalkToComplete(0, nil)")
+    check(sp.eval("PLAYER:getBedType()") == "goodBed", "asleep parked: goodBed")
+    sp.run("TICK(60)")
+    check(sp.eval("PLAYER:getBedType()") == "goodBed", "kept while parked")
+    sp.run("v.moving = true; TICK(30)")
+    check(sp.eval("PLAYER:getBedType()") == "badBed", "towed away: the game's bad vehicle bed (%s)" % sp.eval("PLAYER:getBedType()"))
+    check(sp.eval("HondaCRVGen1.Menu.bedSleepers[0] == nil"), "no longer watched")
+    # a sleep that ended (woken up) is left alone
+    sp.run("v.moving = false; PLAYER.asleep = false; ISWorldObjectContextMenu.onSleepWalkToComplete(0, nil); "
+           "PLAYER.asleep = false; v.moving = true; PLAYER.bedType = 'goodBed'; TICK(30)")
+    check(sp.eval("HondaCRVGen1.Menu.bedSleepers[0] == nil") and sp.eval("PLAYER:getBedType()") == "goodBed",
+          "awake: dropped without touching anything")
+    # the server
+    net = Net()
+    server = side("server", net, seed=71)
+    server.run(BED)
+    server.load("server/HondaCRVGen1_BedServer.lua")
+    server.run("newPlayer('alice'); v = newCRV(1); v:addPart('SeatFrontLeft').cont = newContainer(50, 0); "
+               "HondaCRVGen1.Shared.setBed(v, true); PLAYERS.alice.vehicle = v; SEAT_OF[PLAYERS.alice] = 0")
+    check(server.eval("HondaCRVGen1.Function.BedServer.handle(PLAYERS.alice, { vehicle = 1 })")[0] is True, "accepted parked")
+    server.run("PLAYERS.alice.asleep = true; TICK(60)")
+    check(server.eval("PLAYERS.alice:getBedType()") == "goodBed", "server: goodBed while parked")
+    server.run("v.moving = true; TICK(30)")
+    check(server.eval("PLAYERS.alice:getBedType()") == "averageBed", "server: driven away, the old bed type back")
+    check(server.eval("HondaCRVGen1.Function.BedServer.handle(PLAYERS.alice, { vehicle = 1 })")[0] is False, "server: refused while moving")
+    print("BED IN A MOVING CAR: no good bed while it moves; a sleep on the bed drops to the game's bed once the car moves "
+          "(single player and the server)")
+
+
+def legacy_fold_mode():
+    """H-SAVES-1 (hunt2_saves probe_legacy_fold.py): a car folded under 0.4.3 or earlier (no fold mode stored) with things
+    on its load floor loaded as a bed, whose load floor is shut: the things vanished and the seats would not go back
+    up. The authoritative init now makes it a load floor; an empty one stays the bed it reads as."""
+    sp = side("sp")
+    sp.run(r'''
+v = newCRV(1)
+v.parts.SeatRearLeft.md["crv_function_folded"] = true
+v.parts.CRVFunctionCargo.cont.items = 3
+v.parts.CRVFunctionCargo.cont.weight = 12
+for _, id in ipairs({ "CRVFunctionSeats", "CRVFunctionCargo", "CRVFunctionUnderfloor" }) do
+    HondaCRVGen1.Function.Init(v, v.parts[id])
+end
+v.parts.TrunkDoor.door.open = true
+P = newPlayer("bob", 100, 98); P.area = "TruckBed"
+''')
+    S, F = "HondaCRVGen1.Shared", "HondaCRVGen1.Function"
+    check(sp.eval(S + ".foldMode(v)") == "cargo", "loaded: a load floor (%s)" % sp.eval(S + ".foldMode(v)"))
+    check(sp.eval(F + ".CargoAccess(v, v.parts.CRVFunctionCargo, P)") is True, "the load floor is reachable at the gate")
+    check(sp.eval("v.parts.SeatRearLeft.md.crv_function_foldMode") == "cargo", "stored")
+    check(sp.eval("v.parts.CRVFunctionSeats.visible.InteriorBedding") is None, "no bedding drawn over the cargo")
+    # an empty legacy fold: the bed it always read as; a 0.4.4 load floor and a 0.4.4 bed stay as they are
+    sp.run(r'''
+w = newCRV(2); w.parts.SeatRearLeft.md["crv_function_folded"] = true
+HondaCRVGen1.Function.Init(w, w.parts.CRVFunctionCargo)
+x = newCRV(3); HondaCRVGen1.Shared.setFold(x, true, 'cargo'); x.parts.CRVFunctionCargo.cont.items = 2
+HondaCRVGen1.Function.Init(x, x.parts.CRVFunctionCargo)
+y = newCRV(4); y.parts.CRVFunctionCargo.cont.items = 2
+HondaCRVGen1.Function.Init(y, y.parts.CRVFunctionCargo)
+''')
+    check(sp.eval(S + ".foldMode(w)") == "bed", "empty legacy fold: a bed")
+    check(sp.eval(S + ".foldMode(x)") == "cargo", "a load floor stays a load floor")
+    check(sp.eval(S + ".isFolded(y)") is False, "seats up: nothing changes")
+    # a crvBed save (before the State key) with things on it: migrated, then a load floor
+    sp.run("z = newCRV(5); z.parts.SeatRearLeft.md.crvBed = true; z.parts.CRVFunctionCargo.cont.items = 1; "
+           "HondaCRVGen1.Function.Init(z, z.parts.CRVFunctionCargo)")
+    check(sp.eval(S + ".foldMode(z)") == "cargo" and sp.eval("z.parts.SeatRearLeft.md.crvBed") is None, "crvBed + cargo: a load floor")
+    # a multiplayer client never changes it (the server does, and it syncs)
+    c = side("client", Net())
+    c.run("v = newCRV(1); v.parts.SeatRearLeft.md.crv_function_folded = true; v.parts.CRVFunctionCargo.cont.items = 3; "
+          "HondaCRVGen1.Function.Init(v, v.parts.CRVFunctionCargo)")
+    check(c.eval("v.parts.SeatRearLeft.md.crv_function_foldMode") is None, "a client leaves it to the server")
+    print("LEGACY FOLD MODE: a pre-0.4.4 fold with things on the load floor loads as a load floor; empty ones stay beds")
+
+
+def manual_gamepad():
+    """H-PLAY-1: the owner's manual window on a controller: vanilla's ISReadABook:displayPrintMedia joypad branch (focus,
+    B closes and gives the focus back, X the text), the bumpers and D-pad left / right turn the page, playerNum set
+    for the bottom bar's button hints."""
+    c = side("sp", player="tester")
+    c.run(UI)
+    c.run(BED)
+    c.run("ISReadABook = { displayPrintMedia = function(self) VANILLA_PM = true end }")   # vanilla's, hooked at load
+    c.load("client/HondaCRVGen1_Menu.lua", "client/HondaCRVGen1_FunctionMenu.lua")
+    c.run(r'''
+Joypad = { AButton = 1, BButton = 2, XButton = 3, YButton = 4, LBumper = 5, RBumper = 6 }
+JOYPAD = { focus = "INVENTORY" }
+function getJoypadData(n) if n == 0 and JOYPAD_ON then return JOYPAD end return nil end
+function setJoypadFocus(n, ui) JOYPAD.focus = ui end
+ISAtomUIJoypad = { onGainJoypadFocus = function() end, onJoypadDirLeft = function() end, Apply = nil }
+function ISAtomUIJoypad.Apply(ui) for k, v in pairs(ISAtomUIJoypad) do if v ~= ISAtomUIJoypad.Apply then ui[k] = v end end end
+REMOVED = {}
+UIManager = { RemoveElement = function(j) REMOVED[#REMOVED + 1] = j end }
+WINS = {}
+PZAPI = { UI = { PrintMedia = function(args)
+    local w = { args = args, children = { bar = { children = { name = {}, closeButton = {} } },
+                                          bottomButtons = { children = {} } } }
+    w.children.bar.parent = w; w.children.bar.children.closeButton.parent = w.children.bar
+    function w:instantiate()
+        local self_ = self
+        self.javaObj = { setAlwaysOnTop = function() end, getX = function() return 10 end, getY = function() return 20 end }
+    end
+    function w:centerOnScreen(p) end
+    function w:setX(x) self.px = x end
+    function w:setY(y) self.py = y end
+    function w:onClickNewspaperButton() self.text = not self.text end
+    WINS[#WINS + 1] = w
+    return w
+end } }
+M = HondaCRVGen1.Function.Menu
+M.template = nil
+''')
+    # mouse and keyboard: playerNum set (hints hidden by the game while no joypad), no focus taken
+    c.run("M.openPrintMedia(0, 1)")
+    check(c.eval("WINS[1].playerNum") == 0 and c.eval("JOYPAD.focus") == "INVENTORY" and c.eval("WINS[1].onJoypadDown == nil"),
+          "no controller: playerNum for the hints, nothing else")
+    # a controller: through vanilla's read hook as well
+    c.run("JOYPAD_ON = true; WINS = {}; M.openPrintMedia(0, 1); W = WINS[1]")
+    check(c.eval("JOYPAD.focus == W") and c.eval("W.prevFocus") == "INVENTORY" and c.eval("W.playerNum") == 0,
+          "controller: the window takes the focus, remembers the old one")
+    check(c.eval("W.onGainJoypadFocus ~= nil and W.disableJoypadNavigation == true and W:hasConflictWithJoypadNavigateStart()"),
+          "ISAtomUIJoypad applied, the bumpers kept for the pages")
+    c.run("W:onJoypadDown(Joypad.XButton, JOYPAD)")
+    check(c.eval("W.text") is True, "X: the text")
+    c.run("W:onJoypadDown(Joypad.RBumper, JOYPAD); W2 = WINS[2]")
+    check(c.eval("W2 ~= nil and W2.crvPage") == 2 and c.eval("JOYPAD.focus == W2") and c.eval("W2.prevFocus") == "INVENTORY"
+          and c.eval("REMOVED[1] == W.javaObj"), "RB: the next spread, focused, the old window gone")
+    c.run("W2:onJoypadDirRight(JOYPAD); W3 = WINS[3]")
+    check(c.eval("W3.crvPage") == 3, "D-pad right: the next spread")
+    c.run("W3:onJoypadDirRight(JOYPAD); W3:onJoypadDown(Joypad.RBumper, JOYPAD)")
+    check(c.eval("#WINS") == 3, "no page after the last")
+    c.run("W3:onJoypadDirLeft(JOYPAD); W4 = WINS[4]")
+    check(c.eval("W4.crvPage") == 2, "D-pad left: back")
+    c.run("W4:onJoypadDown(Joypad.LBumper, JOYPAD); W5 = WINS[5]")
+    check(c.eval("W5.crvPage") == 1, "LB: back")
+    c.run("W5:onJoypadDown(Joypad.BButton, JOYPAD)")
+    check(c.eval("JOYPAD.focus") == "INVENTORY" and c.eval("REMOVED[#REMOVED] == W5.javaObj"), "B: closed, the focus given back")
+    c.run("WINS = {}; M.openPrintMedia(0, 1); WINS[1].children.bar.children.closeButton:onLeftClick()")
+    check(c.eval("JOYPAD.focus") == "INVENTORY", "the close button gives the focus back too")
+    # H-DIFF-2: opened while nothing has the focus (the player in control): a page turn keeps "nothing", B gives
+    # the focus back to nothing, not to the removed first window (whose D-pad then opened more pages)
+    c.run("JOYPAD.focus = nil; WINS = {}; M.openPrintMedia(0, 1); W = WINS[1]")
+    c.run("W:onJoypadDown(Joypad.RBumper, JOYPAD); W2 = WINS[2]")
+    check(c.eval("W2.prevFocus ~= W") and c.eval("JOYPAD.focus == W2"), "no focus before: the page turn does not remember the old window")
+    c.run("W2:onJoypadDown(Joypad.BButton, JOYPAD)")
+    check(c.eval("JOYPAD.focus == nil"), "no focus before: B gives the focus back to nothing")
+    c.run("JOYPAD.focus = 'INVENTORY'")
+    # vanilla's read action opens it the same way
+    c.run("WINS = {}; RB = setmetatable({ playerNum = 0, item = newItem('Base.CRVGen1_OwnersManual') }, { __index = ISReadABook }); "
+          "RB:displayPrintMedia()")
+    check(c.eval("#WINS == 1 and JOYPAD.focus == WINS[1] and VANILLA_PM == nil"), "read the vanilla way: our window, focused too")
+    c.run("PZAPI = nil; JOYPAD_ON = nil")
+    print("MANUAL GAMEPAD: focus, B closes (focus back), X the text, bumpers and D-pad turn the page; playerNum for the hints")
+
+
 def main():
     net_action_fields()
     single_player()
@@ -945,6 +1666,20 @@ def main():
     client_menus()
     bed_quality()
     fold_modes()
+    bench_and_caches()
+    table_and_floor()
+    car_menus()
+    sleep_in_bed()
+    bed_mp()
+    know_how_and_texts()
+    xp_failure_farm()
+    seats_out_while_folded()
+    seats_cheat_on_server()
+    menu_seat_and_mark()
+    sleep_split_screen()
+    bed_moving_car()
+    legacy_fold_mode()
+    manual_gamepad()
     print("FUNCTION LUA TESTS OK")
 
 

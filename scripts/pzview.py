@@ -7,7 +7,27 @@ and render it with the game's culling from the game's camera.
             [--acc [--acc-parts CRVSpareCover,...]] [--rack N] [--decal retro_blue,script_white,...]
             [--gz 150] [--cap 512] [--script HondaCRVGen1LiftAlloy] [--folded [--fold-mode bed|cargo]] [--cargo N]
             [--frac 0.15] [--eyes FILE.json] [--probe view,px,py [--probe-all]] [--bay full|low]
-            [--awning stowed|deployed]
+            [--awning stowed|deployed] [--guard bars|armour] [--acc-all-models]
+            [--texcap 256|512|1024|2048] [--tex DIR] [--lights head,tail,brake [--light-samples 16]]
+            [--night [--night-level 0.22]]
+Options added 2026-10-24 (rules in scripts/pzview_rules.py, tests in scripts/test_pzview.py):
+  --acc draws only the models the game shows. A fitted part shows EVERY model (VehiclePart.setInventoryItem ->
+      setAllModelsVisible), less what the mod's Lua hides: one roof rack cargo state (--rack N), the window
+      guards' bars OR their armour (--guard bars|armour; naming a guard's bars in --hide-models also means
+      armour), the roof jerry can only with the rack fitted, the awning's canopy / poles only --awning deployed.
+      --acc-all-models draws every model of every fitted part, stacked (the old behaviour; for mesh checks).
+  --texcap N (--cap N is the same option): every sheet loaded as the game uploads it at Vehicle Texture Size
+      N: repeated 2x2 halving with integer floor averages (max-alpha for the first two halvings, then plain),
+      premultiplied alpha, until it fits; a sheet within N is used as shipped (TextureID.limitMaxSize).
+  --tex DIR: sheets from another textures folder (DIR/<script path>.png or DIR/<file name>.png win; the rest
+      come from --mod). E.g. a rebuilt Mask in a scratch root's ...\common\media\textures.
+  --lights head,tail,brake (any subset, or all): the Lights sheet composited over the shaded view the way the
+      mod's shader does it: mix(col, Lights.rgb, Lights.a * t1en), t1en = 1 where the BILINEARLY sampled Mask
+      is within 0.01 (RGB length) of an enabled lamp zone colour (head lights_rh/lh, tail lights_rt/lt, brake
+      stop_r/l). Done per sample by a second Cycles pass with the zone test in shader nodes (lamp_material),
+      so seams in the capped Mask show as they do in game (dark squiggles in a lit lamp). Applies to the models
+      drawn with the vehicle skin. Each view prints `lamp px` (pixels more than half lit).
+  --night: the shaded view scaled to --night-level (0.22) before the lamps go on: lit lamps stand out.
 Poses: shut, open, left, right, front, gate, hood, fl / fr / rl / rr (one door), win / win_fl.. (windows
 down), joined with '+' (left+win); --frac F poses every opening clip at F of its travel. --eye adds the
 eye-level ring, the 'low' and crouch rings, the seats and (with --folded) the cargo bed; --eyes FILE.json
@@ -17,8 +37,8 @@ Texture sampling (2026-10-12, projectzomboid.jar B42): the game never mipmaps mo
 (ModelManager.setModelMetaData sets no TextureFlags.MIPMAPS, so TextureID uses GL_LINEAR for both
 filters) and uploads a box-downscaled level until the sheet fits the player's option: Vehicle
 Texture Size (engine default 512) for models whose shader name starts with "vehicle", Texture
-Size (default 256) for every other shader. So: textures sample Linear here, --cap N scales every
-texture down to N first (run 512 to see what most players get), and --gz PX_PER_M also saves each
+Size (default 256) for every other shader. So: textures sample Linear here, --cap / --texcap N shrinks every
+texture to N first the loader's way (run 512 to see what most players get), and --gz PX_PER_M also saves each
 view resampled to a game density (<tag>_gz.png; the author plays at ~326 px/m, playbook). Judge texture
 at the _gz files, never at the 1400 px render (215 px/m).
 
@@ -46,7 +66,8 @@ Rules taken from the game's bytecode (projectzomboid.jar, B42, 2026-10):
     from the script, a skinned model riding an unweighted bone is hidden with a warning, and pose()
     moves only the bones each track drives, so this tool fails the way the game fails.
   * Part CRVRoofRack lists its cargo states as extra models; the game shows the one the mod's Lua
-    picks from the container's weight. `--rack N` draws state N (0 = empty basket) with `--acc`.
+    picks from the container's weight. `--rack N` draws state N (0 = empty basket) with `--acc`
+    (pzview_rules.acc_visible_models, with the guards, the roof can and the awning).
 Mapping game render space to Blender space: (x, y, z)_game -> (x, z, y)_blender (game +x = Blender +x;
 both put the vehicle's left at -x in model space). A rotation by t about game y is a rotation by -t
 about Blender z.
@@ -65,6 +86,7 @@ import numpy as np
 from mathutils import Matrix, Vector
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import crv_paths as _crv_paths  # noqa: E402  (machine paths: local_paths.json)
+import pzview_rules as _rules  # noqa: E402  (the Blender-free rules: model visibility, texture cap, lamp zones)
 
 ROOT = os.environ.get("CRV_ROOT") or os.path.dirname(os.path.dirname(os.path.abspath(globals().get("__file__") or os.path.join("scripts", "_"))))
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
@@ -90,6 +112,11 @@ ACC_ONLY = set(filter(None, _arg("--acc-parts", "").split(",")))   # with --acc:
                                    # (e.g. CRVSpareCover), the others stay off as on a bare car
 RACK = int(_arg("--rack", "0"))    # roof rack cargo state drawn with --acc: RackLoad<N> of part CRVRoofRack,
                                    # 0 = the empty basket (HondaCRVGen1Accessories.lua shows one at a time)
+GUARD = _arg("--guard", "bars")    # with --acc: the window guards' item, bars (what spawns) or armour (the mesh /
+if GUARD not in ("bars", "armour"):   # rear plate): HondaCRVGen1_Armour.lua shows that one model, never both
+    raise SystemExit("pzview: --guard is bars or armour, not %r" % GUARD)
+ACC_ALL_MODELS = "--acc-all-models" in argv   # with --acc: every model of every fitted part, stacked (pzview before
+                                   # 2026-10-24); without it only what the game + the mod's Lua show (acc_visible_models)
 HIDE_MODELS = set(filter(None, _arg("--hide-models", "").split(",")))   # part model ids the Lua would hide (a
                                    # feature part's other variants, scripts/features): drawn by nobody here
 DECALS = set(filter(None, _arg("--decal", "").split(",")))   # decals feature: the variants the Lua would show
@@ -131,7 +158,15 @@ BAY = _arg("--bay", "auto")
 CABIN_PART = "CRVCabin"
 SHOW = _arg("--show", None)        # lights | mask | rust: draw that vehicle texture on the skinned
                                    # models instead of the paint (rust through the second UV set)
-CAP = int(_arg("--cap", "0"))      # the loader's texture-size cap (see the docstring); 0 = none
+CAP = int(_arg("--texcap", _arg("--cap", "0")))   # the loader's texture-size cap (see the docstring); 0 = none.
+                                   # --cap is the older name of --texcap; both now shrink the game's way (game_cap)
+TEX = _arg("--tex", None)          # another textures folder: a sheet found there (by its script path under DIR, or
+                                   # its file name in DIR) wins over the mod's; the rest still come from --mod
+LIGHTS = _rules.parse_lights(_arg("--lights", "")) if "--lights" in argv else ()   # lit lamp groups (head, tail,
+                                   # brake): the Lights sheet composited the way the mod's shader does (lamp_overlay)
+NIGHT = "--night" in argv          # the scene light dimmed to NIGHT_LEVEL; lamps are mixed after the lighting
+NIGHT_LEVEL = float(_arg("--night-level", "0.22"))   # (vehicle_crvgen1_norandom.frag), so they keep full strength
+LIGHT_SAMPLES = int(_arg("--light-samples", "16"))   # Cycles samples per pixel of the lamp overlay passes
 GZ = float(_arg("--gz", "0"))      # also save each view at this many px per metre (<tag>_gz.png)
 # --script NAME (lift feature, additive): draw that vehicle block (a feature's second vehicle script, which
 # has no model blocks of its own: the model blocks of every vehicles/*.txt are global to the module, as in
@@ -323,7 +358,17 @@ def fbx_path(mesh_ref):
     raise SystemExit("mesh file not found for %s" % mesh_ref)
 
 
+_tex_from = set()
+
+
 def tex_path(name):
+    if TEX:                                       # --tex DIR: DIR/<script path>.png, else DIR/<file name>.png
+        for p in (os.path.join(TEX, *name.split("/")) + ".png", os.path.join(TEX, name.split("/")[-1] + ".png")):
+            if os.path.exists(p):
+                if p not in _tex_from:
+                    _tex_from.add(p)
+                    print("PZVIEW --tex: %s from %s" % (name, p))
+                return p
     for base in (os.path.join(MOD, "common", "media", "textures"), os.path.join(MOD, "42", "media", "textures")):
         p = os.path.join(base, *name.split("/")) + ".png"
         if os.path.exists(p):
@@ -356,6 +401,54 @@ def import_fbx(path):
 _mats = {}
 
 
+def png_u8(path):
+    """A PNG as the game holds it: (h, w, 4) uint8, row 0 = the file's top row (Blender's byte pixels are the
+    file's bytes / 255, no colour transform)."""
+    img = bpy.data.images.load(path, check_existing=False)
+    w, h = img.size
+    a = np.empty(len(img.pixels), dtype=np.float32)
+    img.pixels.foreach_get(a)
+    bpy.data.images.remove(img)
+    a = np.flipud(np.round(a.reshape(h, w, -1) * 255.0).clip(0, 255).astype(np.uint8))
+    if a.shape[2] == 3:
+        a = np.concatenate([a, np.full((h, w, 1), 255, np.uint8)], axis=2)
+    return a
+
+
+def save_u8(a, path):
+    """Write (h, w, 4) uint8 (row 0 = top) as an RGBA PNG, byte for byte."""
+    h, w = a.shape[:2]
+    img = bpy.data.images.new("pz_u8", w, h, alpha=True)
+    img.pixels.foreach_set((np.flipud(a).astype(np.float32) / 255.0).ravel())
+    img.filepath_raw = path
+    img.file_format = 'PNG'
+    img.save()
+    bpy.data.images.remove(img)
+
+
+_capped = {}
+
+
+def capped_png(png):
+    """The sheet the game uploads at --texcap CAP (pzview_rules.game_cap: the loader's own 2x2 integer halving,
+    max-alpha then average, premultiplied), as a PNG under OUT; png itself when it fits or no cap is set. Saved and
+    loaded back from a file: a scale that lives only in Blender's buffer cache was gone by render time (2026-10-12)."""
+    if not CAP:
+        return png
+    if png in _capped:
+        return _capped[png]
+    a = png_u8(png)
+    if a.shape[0] <= CAP and a.shape[1] <= CAP:
+        _capped[png] = png
+        return png
+    b = _rules.game_cap(a, CAP)
+    out = os.path.join(OUT, "_tmp_cap%d_%s" % (CAP, os.path.basename(png)))
+    save_u8(b, out)
+    print("PZVIEW texcap %d: %s %dx%d -> %dx%d" % (CAP, os.path.basename(png), a.shape[1], a.shape[0], b.shape[1], b.shape[0]))
+    _capped[png] = out
+    return out
+
+
 def material(png, cap=True):
     if png in _mats:
         return _mats[png]
@@ -364,18 +457,7 @@ def material(png, cap=True):
     nt = mat.node_tree
     bsdf = next(n for n in nt.nodes if n.type == 'BSDF_PRINCIPLED')
     tex = nt.nodes.new("ShaderNodeTexImage")
-    img = bpy.data.images.load(png, check_existing=False)
-    if cap and CAP and max(img.size) > CAP:       # what TextureID uploads under the player's size option
-        # scaled in memory, saved and loaded back from the file: a scale that lives only in the
-        # buffer cache was gone by render time (the first --cap runs drew the full sheets, 2026-10-12)
-        k = CAP / float(max(img.size))
-        img.scale(max(1, round(img.size[0] * k)), max(1, round(img.size[1] * k)))
-        capped = os.path.join(OUT, "_tmp_cap%d_%s" % (CAP, os.path.basename(png)))
-        img.filepath_raw = capped
-        img.file_format = 'PNG'
-        img.save()
-        bpy.data.images.remove(img)
-        img = bpy.data.images.load(capped, check_existing=False)
+    img = bpy.data.images.load(capped_png(png) if cap else png, check_existing=False)
     tex.image = img
     tex.interpolation = 'Linear'                  # GL_LINEAR min and mag, no mipmaps: the game's sampling.
                                                   # 'Closest' (v6) showed texel edges the game never draws
@@ -508,10 +590,22 @@ def _clutter_shown(model_id):
     """Whether HondaCRVGen1_Clutter.lua would show this model of CLUTTER_PART at --cargo N."""
     if BED or CARGO <= 0:
         return False                                  # nothing shows under the bed (fold mode bed)
+    if "Fold" in model_id and not FOLDED:
+        return False                                  # the folded load floor's load: --folded --fold-mode cargo only
     if model_id.endswith("Well"):
         return not (ACC and (not ACC_ONLY or "CRVPicnicTable" in ACC_ONLY))
     m = re.search(r"(\d+)$", model_id)
     return m is not None and int(m.group(1)) <= CARGO
+
+
+def acc_fitted(name):
+    """Is accessory part `name` fitted on the car drawn: a CRV* part (not the car's own seats, bay, clutter or
+    cabin, nor a decal) under --acc [--acc-parts], or the awning with --awning."""
+    if not name.startswith("CRV") or name.startswith("CRVDecal") or name in (SEATS_PART, BAY_PART, CLUTTER_PART, CABIN_PART):
+        return False
+    if AWNING and name == AWNING_PART:
+        return True
+    return ACC and (not ACC_ONLY or name in ACC_ONLY)
 
 
 def build(vehicle_mod):
@@ -525,23 +619,32 @@ def build(vehicle_mod):
     drawn.append(instance(base.get("file"), models, skin_png, Matrix.Identity(4), "base"))
     wheels = {w.name: w for w in veh.all("wheel")}
     anims = {}
+    acc_rules = _rules.lua_rules(os.path.join(MOD, "42", "media", "lua"))
+    fitted = {p.name for p in veh.all("part") if acc_fitted(p.name)}
+    if ACC and not ACC_ALL_MODELS:
+        print("PZVIEW acc: models as the game shows them (rack state %d, guards %s, awning %s; Lua tables from %s)"
+              % (RACK, GUARD, AWNING or "stowed", ", ".join(sorted(set(acc_rules["source"].values())))))
     for part in veh.all("part"):
         is_decal = part.name.startswith("CRVDecal")             # decals feature: drawn by --decal alone
         if is_decal:
             if not DECALS:
                 continue
         elif (part.name.startswith("CRV") and part.name not in (SEATS_PART, BAY_PART, CLUTTER_PART, CABIN_PART)
-              and (not ACC or (ACC_ONLY and part.name not in ACC_ONLY))
-              and not (AWNING and part.name == AWNING_PART)):
+              and part.name not in fitted):
             continue
         # tyre parts name their wheel through the vanilla Tire template (wheel = FrontLeft ...)
         wname = part.get("wheel") or TIRE_WHEEL.get(part.name)
+        shown = None                                      # None: every model (the parts below choose their own)
+        if part.name in fitted and not ACC_ALL_MODELS:   # a fitted accessory: what the game + the mod's Lua show
+            shown = set(_rules.acc_visible_models(part.name, [pm.name for pm in part.all("model")], acc_rules,
+                                                  fitted=fitted, rack=RACK, guard=GUARD, awning=AWNING,
+                                                  hidden=HIDE_MODELS))
         for pm in part.all("model"):
             f = pm.get("file")
             if not f:
                 continue
-            if pm.name.startswith("RackLoad") and pm.name != "RackLoad%d" % RACK:
-                continue                                  # cargo states: the Lua shows one at a time (--rack)
+            if shown is not None and pm.name not in shown:
+                continue                                  # hidden by the mod's Lua (rack state, guard item, ...)
             if pm.name in HIDE_MODELS:
                 continue                                  # --hide-models: a variant the Lua keeps hidden
             if part.name == SEATS_PART and pm.name == BEDDING_MODEL:
@@ -553,7 +656,7 @@ def build(vehicle_mod):
                 continue                                  # the trunk's load: --cargo N
             if is_decal and pm.name not in DECALS:
                 continue                                  # --decal: only the chosen variants
-            if part.name == AWNING_PART and pm.name in AWNING_OUT and AWNING != "deployed":
+            if part.name == AWNING_PART and pm.name in AWNING_OUT and AWNING != "deployed" and not ACC_ALL_MODELS:
                 continue                                  # the awning rolled up (--awning deployed: rolled out)
             off = vec(pm.get("offset"))
             rot = [math.radians(a) for a in vec(pm.get("rotate"))]
@@ -918,11 +1021,9 @@ def damage_composite(drawn, vehicle_mod, size=2048):
         name = veh.get(key) or SUV_DAMAGE[key]
         p = tex_path(name) or os.path.join(GAME_MEDIA, "textures", *name.split("/")) + ".png"
         print("PZVIEW damage: %s = %s" % (key, p))
-        img = _png(p)
-        while CAP and max(img.shape[:2]) > CAP:          # the game caps each texture (box-halved at load)
-            h, w = img.shape[0] // 2 * 2, img.shape[1] // 2 * 2
-            img = 0.25 * (img[0:h:2, 0:w:2] + img[1:h:2, 0:w:2] + img[0:h:2, 1:w:2] + img[1:h:2, 1:w:2])
-        return img
+        if CAP:                                           # the game caps each texture at load (game_cap)
+            return _rules.game_cap(png_u8(p), CAP).astype(np.float32) / 255.0
+        return _png(p)
     rust, d1, d2 = sheet("textureRust"), sheet("textureDamage1Shell"), sheet("textureDamage2Shell")
     bm, b2 = sheet("textureDamage1Overlay"), sheet("textureDamage2Overlay")
     # the dent paint: the skin texel's own HSV (vehicle_crvgen1_norandom, like the game's norandom
@@ -1026,6 +1127,226 @@ def damage_composite(drawn, vehicle_mod, size=2048):
         ob.data.materials.clear()
         ob.data.materials.append(mat)
     print("PZVIEW damage: composite %d px, %d texels, %d models" % (S, len(idx), len(obs)))
+
+
+# ----------------------------------------------------------------------------------------------
+# lit lamps (--lights) and night (--night)
+
+_lamp = {}
+
+
+def lamp_material(mask_png, lights_png, groups, tail_level=None):
+    """The lamp term of vehicle_crvgen1_norandom.frag as Cycles nodes, per sample on the surface:
+        t1en = any enabled zone c: length(Mask.rgb - c) < 0.01      (Mask sampled bilinear, raw values)
+        fac  = Lights.a * t1en  (x the zone's factor, pzview_rules.lamp_weights: the mod's combined stop / tail rule)
+    and two emission outputs, P = Lights.rgb * fac (pass 'p') and (fac, fac, fac) (pass 'f'), so the shaded view
+    composites as col * (1 - F) + P = mix(col, Lights.rgb, Lights.a * t1en) per pixel. Both sheets are loaded
+    the game's way at --texcap (capped_png), raw (Non-Color, channel-packed alpha) and Linear (GL_LINEAR, no
+    mipmaps). A back face is transparent (the game culls it). UV: the object's active render layer (UV0 here)."""
+    mat = bpy.data.materials.new("pz_lamps")
+    mat.use_nodes = True
+    nt = mat.node_tree
+    nt.nodes.clear()
+
+    def node(kind, **kw):
+        n = nt.nodes.new(kind)
+        for k, v in kw.items():
+            setattr(n, k, v)
+        return n
+
+    def sheet(png):
+        n = node("ShaderNodeTexImage", interpolation='Linear', extension='REPEAT')
+        img = bpy.data.images.load(capped_png(png), check_existing=False)
+        img.colorspace_settings.name = 'Non-Color'
+        img.alpha_mode = 'CHANNEL_PACKED'
+        n.image = img
+        print("PZVIEW lamps: %s %dx%d (from %s)" % (os.path.basename(png), img.size[0], img.size[1], img.filepath))
+        return n
+    uv = node("ShaderNodeUVMap")
+    mk, lt = sheet(mask_png), sheet(lights_png)
+    nt.links.new(uv.outputs["UV"], mk.inputs["Vector"])
+    nt.links.new(uv.outputs["UV"], lt.inputs["Vector"])
+    en = None
+    sep = node("ShaderNodeSeparateColor")                  # the Mask's blue: the combined lens's stop tag
+    nt.links.new(mk.outputs["Color"], sep.inputs["Color"])
+    for c, w, marked in _rules.lamp_terms(groups, tail_level):   # the zone's lamp factor (combined stop / tail: crvLamp)
+        d = node("ShaderNodeVectorMath", operation='DISTANCE')
+        nt.links.new(mk.outputs["Color"], d.inputs[0])
+        d.inputs[1].default_value = c
+        lt0 = node("ShaderNodeMath", operation='LESS_THAN')
+        nt.links.new(d.outputs["Value"], lt0.inputs[0])
+        lt0.inputs[1].default_value = _rules.ZONE_TOL
+        if marked:                                         # ... and Mask blue >= COMBINED_MARK
+            gt = node("ShaderNodeMath", operation='GREATER_THAN')
+            nt.links.new(sep.outputs["Blue"], gt.inputs[0])
+            gt.inputs[1].default_value = _rules.COMBINED_MARK
+            both = node("ShaderNodeMath", operation='MULTIPLY')
+            nt.links.new(lt0.outputs[0], both.inputs[0])
+            nt.links.new(gt.outputs[0], both.inputs[1])
+            lt0 = both
+        lt_ = node("ShaderNodeMath", operation='MULTIPLY')
+        nt.links.new(lt0.outputs[0], lt_.inputs[0])
+        lt_.inputs[1].default_value = w
+        if en is None:
+            en = lt_
+        else:
+            mx = node("ShaderNodeMath", operation='MAXIMUM')
+            nt.links.new(en.outputs[0], mx.inputs[0])
+            nt.links.new(lt_.outputs[0], mx.inputs[1])
+            en = mx
+    fac = node("ShaderNodeMath", operation='MULTIPLY')
+    nt.links.new(lt.outputs["Alpha"], fac.inputs[0])
+    nt.links.new(en.outputs[0], fac.inputs[1])
+    pre = node("ShaderNodeVectorMath", operation='SCALE')
+    nt.links.new(lt.outputs["Color"], pre.inputs[0])
+    nt.links.new(fac.outputs[0], pre.inputs["Scale"])
+    grey = node("ShaderNodeCombineColor")
+    for i in range(3):
+        nt.links.new(fac.outputs[0], grey.inputs[i])
+    emis = node("ShaderNodeEmission")
+    emis.inputs["Strength"].default_value = 1.0
+    _cull(nt, emis)
+    _lamp["passes"] = {"p": pre.outputs["Vector"], "f": grey.outputs["Color"]}
+    _lamp["tree"], _lamp["emis"] = nt, emis
+    nt.links.new(pre.outputs["Vector"], emis.inputs["Color"])
+    return mat
+
+
+def _cull(nt, shader):
+    """Material output = shader on front faces, a see-through Transparent BSDF on back faces (the game culls)."""
+    geo = nt.nodes.new("ShaderNodeNewGeometry")
+    tr = nt.nodes.new("ShaderNodeBsdfTransparent")
+    mix = nt.nodes.new("ShaderNodeMixShader")
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    # back face: the triangle's own normal (True Normal, from its winding) points away from the camera. Not the
+    # Geometry node's Backfacing output: on this car it flagged front faces of the body whole triangles at a time
+    # (2026-10-24: the D-pillar lamps came out in black patches where Workbench, and the game, draw the body)
+    d = nt.nodes.new("ShaderNodeVectorMath")
+    d.operation = 'DOT_PRODUCT'
+    nt.links.new(geo.outputs["True Normal"], d.inputs[0])
+    nt.links.new(geo.outputs["Incoming"], d.inputs[1])
+    back = nt.nodes.new("ShaderNodeMath")
+    back.operation = 'LESS_THAN'
+    back.inputs[1].default_value = 0.0
+    nt.links.new(d.outputs["Value"], back.inputs[0])
+    nt.links.new(back.outputs[0], mix.inputs[0])
+    nt.links.new(shader.outputs[0], mix.inputs[1])
+    nt.links.new(tr.outputs[0], mix.inputs[2])
+    nt.links.new(mix.outputs[0], out.inputs["Surface"])
+
+
+def black_material():
+    """Everything without the lamp term: opaque black where the game draws it, nothing on back faces."""
+    if "black" not in _lamp:
+        mat = bpy.data.materials.new("pz_black")
+        mat.use_nodes = True
+        nt = mat.node_tree
+        nt.nodes.clear()
+        e = nt.nodes.new("ShaderNodeEmission")
+        e.inputs["Color"].default_value = (0.0, 0.0, 0.0, 1.0)
+        _cull(nt, e)
+        _lamp["black"] = mat
+    return _lamp["black"]
+
+
+def lamp_setup(vehicle_mod):
+    """Build the lamp material from the vehicle script's textureMask / textureLights (via --tex / --mod)."""
+    veh = vehicle_mod.all("vehicle")[0]
+    mask = tex_path(veh.get("textureMask")) if veh.get("textureMask") else None
+    lights = tex_path(veh.get("textureLights")) if veh.get("textureLights") else None
+    if not mask or not lights:
+        raise SystemExit("pzview --lights: the vehicle script names no textureMask / textureLights found (%s, %s)"
+                         % (veh.get("textureMask"), veh.get("textureLights")))
+    frag = os.path.join(MOD, "common", "media", "shaders", "vehicle_crvgen1_norandom.frag")   # the mod's own lamp rule
+    tail_level = _rules.parse_tail_level(open(frag, encoding="utf-8").read()) if os.path.exists(frag) else None
+    _lamp["mat"] = lamp_material(mask, lights, LIGHTS, tail_level)
+    print("PZVIEW lamps: %s lit (zone factors %s), Mask %s, Lights %s, cap %s"
+          % ("+".join(LIGHTS), ", ".join("%s%s x%.2f" % (c, " tagged" if m else "", w)
+                                         for c, w, m in _rules.lamp_terms(LIGHTS, tail_level)),
+             mask, lights, CAP or "none"))
+
+
+def shoot_lamps(tag):
+    """Render the lamp passes of the current view with Cycles (P = Lights.rgb * fac, F = fac, linear EXR, so
+    the values stay raw) and return them as arrays shaped like shoot()'s. Every material is swapped for the
+    pass and restored after; the skinned models (pz_skin: the vehicle skin, where the game's vehicle shader
+    reads the vehicle's Mask and Lights) get the lamp term, the rest draw black and still hide what is behind."""
+    scene = bpy.context.scene
+    saved = {}
+    for ob in scene.objects:
+        if ob.type != 'MESH' or ob.data.name in saved:
+            continue
+        saved[ob.data.name] = (ob.data, list(ob.data.materials),
+                               [l.active_render for l in ob.data.uv_layers])
+    lamp, black = _lamp["mat"], black_material()
+    for ob in scene.objects:
+        if ob.type != 'MESH':
+            continue
+        skin = bool(ob.get("pz_skin"))
+        ob.data.materials.clear()
+        ob.data.materials.append(lamp if skin else black)
+        if skin and len(ob.data.uv_layers):
+            ob.data.uv_layers[0].active_render = True     # texCoords: the first UV set (damage_composite moves it)
+    r, img = scene.render, scene.render.image_settings
+    keep = (r.engine, img.file_format, img.color_mode, img.color_depth, scene.world, r.threads_mode, r.threads)
+    r.engine = 'CYCLES'
+    c = scene.cycles
+    c.device = 'CPU'
+    c.samples = LIGHT_SAMPLES
+    c.use_denoising = False
+    c.use_adaptive_sampling = False
+    c.max_bounces = 0
+    c.transparent_max_bounces = 128
+    c.filter_width = 1.0
+    r.threads_mode = 'FIXED'
+    r.threads = max(1, (os.cpu_count() or 4) - 2)           # leave two cores idle
+    world = bpy.data.worlds.get("pz_black_world") or bpy.data.worlds.new("pz_black_world")
+    world.use_nodes = False
+    world.color = (0.0, 0.0, 0.0)
+    scene.world = world
+    img.file_format = 'OPEN_EXR'
+    img.color_mode = 'RGB'
+    img.color_depth = '32'
+    out = {}
+    nt, emis = _lamp["tree"], _lamp["emis"]
+    for name in ("p", "f"):
+        nt.links.new(_lamp["passes"][name], emis.inputs["Color"])
+        path = os.path.join(OUT, "_tmp_%s_lamp_%s.exr" % (tag, name))
+        r.filepath = path
+        bpy.ops.render.render(write_still=True)
+        im = bpy.data.images.load(path, check_existing=False)
+        w, h = im.size
+        a = np.empty(len(im.pixels), dtype=np.float32)
+        im.pixels.foreach_get(a)
+        bpy.data.images.remove(im)
+        out[name] = a.reshape(h, w, -1)
+    nt.links.new(_lamp["passes"]["p"], emis.inputs["Color"])
+    (r.engine, img.file_format, img.color_mode, img.color_depth, scene.world, r.threads_mode, r.threads) = keep
+    for data, mats, act in saved.values():
+        data.materials.clear()
+        for m in mats:
+            data.materials.append(m)
+        for l, a in zip(data.uv_layers, act):
+            if a:
+                l.active_render = True
+    return out["p"][..., :3], out["f"][..., 0]
+
+
+def light_view(culled, tag):
+    """The view as the game draws it at --night / with --lights: col * night, then mix(col, Lights.rgb,
+    Lights.a * t1en) (after the lighting, so lit lamps keep full strength). Returns (image, lit px)."""
+    a = culled.copy()
+    col = a[..., :3] * (NIGHT_LEVEL if NIGHT else 1.0)
+    lit = 0
+    if LIGHTS:
+        P, F = shoot_lamps(tag)
+        col = col * (1.0 - F[..., None]) + P
+        lit = int((F > 0.5).sum())
+        f = a.copy()                                       # <tag>_lampfac.png: Lights.a * t1en per pixel, grey
+        f[..., :3] = np.clip(F, 0.0, 1.0)[..., None]
+        save(os.path.join(OUT, tag + "_lampfac.png"), f)
+    a[..., :3] = np.clip(col, 0.0, 1.0)
+    return a, lit
 
 
 def setup_render():
@@ -1380,6 +1701,8 @@ def main():
                                                                  m.node_tree.nodes.active.image.size[1]) for p, m in _mats.items())))
     if DAMAGE is not None:
         damage_composite(drawn, vehicle_mod)
+    if LIGHTS:
+        lamp_setup(vehicle_mod)
     cam = setup_render()
     twins = glass_twins(drawn, vehicle_mod)
     views = []
@@ -1427,6 +1750,11 @@ def main():
             aim(cam, az, tgt, sc)
         path = os.path.join(OUT, tag + ".png")
         culled = shoot(path, True)                          # what the game draws
+        if LIGHTS or NIGHT:                                 # lit lamps / night: <tag>.png is the composite
+            litv, lit = light_view(culled, tag)
+            save(path, litv)
+            print("PZVIEW %-28s lamps %s%s, lamp px %6d" % (tag, "+".join(LIGHTS) or "off",
+                                                           " at night %.2f" % NIGHT_LEVEL if NIGHT else "", lit))
         if GZ and sc:                                       # orthographic views only: sc metres across RES px
             save_gz(path, os.path.join(OUT, tag + "_gz.png"), GZ * sc / RES)
         for tw in twins:

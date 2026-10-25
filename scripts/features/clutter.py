@@ -47,10 +47,16 @@ partly over that hole, so with the table out the Lua also shows InteriorClutterW
 the soft stuff under it filling the well to just under the deck (WELL_TOP): the load rests on it, nothing
 floats. One cheap mesh, not a second set of states.
 
-Folded seats (HondaCRVGen1.Shared.isBed, State key function_folded): nothing shows (the bed builder's made bed
-lies there). The lua says how it follows the fill on every side (State key clutter_load, derived on the
-authoritative side on a 15-tick tick like the rack's; the game has no container-changed hook that reaches the
-server or other clients: OnContainerUpdate is a client UI refresh, ItemContainer.addItem fires nothing).
+Folded seats made up as a bed (HondaCRVGen1.Shared.isBed): nothing shows (the bedding lies there). The lua says how it
+follows the fill on every side (State key clutter_load, derived on the authoritative side on a 15-tick tick like the
+rack's; the game has no container-changed hook that reaches the server or other clients: OnContainerUpdate is a client
+UI refresh, ItemContainer.addItem fires nothing). The well blanket follows the under-floor storage (State key
+clutter_well: it holds something), or the trunk's load standing over the open well (2026-10-24).
+
+The folded load floor (2026-10-24): folded as a bare load floor (fold mode "cargo") the rear seats add the function
+feature's container CRVFunctionCargo; what lies there shows on the folded backs, InteriorClutterFold1..3 (State key
+clutter_fold, the same 10 / 40 / 75 % states and hysteresis), lean pieces in the trunk load's style (FOLD_PIECES,
+FOLD_TRI_BUDGET), hidden while the seats are up or made up as a bed.
 
 Sheet: the feature's own 512 "clutter" sheet (vehiclewheel shader, like the offroad pieces), not the shell
 (its layout gate) nor the interior (the cabin's density).
@@ -63,12 +69,17 @@ PART = "CRVClutterCargo"                       # HondaCRVGen1.Clutter.PART
 LUA_NS = "HondaCRVGen1.Clutter"
 TIERS = ["acc_clutter_load1", "acc_clutter_load2", "acc_clutter_load3"]
 WELL = "acc_clutter_well"
-# model ids (HondaCRVGen1.Clutter.MODELS / .WELL); 'Interior' in the name: pzview's cabin ID pass paints them
-# with the cabin (a slit that shows the cargo is a slit)
+# the folded load floor's load (2026-10-24): the function feature's container CRVFunctionCargo while the rear seats are
+# folded as a load floor (fold mode "cargo"); the same incremental states, its own three models (FOLD_* below)
+FOLD_TIERS = ["acc_clutter_fold1", "acc_clutter_fold2", "acc_clutter_fold3"]
+# model ids (HondaCRVGen1.Clutter.MODELS / .FOLD_MODELS / .WELL); 'Interior' in the name: pzview's cabin ID pass
+# paints them with the cabin (a slit that shows the cargo is a slit)
 MODEL_IDS = ["InteriorClutter1", "InteriorClutter2", "InteriorClutter3"]
+FOLD_IDS = ["InteriorClutterFold1", "InteriorClutterFold2", "InteriorClutterFold3"]
 WELL_ID = "InteriorClutterWell"
 FILL = (0.10, 0.40, 0.75)                      # HondaCRVGen1.Clutter.FILL (share of the trunk's weight capacity)
 TRI_BUDGET = 1320                              # the full load (tiers 1-3); the well blanket on top (BUILD checks)
+FOLD_TRI_BUDGET = 620                          # the folded floor's full load (fold tiers 1-3)
 CORNER_SEG = 3                                 # the cooler's rounded corners (round 5: one chamfer a corner read as an
                                                # octagonal block at eye level); the gas can takes 2
 SHADE_K = 0.70                                 # the pieces' own occlusion (build_accessories._shade)
@@ -130,7 +141,23 @@ WELL_TOP = 0.759
 # what each state adds (built in this order: the kit bag rests on what the earlier pieces put under it)
 TIER_PIECES = [["duffel", "box_a"], ["cooler", "box_b", "pack"], ["toolbox", "can", "roll", "kitbag"]]
 
-OBJECTS = {n: {"space": KEY, "texel_w": True} for n in TIERS + [WELL]}
+# The folded load floor (fold mode "cargo"): the folded seat backs behind the front seats, measured on the built car
+# (build_cabin's bed notes, scratch feat_bed/probe_heights.py): their carpeted tops z 0.788 at y -0.50, 0.799 at
+# -0.60 .. -0.65, 0.792 at -0.90, then down into the gap at the riser (y -0.95 .. -1.00); flat for |x| <= 0.55 (the
+# rounded outer edges and the wheel-housing trims beyond). The front seat backs stand just ahead of y -0.50 and lean
+# back over it higher up: nothing forward of y -0.575, nothing taller than ~0.27 over the backs. Lean pieces in the
+# trunk load's style, 2026-10-24: 1 a canvas duffel across the left half and a taped carton on the right; 2 + a
+# rolled blanket in front of the carton and a toolbox on it; 3 + a gas can upright between the duffel and the carton
+FOLD_TOP = ((-0.95, 0.790), (-0.90, 0.792), (-0.65, 0.799), (-0.60, 0.799), (-0.50, 0.788))
+FOLD_DUFFEL = dict(xc=-0.265, yc=-0.780, along="x", length=0.42, w=0.27, h=0.21, mat=CANVAS, straps=False)
+FOLD_BOX = dict(c=(0.285, -0.790), ab=(0.150, 0.105), h=0.190, yaw=5.0)        # closed, taped both ways, a label
+FOLD_ROLL = dict(c=(0.270, -0.627), r=0.050, length=0.30, yaw=-3.0)
+FOLD_TOOLBOX = dict(c=(-0.010, -0.005), yaw=-7.0)                                # in FOLD_BOX's frame, on its top
+FOLD_CAN = dict(c=(0.035, -0.790), yaw=-4.0)
+FOLD_CLEAR = dict(x=0.50, y0=-0.94, y1=-0.570, z0=0.78, z1=1.16)                 # BUILD's clear box for the fold pieces
+FOLD_PIECES = [["fold_duffel", "fold_box"], ["fold_roll", "fold_toolbox"], ["fold_can"]]
+
+OBJECTS = {n: {"space": KEY, "texel_w": True} for n in TIERS + FOLD_TIERS + [WELL]}
 SPACES = {KEY: {"size": 512, "texture": TEX_NAME, "ao_k": 0.30, "gain": 1.0, "grime": ((96, 88, 74), 0.0)}}
 
 
@@ -282,13 +309,15 @@ def _tape(BA, b, along, half, h, down, width=0.048, lift=0.0):
     BA._sweep(b, pts, BA._rect(width, t), ups=ups, smooth=False, mat=TAPE)
 
 
-def _carton_a(BA, b):
-    a, bb = BOX_A["ab"]
-    h = BOX_A["h"]
+def _carton_a(BA, b, box=None):
+    """A closed carton taped both ways with a shipping label on its gate side (box: the dims, BOX_A by default)."""
+    box = box or BOX_A
+    a, bb = box["ab"]
+    h = box["h"]
     _bevel_box(BA, b, a, bb, h, CARD, top_mat=FLAP)
     _tape(BA, b, "x", a, h, 0.07)                               # along the flaps' seam, then across it
     _tape(BA, b, "y", bb, h, 0.05, lift=0.0026)
-    BA._box(b, (-0.11, -bb - 0.0015, 0.08), (0.0, -bb + 0.002, 0.16), mat=LABEL)    # shipping label to the gate
+    BA._box(b, (-0.11, -bb - 0.0015, 0.08 * h / 0.25), (0.0, -bb + 0.002, 0.16 * h / 0.25), mat=LABEL)   # label to the gate
 
 
 def _carton_b(BA, b):
@@ -369,9 +398,10 @@ def _backpack(BA, b):
     BA._sweep(b, pts, BA._rect(0.010, 0.003), ups=[(0.0, -1.0, 0.0)] * len(pts), smooth=False, mat=BLACK)
 
 
-def _roll(BA, b):
+def _roll(BA, b, roll=None):
     """A wool blanket rolled up and held by two black straps (bands of the roll's own faces), lying along x."""
-    r, L = ROLL_["r"], ROLL_["length"] / 2.0
+    roll = roll or ROLL_
+    r, L = roll["r"], roll["length"] / 2.0
     n = 8
     ang = [math.pi / n + 2 * math.pi * k / n for k in range(n)]
 
@@ -465,6 +495,58 @@ def _build_tier(BA, k, built):
     return _obj(TIERS[k], bm)
 
 
+def _fold_top(y):
+    """The folded seat backs' top at y (FOLD_TOP, linear between the measured points)."""
+    pts = FOLD_TOP
+    if y <= pts[0][0]:
+        return pts[0][1]
+    for (ya, za), (yb, zb) in zip(pts, pts[1:]):
+        if ya <= y <= yb:
+            return za + (zb - za) * (y - ya) / (yb - ya)
+    return pts[-1][1]
+
+
+def _fold_z(y0, y1):
+    """Where a piece spanning y0..y1 stands on the folded backs: their highest point under it, 1 mm in."""
+    return max(_fold_top(y0 + (y1 - y0) * i / 8.0) for i in range(9)) - 0.001
+
+
+def _build_fold_tier(BA, k):
+    import bmesh
+    bm = bmesh.new()
+    bx = FOLD_BOX
+    fb = _frame(bx["c"][0], bx["c"][1], _fold_z(bx["c"][1] - 0.14, bx["c"][1] + 0.14), bx["yaw"])
+    for piece in FOLD_PIECES[k]:
+        if piece == "fold_duffel":
+            d = FOLD_DUFFEL
+            z = _fold_z(d["yc"] - d["w"] / 2, d["yc"] + d["w"] / 2)
+            _bag(BA, bm, d, lambda u: z)
+        elif piece == "fold_box":
+            _place(bm, lambda b: _carton_a(BA, b, bx), fb)
+        elif piece == "fold_roll":
+            r = FOLD_ROLL
+            _place(bm, lambda b: _roll(BA, b, r), _frame(r["c"][0], r["c"][1], _fold_z(r["c"][1] - r["r"], r["c"][1] + r["r"]),
+                                                          r["yaw"]))
+        elif piece == "fold_toolbox":
+            t = FOLD_TOOLBOX
+            _place(bm, lambda b: _toolbox(BA, b), fb @ _frame(t["c"][0], t["c"][1], bx["h"] + 0.0008, t["yaw"]))
+        elif piece == "fold_can":
+            c = FOLD_CAN
+            _place(bm, lambda b: _gas_can(BA, b), _frame(c["c"][0], c["c"][1], _fold_z(c["c"][1] - 0.14, c["c"][1] + 0.14), c["yaw"]))
+        else:
+            raise RuntimeError("clutter: unknown fold piece %s" % piece)
+    return _obj(FOLD_TIERS[k], bm)
+
+
+def _check_fold_box(ob):
+    """Every vertex of a fold piece over the folded backs, behind the front seats, under the side glass."""
+    c = FOLD_CLEAR
+    bad = [(round(v.co.x, 3), round(v.co.y, 3), round(v.co.z, 3)) for v in ob.data.vertices
+           if abs(v.co.x) > c["x"] or not (c["y0"] <= v.co.y <= c["y1"]) or not (c["z0"] <= v.co.z <= c["z1"])]
+    if bad:
+        raise RuntimeError("clutter: %s has %d vertices outside the folded floor's clear box, e.g. %s" % (ob.name, len(bad), bad[:4]))
+
+
 def _check_box(ob, report):
     """Every vertex inside the cargo bay's clear box (the module docstring's measurements)."""
     bad = []
@@ -484,10 +566,28 @@ def BUILD(report):
     made = []
     for k in range(len(TIERS)):
         made.append(_build_tier(BA, k, list(made)))
+    folds = [_build_fold_tier(BA, k) for k in range(len(FOLD_TIERS))]
     bm = bmesh.new()
     _well(BA, bm)
     made.append(_obj(WELL, bm))
     total = 0
+    fold_total = 0
+    for ob in folds:
+        _check_fold_box(ob)
+        names = [m.name for m in ob.data.materials]
+        if names != MATS:
+            raise RuntimeError("clutter: %s carries materials %s" % (ob.name, names))
+        shade = BA._shade(ob, SHADE_K)
+        area = BA._texel_weights(ob)
+        n = BA.tris(ob)
+        fold_total += n
+        vs = ob.data.vertices
+        report("FEATURE clutter: %-18s %4d tris  x %.2f..%.2f  y %.2f..%.2f  z %.3f..%.3f  shade %.2f  area m2 %s" % (
+            ob.name, n, min(v.co.x for v in vs), max(v.co.x for v in vs), min(v.co.y for v in vs), max(v.co.y for v in vs),
+            min(v.co.z for v in vs), max(v.co.z for v in vs), shade, " ".join("%.2f:%.2f" % (w, a) for w, a in sorted(area.items()))))
+    report("FEATURE clutter: folded floor's full load %d tris (budget %d)" % (fold_total, FOLD_TRI_BUDGET))
+    if fold_total > FOLD_TRI_BUDGET:
+        raise RuntimeError("clutter: the folded floor's full load is %d tris, over the %d budget" % (fold_total, FOLD_TRI_BUDGET))
     for ob in made:
         _check_box(ob, report)
         names = [m.name for m in ob.data.materials]
@@ -542,7 +642,8 @@ def _worn(fine, a_fine, a_broad=0.10):
 def _bake_textured():
     fabric = "poly_wool_herringbone_diffuse_1k.jpg"
     return {
-        "AccClutterCanvas": _worn(60.0, 0.05) + _bag_layers(DUFFEL, COLOURS["AccClutterCanvas"]) + [SHADE],
+        "AccClutterCanvas": (_worn(60.0, 0.05) + _bag_layers(DUFFEL, COLOURS["AccClutterCanvas"])
+                             + _bag_layers(FOLD_DUFFEL, COLOURS["AccClutterCanvas"]) + [SHADE]),
         "AccClutterCard": _worn(25.0, 0.05, 0.08) + [SHADE],
         "AccClutterFlap": _worn(25.0, 0.05, 0.12) + [SHADE],
         "AccClutterCardIn": _worn(25.0, 0.04) + [SHADE],
@@ -572,13 +673,13 @@ BAKE_MAT_WEIGHTS = {m: 1.0 for m in MATS}
 
 def MODELS(gen):
     return [gen.model_block(gen.acc_model_name(geo), "crvgen1_" + geo, texture="%s_%s" % (gen.TEX, TEX_NAME), shader="vehiclewheel")
-            for geo in TIERS + [WELL]]
+            for geo in TIERS + FOLD_TIERS + [WELL]]
 
 
 def _part(gen):
     t = "\t\t\t"
     lines = ["\t\tpart %s" % PART, "\t\t{"]
-    for mid, geo in list(zip(MODEL_IDS, TIERS)) + [(WELL_ID, WELL)]:
+    for mid, geo in list(zip(MODEL_IDS, TIERS)) + list(zip(FOLD_IDS, FOLD_TIERS)) + [(WELL_ID, WELL)]:
         lines += ["%smodel %s" % (t, mid), "%s{" % t, "%s\tfile = %s," % (t, gen.acc_model_name(geo)), "%s}" % t]
     lines += ["%scategory = nodisplay," % t,
               "%ssetAllModelsVisible = false," % t,          # no item: the Lua alone shows the load

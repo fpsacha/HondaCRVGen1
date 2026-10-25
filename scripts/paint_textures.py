@@ -48,6 +48,8 @@ K = L.PXM * SS                        # pixels per metre while painting
 # swatch's blue cast read as navy in pzview (2026-10-13), and the shade chip (#100F11) is neutral; the blue
 # lives in its top. Its top hue is a soft one for the same reason (from (52, 60, 88) the tops shipped
 # (81, 88, 123) and read blue-grey; now belt (36, 36, 41), tops (86, 89, 104)).
+# Sebring Silver's top is a cool silver (196, 204, 216), not the chip's neutral (202, 204, 204) (2026-10-24, with
+# its light level in paint_pass.SKIN_TUNE): the light silver otherwise read as the warm Taffeta White.
 # The suffixes are the files the vehicle script already lists (gen_scripts.SKINS), so no texture is renamed:
 # the old beige default (there is no beige RD1) became Electron Blue Pearl, the eighth paint.
 PAINTS = [
@@ -57,7 +59,7 @@ PAINTS = [
     ("_red",    "R-81",    "Milano Red",               "solid",    (153, 25, 39),  None),
     ("_blue",   "B-84P",   "Supermarine Blue Pearl",   "pearl",    (27, 58, 95),   (56, 74, 97)),
     ("_green",  "G-95P",   "Clover Green Pearl",       "pearl",    (3, 58, 33),    (54, 83, 79)),
-    ("_silver", "NH-552M", "Sebring Silver Metallic",  "metallic", (167, 167, 166), (202, 204, 204)),
+    ("_silver", "NH-552M", "Sebring Silver Metallic",  "metallic", (167, 167, 166), (196, 204, 216)),
     ("_gold",   "YR-524M", "Naples Gold Metallic",     "metallic", (182, 172, 156), (215, 208, 196)),
 ]
 SKINS = {p[0]: p[4] for p in PAINTS}

@@ -51,17 +51,23 @@ local function key(p)
     return "p" .. tostring(p:getPlayerNum())
 end
 
+-- the players, in a list kept from tick to tick (valid until the next call: no table a tick, perf 2026-10-24)
+local playerList = {}
 function Rain.players()
-    local out = {}
+    local out, n = playerList, 0
     if isServer() then
         local list = getOnlinePlayers()
-        for i = 0, (list and list:size() or 0) - 1 do out[#out + 1] = list:get(i) end
+        for i = 0, (list and list:size() or 0) - 1 do
+            local p = list:get(i)
+            if p then n = n + 1; out[n] = p end
+        end
     else
         for i = 0, getNumActivePlayers() - 1 do
             local p = getSpecificPlayer(i)
-            if p then out[#out + 1] = p end
+            if p then n = n + 1; out[n] = p end
         end
     end
+    for i = #out, n + 1, -1 do out[i] = nil end
     return out
 end
 
@@ -77,9 +83,16 @@ local function clothes(p)
 end
 
 function Rain.snapshot(p)
-    local h = { player = p, stat = p:getStats():get(CharacterStat.WETNESS), parts = {}, clothes = {}, sent = 0 }
+    local h = { player = p, stat = p:getStats():get(CharacterStat.WETNESS), parts = {}, clothes = {}, sent = 0,
+                bodyParts = {}, nParts = 0 }
     local parts = p:getBodyDamage():getBodyParts()
-    for i = 0, parts:size() - 1 do h.parts[i] = parts:get(i):getWetness() end
+    -- the BodyPart objects are kept (a character's BodyDamage holds the same ones for its life: perf 2026-10-24)
+    h.nParts = parts:size()
+    for i = 0, h.nParts - 1 do
+        local bp = parts:get(i)
+        h.bodyParts[i] = bp
+        h.parts[i] = bp:getWetness()
+    end
     for _, item in ipairs(clothes(p)) do h.clothes[item] = item:getWetness() end
     return h
 end
@@ -103,14 +116,16 @@ end
 function Rain.hold(p, h, dry)
     local changed = false
     local stats = p:getStats()
-    h.stat = math.max(0, math.min(h.stat, stats:get(CharacterStat.WETNESS)) - dry)
-    if stats:get(CharacterStat.WETNESS) > h.stat then
+    local wet = stats:get(CharacterStat.WETNESS)
+    h.stat = math.max(0, math.min(h.stat, wet) - dry)
+    if wet > h.stat then
         stats:set(CharacterStat.WETNESS, h.stat)
         changed = true
     end
-    local parts = p:getBodyDamage():getBodyParts()
-    for i = 0, parts:size() - 1 do
-        local bp = parts:get(i)
+    local kept = h.bodyParts
+    local parts = (not kept) and p:getBodyDamage():getBodyParts() or nil
+    for i = 0, (kept and h.nParts or parts:size()) - 1 do
+        local bp = kept and kept[i] or parts:get(i)
         local now = bp:getWetness()
         local lvl = math.max(0, math.min(h.parts[i] or now, now) - dry)
         h.parts[i] = lvl
@@ -119,16 +134,23 @@ function Rain.hold(p, h, dry)
             changed = true
         end
     end
-    local seen = {}
-    for _, item in ipairs(clothes(p)) do
-        local now = item:getWetness()
-        local lvl = math.max(0, math.min(h.clothes[item] or now, now) - dry)
-        seen[item] = lvl
-        if now > lvl then
-            item:setWetness(lvl)
-            changed = true
+    -- the worn clothing, walked in place; this tick's levels go into the table of two ticks ago (no table a tick)
+    local seen = h.spare or {}
+    for item, _ in pairs(seen) do seen[item] = nil end
+    local worn = p:getWornItems()
+    for i = 0, (worn and worn:size() or 0) - 1 do
+        local item = worn:getItemByIndex(i)
+        if item and item:IsClothing() then
+            local now = item:getWetness()
+            local lvl = math.max(0, math.min(h.clothes[item] or now, now) - dry)
+            seen[item] = lvl
+            if now > lvl then
+                item:setWetness(lvl)
+                changed = true
+            end
         end
     end
+    h.spare = h.clothes
     h.clothes = seen                                  -- clothes taken off under it are forgotten
     return changed
 end
@@ -150,9 +172,16 @@ function Rain.OnTick()
         return
     end
     local now = getTimeInMillis()
-    local keep = {}
+    local keep = Rain.spare or {}                    -- last tick's held table, emptied (no table a tick)
+    Rain.spare = nil
+    for k, _ in pairs(keep) do keep[k] = nil end
+    local shelters = Awning.shelters()               -- once a tick for every player (perf 2026-10-24)
+    if #shelters == 0 then
+        if not empty(Rain.held) then Rain.held = {} end
+        return
+    end
     for _, p in ipairs(Rain.players()) do
-        if not p:isDead() and Awning.shelterOf(p) then
+        if Awning.shelterOf(p, shelters) and not p:isDead() then
             local k = key(p)
             local h = Rain.held[k]
             if not h or h.player ~= p then
@@ -164,6 +193,7 @@ function Rain.OnTick()
             keep[k] = h
         end
     end
+    Rain.spare = Rain.held
     Rain.held = keep
 end
 

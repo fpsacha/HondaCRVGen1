@@ -283,9 +283,11 @@ def main():
             errors.append("%s: no image %s" % (pid, os.path.basename(f)))
             continue
         im = Image.open(f)
-        if im.size != (263, 600):
-            errors.append("%s: image %dx%d" % (pid, im.size[0], im.size[1]))
-        images[pid] = np.asarray(im.convert("RGBA"))[..., 3] > 127
+        if im.size[0] > 263 or im.size[1] > 600:        # a 263 x 600 sheet, shipped cut after its last drawn
+            errors.append("%s: image %dx%d" % (pid, im.size[0], im.size[1]))   # column / row (compose_overlays.ship_crop)
+        sheet = Image.new("RGBA", (263, 600), (0, 0, 0, 0))
+        sheet.paste(im.convert("RGBA"), (0, 0))         # drawn from the window's x / y: the cut part was transparent
+        images[pid] = np.asarray(sheet)[..., 3] > 127
     base = os.path.join(IMG, prefix + "base.png")
     if not os.path.exists(base):
         errors.append("no %sbase.png" % prefix)

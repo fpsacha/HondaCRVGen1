@@ -1045,6 +1045,12 @@ def BUILD(report):
     made = [build_snorkel(BA, report), build_skid(BA, report), build_bumper(BA, report), build_ladder(BA, report),
             build_can_gate(BA, report), build_can_roof(BA, report)]
     for ob in made:
+        # faces no camera sees out (BA.prune_hidden, optimization pass 2026-10-24): the can on the gate
+        # against the gate, the rest against the body
+        if ob.name == CAN_GATE:
+            BA.prune_hidden(ob, ("trunk",), report, gate=True)
+        else:
+            BA.prune_hidden(ob, ("body",), report)
         mean = BA._shade(ob, 0.55)
         report("FEATURE offroad: %s shade mean %.2f" % (ob.name, mean))
         if OBJECTS[ob.name].get("texel_w"):
@@ -1288,7 +1294,7 @@ def VEHICLE_PARTS(gen, vehicle):
     out = []
     for part, geo, item, area, parent, req, tool, tm, sk, _n in PARTS:
         out.append(gen.accessory_part(part, geo, item, area, parent=parent, require_installed=req, tool=tool, time=tm,
-                                      level=sk, lua=LUA_NS))
+                                      level=sk, lua=LUA_NS, repair=item != "JerryCan"))   # the can: vanilla's item, never altered
     return out
 
 
@@ -1413,10 +1419,10 @@ LUA = ["server/Vehicles/HondaCRVGen1_Offroad.lua"]
 # rare loot in garages and auto shops; no "sandbox" key: the function feature's FunctionLootRarity scales every CR-V entry
 DISTRIBUTIONS = [
     {"list": "GarageMechanics", "item": "Base.CRVGen1_OffroadSnorkel", "weight": 0.3},
-    {"list": "MechanicShelfMisc", "item": "Base.CRVGen1_OffroadSnorkel", "weight": 0.4},
+    {"list": "StoreShelfMechanics", "item": "Base.CRVGen1_OffroadSnorkel", "weight": 0.4},
     {"list": "CrateMechanics", "item": "Base.CRVGen1_OffroadSnorkel", "weight": 0.4},
     {"list": "GarageMechanics", "item": "Base.CRVGen1_OffroadSkidPlate", "weight": 0.3},
-    {"list": "MechanicShelfMisc", "item": "Base.CRVGen1_OffroadSkidPlate", "weight": 0.3},
+    {"list": "MechanicShelfMufflers", "item": "Base.CRVGen1_OffroadSkidPlate", "weight": 0.3},
     {"list": "GarageMetalwork", "item": "Base.CRVGen1_OffroadSkidPlate", "weight": 0.2},
     {"list": "CrateMechanics", "item": "Base.CRVGen1_OffroadRearBumper", "weight": 0.3},
     {"list": "MechanicSpecial", "item": "Base.CRVGen1_OffroadRearBumper", "weight": 0.4},

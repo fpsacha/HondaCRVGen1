@@ -1,5 +1,6 @@
 require "TimedActions/ISBaseTimedAction"
 require "HondaCRVGen1_Awning"
+require "HondaCRVGen1_Lift"                -- Lift.report: the outcome to the acting player
 
 -- Roll the CR-V's side awning out (on = true) or up (awning feature, scripts/features/awning.py).
 --
@@ -51,17 +52,28 @@ function ISCRVAwning:stop()
     ISBaseTimedAction.stop(self)
 end
 
--- the acting client: feedback only, no state
+-- the acting client: no state, and no outcome text: the authoritative side may still refuse (complete())
 function ISCRVAwning:perform()
     self:stopSound()
-    HaloTextHelper.addText(self.character, getText(self.on and "IGUI_CRV_Awning_Deployed" or "IGUI_CRV_Awning_Stowed"))
     ISBaseTimedAction.perform(self)
 end
 
--- the authoritative side: check again, then change the state (saved, synced, listeners fired)
+-- the authoritative side: check again (the player still at the car: the server never runs isValid for a
+-- client's action), then change the state (saved, synced, listeners fired) and tell the player how it went
+-- (HondaCRVGen1.Lift.report: a halo in single player, the server's answer to that client in multiplayer)
 function ISCRVAwning:complete()
-    if not ISCRVAwning.check(self.vehicle, self.character, self.on) then return false end
+    local report = HondaCRVGen1.Lift.report
+    if not HondaCRVGen1.State.near(self.character, self.vehicle) then
+        report(self.character, false, nil)
+        return false
+    end
+    local ok, why = ISCRVAwning.check(self.vehicle, self.character, self.on)
+    if not ok then
+        report(self.character, false, why)
+        return false
+    end
     HondaCRVGen1.Awning.set(self.vehicle, self.on)
+    report(self.character, true, self.on and "IGUI_CRV_Awning_Deployed" or "IGUI_CRV_Awning_Stowed")
     return true
 end
 

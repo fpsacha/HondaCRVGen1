@@ -146,27 +146,87 @@ function F.setFloorFound(vehicle)
 end
 
 -- ---------------------------------------------------------------------------------------------
+-- the folded bed: a good bed (the game treats every vehicle as a bad one), better with a pillow. The rule is shared:
+-- the sleeper's client answers getBedQuality with it (single player: that is the sleep), and in multiplayer the
+-- server re-checks it before it sets the player's bed type (server/HondaCRVGen1_BedServer.lua), since the server
+-- is where a sleeping player's stats run (IsoGameCharacter.updateStats_WakeState, 42.21: GameServer.server only)
+
+-- the containers where a pillow counts on the folded bed: the cargo deck it runs onto (the trunk); vanilla's own
+-- spot, the sleeper's seat container, is checked first. Not the folded load floor (CRVFunctionCargo): it is open in
+-- fold mode "cargo" only (F.CargoAccess) and must be empty to make up the bed, so it never holds one on a bed
+-- (I-DIFF-3)
+F.BED_PILLOW_PARTS = { "TruckBed" }
+
+local function hasPillow(cont)
+    return cont ~= nil and cont:containsTag(ItemTag.PILLOW) == true
+end
+
+local function handPillow(chr)
+    local a, b = chr:getPrimaryHandItem(), chr:getSecondaryHandItem()
+    return (a ~= nil and a:hasTag(ItemTag.PILLOW)) or (b ~= nil and b:hasTag(ItemTag.PILLOW))
+end
+
+-- does chr, in the folded vehicle, have a pillow: in hand, in their seat's container (as vanilla's vehicle branch
+-- of getBedQuality), or anywhere on the bed (F.BED_PILLOW_PARTS)
+function F.bedPillow(chr, vehicle)
+    if handPillow(chr) then return true end
+    local seatPart = vehicle:getPartForSeatContainer(vehicle:getSeat(chr))
+    if seatPart and hasPillow(seatPart:getItemContainer()) then return true end
+    for _, id in ipairs(F.BED_PILLOW_PARTS) do
+        local part = vehicle:getPartById(id)
+        if part and hasPillow(part:getItemContainer()) then return true end
+    end
+    return false
+end
+
+-- is vehicle a made-up bed someone can sleep well in now: folded into a bed, the bench there (H-PLAY-3: with both
+-- rear seats out nothing is drawn, so there is no bed; ISUninstallVehiclePart refuses them while folded, this covers
+-- a car that lost them before that rule) and parked (I-PLAY-3: a bed in a parked car, not one being driven or towed)
+function F.isMadeBed(vehicle)
+    if not vehicle or not HondaCRVGen1.Shared.isBed(vehicle) or not F.benchFitted(vehicle) then return false end
+    return vehicle:isStopped() == true
+end
+
+-- the bed type of chr sleeping in vehicle: "goodBed" / "goodBedPillow" on a made-up CR-V bed, else nil (the game's
+-- answer stands)
+function F.bedType(chr, vehicle)
+    if not chr or not F.isMadeBed(vehicle) then return nil end
+    return F.bedPillow(chr, vehicle) and "goodBedPillow" or "goodBed"
+end
+
+-- ---------------------------------------------------------------------------------------------
 -- the rear seats' look: upright or folded flat (one bench model at a time), and the bedding on the folded
 -- seats in fold mode "bed"
 
 F.SEATS_PART = "CRVFunctionSeats"
 F.SEAT_MODELS = { up = "InteriorSeatsUp", folded = "InteriorSeatsFolded", bedding = "InteriorBedding" }
-F.seatsShown = {}                        -- vehicle id -> { vehicle =, folded =, bed = } what this side last showed
+F.seatsShown = {}                        -- vehicle id -> { vehicle =, folded =, bed =, fitted = } what this side last showed
+
+-- is either rear seat's item fitted (the bench is drawn by CRVFunctionSeats, not by the seat parts: with both seats
+-- taken out there is no bench to draw)
+function F.benchFitted(vehicle)
+    for _, id in ipairs(HondaCRVGen1.Shared.REAR_SEATS) do
+        local p = vehicle:getPartById(id)
+        if p and p:getInventoryItem() then return true end
+    end
+    return false
+end
 
 -- show the bench and the bedding as the synced state says, where the car is drawn; cheap and idempotent (a listener)
 function F.applySeats(vehicle)
     if isServer() or not vehicle or not HondaCRVGen1.Shared.isCRV(vehicle) then return end
     local part = vehicle:getPartById(F.SEATS_PART)
     if not part then return end
+    local fitted = F.benchFitted(vehicle)
     local folded = HondaCRVGen1.Shared.isFolded(vehicle) == true
     local bed = folded and HondaCRVGen1.Shared.isBed(vehicle) == true
     local id = vehicle:getId()
     local e = F.seatsShown[id]
-    if e and e.vehicle == vehicle and e.folded == folded and e.bed == bed then return end
-    part:setModelVisible(F.SEAT_MODELS.up, not folded)
-    part:setModelVisible(F.SEAT_MODELS.folded, folded)
-    part:setModelVisible(F.SEAT_MODELS.bedding, bed)
-    F.seatsShown[id] = { vehicle = vehicle, folded = folded, bed = bed }
+    if e and e.vehicle == vehicle and e.folded == folded and e.bed == bed and e.fitted == fitted then return end
+    part:setModelVisible(F.SEAT_MODELS.up, fitted and not folded)
+    part:setModelVisible(F.SEAT_MODELS.folded, fitted and folded)
+    part:setModelVisible(F.SEAT_MODELS.bedding, fitted and bed)
+    F.seatsShown[id] = { vehicle = vehicle, folded = folded, bed = bed, fitted = fitted }
 end
 
 local function onFoldState(vehicle, key, value, old, how)
@@ -174,6 +234,44 @@ local function onFoldState(vehicle, key, value, old, how)
 end
 State.onChange(HondaCRVGen1.Shared.FOLD_KEY, onFoldState)
 State.onChange(HondaCRVGen1.Shared.MODE_KEY, onFoldState)
+
+-- a rear seat fitted or taken out (on a client the install / uninstall runs on the server: the State poll notices
+-- the part's item change on every tracked car)
+for _, id in ipairs(HondaCRVGen1.Shared.REAR_SEATS) do
+    State.watchPart(id, function(vehicle, part) F.applySeats(vehicle) end)
+end
+
+-- drop the cars that left the world (streamed out, removed), as State.poll drops them from State.tracked: an entry
+-- holds the BaseVehicle, which would otherwise stay referenced for the whole session
+function F.pruneSeats()
+    for id, e in pairs(F.seatsShown) do
+        local v = e.vehicle
+        if v == nil or v:isRemovedFromWorld() or v:getId() ~= id then
+            F.seatsShown[id] = nil
+        end
+    end
+end
+
+-- (perf 2026-10-24: the cache is one of State's prunable caches, emptied of those cars by the client poll, instead
+-- of a tick handler of its own)
+if not isServer() then
+    State.prunable(F.seatsShown)
+end
+
+-- H-SAVES-1: a car folded under 0.4.3 or earlier had one folded state, whose load floor was open; 0.4.4 reads a fold
+-- without a mode as a bed, whose load floor is shut, so what the player stored there vanished (and the seats would
+-- not go back up over it). Authoritative side, at the load floor's init: folded, no mode stored and things on the
+-- load floor -> a load floor ("cargo"). A bed made up under 0.4.4+ is stored as no mode too ("bed" is the default),
+-- but making up a bed needs that floor empty (Shared.canMakeBed), so it is never caught. Returns true when it changed
+function F.migrateFoldMode(vehicle, part)
+    if isClient() or not vehicle or not part or not HondaCRVGen1.Shared.isFolded(vehicle) then return false end
+    local seat = HondaCRVGen1.Shared.bedPart(vehicle)
+    local md = seat and seat:getModData()
+    if not md or md[State.PREFIX .. HondaCRVGen1.Shared.MODE_KEY] ~= nil then return false end
+    local cont = part:getItemContainer()
+    if not cont or cont:isEmpty() then return false end
+    return State.set(vehicle, HondaCRVGen1.Shared.MODE_KEY, HondaCRVGen1.Shared.MODE_CARGO) == true
+end
 
 -- part init (every part of the feature, every side): migrate an old save's bed flag where the game is
 -- authoritative, then fire the listeners for this car (State.refresh also starts the client poll)
@@ -196,6 +294,7 @@ function F.Init(vehicle, part)
             local ok, why = HondaCRVGen1.Shared.setBed(vehicle, true)
             if why == "unchanged" then vehicle:transmitPartModData(seat) end
         end
+        F.migrateFoldMode(vehicle, part)
     end
     if part:getId() == F.CARGO_PART then
         State.refresh(vehicle, HondaCRVGen1.Shared.FOLD_KEY)
@@ -219,10 +318,44 @@ function F.bonus(character, vehicle, amount)
     return amount
 end
 
--- the vanilla actions grant their own XP once per item and car (addMechanicsItem keys); the bonus
--- follows the same keys so taking a part off and on again cannot farm it
+-- the vanilla actions grant their own XP once per item and car (addMechanicsItem keys); the success bonus
+-- follows the same keys so taking a part off and on again cannot farm it. Vanilla records a key only on a SUCCESS
+-- (ISInstallVehiclePart / ISUninstallVehiclePart:complete: addMechanicsItem in the success branch; a failure gives
+-- its +1 and records nothing), so those keys alone cannot hold back a failure that is retried. The failure bonus (still
+-- only while the item has not been done on that car) has its own memory too (H-PLAY-2): once per player and part of
+-- the car per in-game day, kept in the car's mod data (key F.FAIL_XP_KEY), as the lift conversion keeps its XP
+-- (Lift.giveXp)
 local function fresh(character, key)
     return character:getMechanicsItem(key) == nil
+end
+
+F.FAIL_XP_KEY = "crvManualFailXP"
+F.FAIL_XP_MEMORY_MS = 86400000           -- one in-game day (vanilla's own memory for mechanics XP keys)
+
+local function gameMillis()
+    if not getGameTime then return 0 end
+    local ok, t = pcall(function() return getGameTime():getCalender():getTimeInMillis() end)
+    return (ok and type(t) == "number") and t or 0
+end
+
+-- the failure bonus for character on part of vehicle, at most once per in-game day; returns the XP given
+function F.failBonus(character, vehicle, part)
+    if isClient() or not character or not vehicle or not part then return 0 end
+    if not HondaCRVGen1.Shared.isCRV(vehicle) or not F.knows(character) then return 0 end
+    local md = vehicle:getModData()
+    local memory = type(md[F.FAIL_XP_KEY]) == "table" and md[F.FAIL_XP_KEY] or {}
+    md[F.FAIL_XP_KEY] = memory
+    local now = gameMillis()
+    local old = {}
+    for k, t in pairs(memory) do
+        if type(t) ~= "number" or now - t >= F.FAIL_XP_MEMORY_MS or t > now then old[#old + 1] = k end
+    end
+    for _, k in ipairs(old) do memory[k] = nil end
+    local who = (character.getUsername and character:getUsername()) or "player"
+    local key = tostring(who) .. "|" .. tostring(part:getId())
+    if memory[key] then return 0 end
+    memory[key] = now
+    return F.bonus(character, vehicle, F.XP.fail)
 end
 
 local installComplete = ISInstallVehiclePart.complete
@@ -230,28 +363,81 @@ function ISInstallVehiclePart:complete()
     local vehicle, item, part = self.vehicle, self.item, self.part
     local first = vehicle and item and fresh(self.character, item:getID() .. vehicle:getMechanicalID() .. "1")
     local result = installComplete(self)
-    if vehicle and part and item then
+    if vehicle and part and item and first then
         if part:getInventoryItem() == item then
-            if first then F.bonus(self.character, vehicle, F.XP.install) end
+            F.bonus(self.character, vehicle, F.XP.install)
         else
-            F.bonus(self.character, vehicle, F.XP.fail)
+            F.failBonus(self.character, vehicle, part)
         end
     end
     return result
 end
 
+-- the picnic table IS the cargo floor's panel (the real RD1's): taking it out shows the storage well under it
+local function tableOut(vehicle, part)
+    if isClient() or not part or part:getId() ~= HondaCRVGen1.Shared.TABLE_PART or part:getInventoryItem() then return end
+    if vehicle:getPartById(F.FLOOR_PART) and not F.isFloorFound(vehicle) then
+        F.setFloorFound(vehicle)
+    end
+end
+
+-- H-PLAY-3: a rear seat stays in while the seats are folded (the folded bench and the bed on it are drawn from those
+-- two seats, Function.applySeats); the reason is IGUI_CRV_Function_SeatsAreFolded, as for getting in. Vanilla's
+-- way: the uninstall test (Vehicles.UninstallTest.Default, which the rear seats' tables name) says no, so the
+-- mechanics window greys "Uninstall" out and ISUninstallVehiclePart:isValid refuses; complete() refuses too, on the
+-- authoritative side, which never runs a client's isValid. A mechanics cheat goes through, as in vanilla's Default
+-- and ISUninstallVehiclePart:isValid: ISVehicleMechanics.cheat is the client's (client/ file: nil on a dedicated
+-- server), chr:isMechanicsCheat() (IsoGameCharacter, the player's CheatType.MECHANICS, 42.21) is the server's
+function F.seatUninstallBlocked(vehicle, part, chr)
+    if not vehicle or not part then return false end
+    if ISVehicleMechanics and ISVehicleMechanics.cheat then return false end
+    if chr and chr.isMechanicsCheat and chr:isMechanicsCheat() == true then return false end
+    local id = part:getId()
+    for _, seat in ipairs(HondaCRVGen1.Shared.REAR_SEATS) do
+        if id == seat then
+            return HondaCRVGen1.Shared.isCRV(vehicle) and HondaCRVGen1.Shared.isFolded(vehicle) == true
+        end
+    end
+    return false
+end
+
+function F.uninstallTest(vehicle, part, chr)
+    if F.seatUninstallBlocked(vehicle, part, chr) then return false end
+    return F.vanillaUninstallTest(vehicle, part, chr)
+end
+
+-- wrapped once per table, marked on the table (the armour feature's rule, Armour.wrapOnce: a later wrapper calls
+-- ours, re-wrapping would loop); Vehicles.lua is a server file that loads after this shared one, so again at game
+-- start. Returns true when it wrapped
+F.UNINSTALL_MARK = "HondaCRVGen1FunctionWrapped"
+function F.wrapUninstallTest()
+    local t = Vehicles and Vehicles.UninstallTest
+    if type(t) ~= "table" or type(t.Default) ~= "function" or rawget(t, F.UNINSTALL_MARK) then return false end
+    rawset(t, F.UNINSTALL_MARK, true)
+    F.vanillaUninstallTest = t.Default
+    t.Default = F.uninstallTest
+    return true
+end
+F.wrapUninstallTest()
+if Events and Events.OnGameStart then Events.OnGameStart.Add(F.wrapUninstallTest) end
+if Events and Events.OnServerStarted then Events.OnServerStarted.Add(F.wrapUninstallTest) end
+
 local uninstallComplete = ISUninstallVehiclePart.complete
 function ISUninstallVehiclePart:complete()
     local vehicle, part = self.vehicle, self.part
+    if F.seatUninstallBlocked(vehicle, part, self.character) then return false end
     local item = part and part:getInventoryItem()
     local first = vehicle and item and fresh(self.character, item:getID() .. vehicle:getMechanicalID() .. "0")
     local result = uninstallComplete(self)
     if vehicle and item then
-        if not part:getInventoryItem() then
-            if first then F.bonus(self.character, vehicle, F.XP.uninstall) end
-        else
-            F.bonus(self.character, vehicle, F.XP.fail)
+        if first then
+            if not part:getInventoryItem() then
+                F.bonus(self.character, vehicle, F.XP.uninstall)
+            else
+                F.failBonus(self.character, vehicle, part)
+            end
         end
+        if HondaCRVGen1.Shared.isCRV(vehicle) then tableOut(vehicle, part) end
     end
     return result
 end

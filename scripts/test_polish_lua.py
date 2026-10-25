@@ -62,12 +62,17 @@ function CELL:getVehicles() return self.list end
 function getCell() return CELL end
 LOCAL = newPlayer(PLAYER_NAME or "me", 100, 100)
 function getPlayer() return LOCAL end
--- vanilla's player:getNearVehicle(): the nearest vehicle within a few tiles (what the polish scan uses)
+-- 42.21 IsoPlayer.getNearVehicle, its rules (bytecode): null while the player is IN a vehicle; otherwise the
+-- nearest car closer than 4 tiles (DistToSquared < 16) that the player FACES (a line along the forward direction,
+-- PolygonalMap2.intersectLineWithVehicle). FACING = false: the player has turned away
+FACING = true
 function LOCAL:getNearVehicle()
-    local best, bd = nil, 10 * 10
+    if self:getVehicle() ~= nil then return nil end
+    if not FACING then return nil end
+    local best, bd = nil, 16
     for _, v in ipairs(CELL_LIST) do
         local dx, dy = v:getX() - self:getX(), v:getY() - self:getY()
-        if dx * dx + dy * dy <= bd then best, bd = v, dx * dx + dy * dy end
+        if dx * dx + dy * dy < bd then best, bd = v, dx * dx + dy * dy end
     end
     return best
 end
@@ -115,8 +120,39 @@ function spawnCar(id, skin, script)
     triggerEvent("OnSpawnVehicleEnd", v)
     return v
 end
+-- the car leaves the world (streamed out or removed: BaseVehicle.removeFromWorld sets removedFromWorld)
 function removeCar(v)
     for i = #CELL_LIST, 1, -1 do if CELL_LIST[i] == v then table.remove(CELL_LIST, i) end end
+    v.removed = true
+end
+-- 42.21 PZAPI.ModOptions (client/PZAPI/ModOptions.lua), the part the mod uses: create, getOptions, addSlider,
+-- addDescription, getOption, getValue, load (reads ModOptions.ini: MODOPTIONS_FILE here)
+MODOPTIONS_FILE = {}
+function makeModOptionsApi()
+    local Options = {}
+    Options.__index = Options
+    local api = { Dict = {}, Data = {} }
+    function api:create(id, name)
+        local o = setmetatable({ id = id, name = name, data = {}, dict = {} }, Options)
+        table.insert(self.Data, o); self.Dict[id] = o
+        return o
+    end
+    function api:getOptions(id) return self.Dict[id] end
+    function api:load()
+        for id, vals in pairs(MODOPTIONS_FILE) do
+            local o = self.Dict[id]
+            if o then for k, v in pairs(vals) do if o.dict[k] then o.dict[k].value = v end end end
+        end
+    end
+    function Options:addSlider(id, name, min, max, step, value)
+        local opt = { type = "slider", id = id, name = name, min = min, max = max, step = step, value = value }
+        function opt:getValue() return self.value end
+        table.insert(self.data, opt); self.dict[id] = opt
+        return opt
+    end
+    function Options:addDescription(text) table.insert(self.data, { type = "description", text = text }) end
+    function Options:getOption(id) return self.dict[id] end
+    return api
 end
 '''
 
@@ -304,6 +340,75 @@ def start_guard_tests():
     print("POLISH start guard: a failed start is dropped and retried: ok")
 
 
+def occupant_tests():
+    """H-LUA-1 / H-COMPAT-1: the layer followed IsoPlayer.getNearVehicle(), which the game answers with nil while the
+    player sits in a car and otherwise only for a car within 4 tiles the player faces: the driver never heard it.
+    Now the car the player sits in, then the tracked CR-Vs within RANGE, nearest first (at most MAX_CARS)."""
+    s = side("sp")
+    s.run("car = spawnCar(1, 4); car.engine = true; car.rpm = 2000; car.x, car.y = 102, 100; TICK(31)")
+    check(len(playing(s)) == 2, "on foot, 2 tiles, facing: the layer plays (%s)" % playing(s))
+    s.run("LOCAL.vehicle = car; LOCAL.x, LOCAL.y = car.x, car.y; TICK(31)")
+    check(s.eval("LOCAL:getNearVehicle() == nil"), "the fake answers as the game: nil inside a car")
+    check(len(playing(s)) == 2, "the driver inside the running CR-V hears it (%s)" % playing(s))
+    s.run("car.x = 400; LOCAL.x = 400; TICK(200)")                 # driving away: the layer stays with the car
+    check(len(playing(s)) == 2 and s.eval("EMITTERS[#EMITTERS].x") == 400, "driving: the layer follows the car")
+    s.run("LOCAL.vehicle = nil; car.x = 102; LOCAL.x = 95; TICK(31)")
+    check(len(playing(s)) == 2, "on foot 7 tiles away (RANGE %d): still heard" % s.eval("HondaCRVGen1.Polish.RANGE"))
+    s.run("LOCAL.x = 100; FACING = false; TICK(31)")
+    check(len(playing(s)) == 2, "2 tiles away, facing away: still heard")
+    s.run("LOCAL.x = 100 - 50; TICK(31)")
+    check(playing(s) == [], "50 tiles away: none")
+    # a passenger in another, stopped car hears the running CR-V beside it; and its own engine first
+    s.run("LOCAL.x = 100; FACING = true; other = spawnCar(2, 3, 'Base.SmallCar'); LOCAL.vehicle = other; TICK(31)")
+    check(len(playing(s)) == 2, "sitting in another car next to a running CR-V: heard")
+    # several running CR-Vs: the nearest MAX_CARS, the one the player sits in first
+    s.run("""LOCAL.vehicle = nil; LOCAL.x, LOCAL.y = 100, 100
+             cars = {}
+             for i = 1, 5 do local c = spawnCar(10 + i, 2); c.engine = true; c.rpm = 1500; c.x = 100 + i * 5; cars[i] = c end
+             TICK(31)""")
+    n = s.eval("HondaCRVGen1.Polish.MAX_CARS")
+    started = s.eval("(function() local t = {} for v in pairs(HondaCRVGen1.Polish.cars) do t[#t + 1] = v:getId() end table.sort(t) return table.concat(t, ',') end)()")
+    check(started == "1,11,12", "the %d nearest running CR-Vs get the layer (%s)" % (n, started))
+    s.run("LOCAL.vehicle = cars[5]; LOCAL.x = cars[5].x; TICK(31)")
+    check(s.eval("HondaCRVGen1.Polish.cars[cars[5]] ~= nil"), "the car the player sits in is always among them")
+    # a car that left the world is never started from its stale tracking entry
+    s.run("removeCar(cars[4]); TICK(31)")
+    check(s.eval("HondaCRVGen1.Polish.cars[cars[4]] == nil"), "a removed car: no layer")
+    print("POLISH OCCUPANTS: driver / passenger hear the layer, on foot within RANGE whatever the facing, nearest %d: ok" % n)
+
+
+def option_tests():
+    """I-DATA-2: the player's own volume (Options > Mods, PZAPI.ModOptions), independent of the server's sandbox
+    volume: default on at the recorded level, 0 = off, the saved value counts from the game's start."""
+    s = side("sp")
+    check(s.eval("HondaCRVGen1.Polish.clientVolume()") == 1, "no options API: full volume")
+    s.run("PZAPI = { ModOptions = makeModOptionsApi() }; triggerEvent('OnGameBoot')")
+    check(s.eval("PZAPI.ModOptions:getOptions('HondaCRVGen1') ~= nil"), "the options are registered at OnGameBoot")
+    check(s.eval("PZAPI.ModOptions:getOptions('HondaCRVGen1'):getOption('engineVolume'):getValue()") == 100, "default 100 %")
+    s.run("car = spawnCar(1, 0); car.engine = true; car.rpm = 2000; TICK(31)")
+    check(len(playing(s)) == 2, "default: the layer plays")
+    _lp, lv100, _hp, _hv = (s.eval("({HondaCRVGen1.Polish.mix(2000, HondaCRVGen1.Polish.volumeSetting())})[%d]" % i) for i in (1, 2, 3, 4))
+    s.run("MODOPTIONS_FILE = { HondaCRVGen1 = { engineVolume = 50 } }; triggerEvent('OnGameStart')")
+    check(abs(s.eval("HondaCRVGen1.Polish.volumeSetting()") - 0.5) < 1e-9, "the saved 50 % is read at the game's start")
+    s.run("TICK(10)")
+    vol = layer(s, "CRVGen1EngineLow")[1]
+    check(abs(vol - lv100 * 0.5) < 1e-6, "50 %%: the layer at half volume (%s vs %s)" % (vol, lv100))
+    s.run("SandboxVars = { HondaCRVGen1 = { PolishEngineVolume = 200 } }")
+    check(abs(s.eval("HondaCRVGen1.Polish.volumeSetting()") - 1.0) < 1e-9, "times the server's sandbox volume")
+    # R2-AUD-1 (2026-10-24): both at 200 % multiplied to 4x the recorded level; the product is held at 2x
+    s.run("PZAPI.ModOptions:getOptions('HondaCRVGen1'):getOption('engineVolume').value = 200")
+    check(abs(s.eval("HondaCRVGen1.Polish.volumeSetting()") - 2.0) < 1e-9,
+          "200 %% x 200 %%: held at 2x (%s)" % s.eval("HondaCRVGen1.Polish.volumeSetting()"))
+    s.run("TICK(10)")
+    vol = layer(s, "CRVGen1EngineLow")[1]
+    check(abs(vol - lv100 * 2) < 1e-6, "the layer at twice its default volume, not four times (%s vs %s)" % (vol, lv100))
+    lv4 = s.eval("({HondaCRVGen1.Polish.mix(2000, 4)})[2]")
+    check(abs(lv4 - lv100 * 2) < 1e-6, "Polish.mix holds a master over 2 at 2 (%s vs %s)" % (lv4, lv100 * 2))
+    s.run("PZAPI.ModOptions:getOptions('HondaCRVGen1'):getOption('engineVolume').value = 0; TICK(31)")
+    check(playing(s) == [], "0: the layer off for this player")
+    print("POLISH OPTION: per-player engine volume (default 100 %, saved value read at start, x sandbox, 0 = off): ok")
+
+
 def mp_tests():
     net = Net()
     server = side("server", net)
@@ -353,6 +458,8 @@ def main():
     viewpoint_tests()
     pitch_log_tests()
     start_guard_tests()
+    occupant_tests()
+    option_tests()
     mp_tests()
     print("POLISH LUA TESTS OK")
 

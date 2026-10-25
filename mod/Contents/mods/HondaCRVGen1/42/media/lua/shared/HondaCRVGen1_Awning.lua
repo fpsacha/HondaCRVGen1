@@ -9,8 +9,9 @@ poles (AwningPoles; the lifted scripts draw a longer pair). The rolled-out state
 awning_deployed (boolean, in the part's mod data: saved with the car and synced to every client), changed
 only where the game is authoritative:
   * the timed action ISCRVAwning (complete(): single player or the server) rolls it out or up;
-  * the car rolls it up itself when its engine runs or it moves (Awning.OnTick, authoritative side); moving
-    faster than TEAR_KMH with it out tears it (condition -TEAR);
+  * the car rolls it up itself when its engine runs, it moves or it is hitched (towing or towed: Awning.hitched)
+    (Awning.OnTick, authoritative side); moving faster than TEAR_KMH with it out tears it (condition -TEAR);
+    a hitched car cannot roll it out;
   * removing the part, or installing it, leaves it rolled up.
 Model visibility is neither saved nor synced, and the engine shows every model of a part whenever its item is
 set (VehiclePart.setInventoryItem -> setAllModelsVisible), so every side that draws the car shows the canopy
@@ -52,7 +53,8 @@ Awning.EVERY = 20                 -- ticks between the authoritative side's chec
 State.define(Awning.KEY, { part = Awning.PART, kind = "boolean", default = false, request = false })
 
 Awning.out = Awning.out or {}         -- vehicle id -> BaseVehicle, every rolled-out awning this side knows of
-Awning.shown = Awning.shown or {}     -- drawing side: vehicle id -> { vehicle =, canopy =, poles = }
+-- drawing side: vehicle id -> { vehicle =, canopy =, poles = } (the State poll drops the cars that left the world)
+Awning.shown = State.prunable(Awning.shown or {})
 
 function Awning.part(vehicle)
     return vehicle and vehicle:getPartById(Awning.PART) or nil
@@ -73,9 +75,19 @@ local function speed(vehicle)
     return ok and type(v) == "number" and math.abs(v) or 0
 end
 
+-- is the car hitched: towing a trailer or another car, or towed (BaseVehicle.getVehicleTowing / getVehicleTowedBy,
+-- 42.21: what the game's tow bar sets on both cars, on every side). A towed car moves without its engine, maybe
+-- under MOVE_KMH for a while: the hitch itself is the test (H-MP-I2, 2026-10-24)
+function Awning.hitched(vehicle)
+    if vehicle.getVehicleTowing and vehicle:getVehicleTowing() then return true end
+    if vehicle.getVehicleTowedBy and vehicle:getVehicleTowedBy() then return true end
+    return false
+end
+
 function Awning.parked(vehicle)
     if vehicle:isEngineRunning() then return false, "Tooltip_CRV_Awning_EngineOn" end
     if speed(vehicle) > Awning.MOVE_KMH then return false, "Tooltip_CRV_Awning_Moving" end
+    if Awning.hitched(vehicle) then return false, "Tooltip_CRV_Lift_Trailer" end   -- (the lift's "Unhitch the trailer first")
     return true
 end
 
@@ -119,13 +131,68 @@ function Awning.isUnder(vehicle, character)
     return x >= a.x0 and x <= a.x1 and y >= a.y0 and y <= a.y1
 end
 
--- the rolled-out awning character stands under, or nil
-function Awning.shelterOf(character)
+-- tiles from the car's centre that hold the whole footprint (the farthest corner, in world units through the
+-- script's model scale, plus two tiles of slack: a car tilted up to ~50 degrees, an origin off the centre): a
+-- character farther away cannot be under the canopy
+local AREA_R = 0
+for _, x in ipairs({ Awning.AREA.x0, Awning.AREA.x1 }) do
+    for _, y in ipairs({ Awning.AREA.y0, Awning.AREA.y1 }) do
+        AREA_R = math.max(AREA_R, math.sqrt(x * x + y * y))
+    end
+end
+function Awning.radius(vehicle)
+    local s = vehicle:getScript() and vehicle:getScript():getModelScale() or 1.0
+    if not s or s <= 0 then s = 1.0 end
+    return AREA_R * s + 2
+end
+
+-- the radius of a rolled-out awning's car, kept per car (vehicle id -> { vehicle =, r = }; dropped with Awning.out)
+Awning.reach = Awning.reach or {}
+local function reachEntry(id, v)
+    local c = Awning.reach[id]
+    if not c or c.vehicle ~= v then
+        c = { vehicle = v, v = v, r = Awning.radius(v) }
+        Awning.reach[id] = c
+    end
+    return c
+end
+local function reachOf(id, v)
+    return reachEntry(id, v).r
+end
+
+-- the rolled-out awnings this tick, in Awning.out's order, as { v = BaseVehicle, x =, y =, r = } (the cars that left
+-- the world are dropped): Awning.shelterOf(character, list) tests a character against each, the far ones by distance
+-- alone (perf 2026-10-24: the rain loop asked every player against every awning in full, ~17 game calls each, every
+-- tick). The list and its entries are kept from call to call (no table a tick): valid until the next call
+local shelterList = {}
+function Awning.shelters()
+    local list, n = shelterList, 0
     for id, v in pairs(Awning.out) do
         if v:isRemovedFromWorld() or v:getId() ~= id then
             Awning.out[id] = nil
-        elseif Awning.isUnder(v, character) then
-            return v
+        else
+            local c = reachEntry(id, v)
+            c.x, c.y = v:getX(), v:getY()
+            n = n + 1
+            list[n] = c
+        end
+    end
+    for i = #list, n + 1, -1 do list[i] = nil end
+    for id, _ in pairs(Awning.reach) do
+        if Awning.out[id] == nil then Awning.reach[id] = nil end
+    end
+    return list
+end
+
+-- the rolled-out awning character stands under, or nil (list: Awning.shelters() of this tick, made here if not given)
+function Awning.shelterOf(character, list)
+    list = list or Awning.shelters()
+    if #list == 0 then return nil end
+    local x, y = character:getX(), character:getY()
+    for _, s in ipairs(list) do
+        local dx, dy = x - s.x, y - s.y
+        if dx * dx + dy * dy <= s.r * s.r and Awning.isUnder(s.v, character) then
+            return s.v
         end
     end
     return nil
@@ -168,8 +235,8 @@ function Awning.apply(vehicle)
         part:setModelVisible(Awning.MODELS.canopy, canopy)
         part:setModelVisible(Awning.MODELS.poles, out)
         Awning.shown[id] = { vehicle = vehicle, canopy = canopy, poles = out }
+        State.sawPart(vehicle, part)             -- (only when it drew: the cut-away pass re-applies every 5 ticks)
     end
-    State.sawPart(vehicle, part)
 end
 
 local function track(vehicle, on)
@@ -253,7 +320,7 @@ function Awning.check(vehicle)
         return
     end
     local v = speed(vehicle)
-    if not vehicle:isEngineRunning() and v <= Awning.MOVE_KMH then return end
+    if not vehicle:isEngineRunning() and v <= Awning.MOVE_KMH and not Awning.hitched(vehicle) then return end
     if v > Awning.TEAR_KMH then
         local part = Awning.part(vehicle)
         part:setCondition(math.max(0, part:getCondition() - Awning.TEAR))
@@ -275,15 +342,25 @@ function Awning.OnTick()
     end
 end
 
--- drawing side: the cut-away follows the local players as they walk in and out from under a canopy
+-- drawing side: the cut-away follows the local players as they walk in and out from under a canopy. An awning that
+-- shows its canopy with no local player within its radius (Awning.radius) has nothing to cut away: it is left as it
+-- is (perf 2026-10-24); its state changes reach it through the State listener and part watcher as before
 local drawTicks = 0
 function Awning.OnTickClient()
     drawTicks = drawTicks + 1
     if drawTicks % 5 ~= 0 then return end
     for id, v in pairs(Awning.out) do
-        if not v:isRemovedFromWorld() and v:getId() == id then
-            Awning.apply(v)
+        if State.gone(v, id) then
+            Awning.out[id] = nil                         -- left the world (unloaded, removed): forget it here too
+        else
+            local e = Awning.shown[id]
+            if not (e and e.vehicle == v and e.canopy == e.poles and not State.anyNear(v, reachOf(id, v), drawTicks)) then
+                Awning.apply(v)
+            end
         end
+    end
+    for id, _ in pairs(Awning.reach) do
+        if Awning.out[id] == nil then Awning.reach[id] = nil end
     end
 end
 

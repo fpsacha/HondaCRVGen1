@@ -118,10 +118,10 @@ def single_player():
     # shut: held while the clip swings it down
     s.run("hood(v, false); TICK(%d)" % (HOLD - 10))
     check(s.eval("shown(v)") == "EngineBay", "held while the hood swings shut")
-    s.run("TICK(12)")
+    s.run("TICK(12 + HondaCRVGen1.Bay.EVERY)")              # the shut door is noticed on the next full pass
     check(s.eval("shown(v)") == "EngineBayLow", "the stand-in once the hold ran out")
     # the hold counts unpaused time only
-    s.run("hood(v, true); TICK(1); hood(v, false); TICK(1); PAUSED = true; TICK(%d)" % (3 * HOLD))
+    s.run("hood(v, true); TICK(HondaCRVGen1.Bay.EVERY); hood(v, false); TICK(HondaCRVGen1.Bay.EVERY); PAUSED = true; TICK(%d)" % (3 * HOLD))
     check(s.eval("shown(v)") == "EngineBay", "a paused game does not run the hold out")
     s.run("PAUSED = false; TICK(%d)" % HOLD)
     check(s.eval("shown(v)") == "EngineBayLow", "unpaused, the hold runs out")
@@ -133,9 +133,9 @@ def single_player():
     check(s.eval("shown(v)") == "EngineBayLow", "a locked hood: the stand-in after the grace")
     s.run("v.parts.EngineDoor.door.locked = false")
     # the hood off and back on
-    s.run("v.parts.EngineDoor:setInventoryItem(nil); TICK(1)")
+    s.run("v.parts.EngineDoor:setInventoryItem(nil); TICK(HondaCRVGen1.Bay.EVERY)")
     check(s.eval("shown(v)") == "EngineBay", "the hood removed: the bay is in plain view")
-    s.run("v.parts.EngineDoor:setInventoryItem(newItem('EngineDoor1')); TICK(%d)" % HOLD)
+    s.run("v.parts.EngineDoor:setInventoryItem(newItem('EngineDoor1')); TICK(%d + HondaCRVGen1.Bay.EVERY)" % HOLD)
     check(s.eval("shown(v)") == "EngineBayLow", "a shut hood refitted: the stand-in again")
     # idle ticks
     calls = s.eval("v.parts.CRVEngineBay.calls")
@@ -168,7 +168,7 @@ def single_player():
     s.run("L = crv(4, 'Base.HondaCRVGen1LiftSteel'); createPhysics(L)")
     check(s.eval("shown(L)") == "EngineBayLow", "the lifted car: the stand-in")
     # removed from the world / a new BaseVehicle under the same id
-    s.run("w.removed = true; TICK(1)")
+    s.run("w.removed = true; TICK(HondaCRVGen1.Bay.EVERY)")
     check(s.eval("HondaCRVGen1.Bay.cars[3]") is None, "a car removed from the world leaves the table")
     s.run("v2 = crv(1); VEHICLES[1] = v2; v2.parts.EngineDoor.door.open = true; createPhysics(v2); TICK(1)")
     check(s.eval("shown(v2)") == "EngineBay" and s.eval("HondaCRVGen1.Bay.cars[1].vehicle == v2"),
@@ -219,7 +219,7 @@ def multiplayer():
     check(S.eval("v.parts.CRVEngineBay.calls") == 0 and S.eval("shown(v)") == "", "server: nothing drawn")
     net.pump()
     for c in (A, B):
-        c.run("TICK(1)")
+        c.run("TICK(HondaCRVGen1.Bay.EVERY)")
         check(c.eval("shown(v)") == "EngineBay", "%s: the bay once the open door is synced" % c.player)
     # a player streaming in while the hood is open
     C = side("client", net, player="carol")
@@ -237,19 +237,72 @@ def multiplayer():
     # the hood taken off on the server, refitted
     net.item(7, "EngineDoor", False)
     for c in (A, B, C):
-        c.run("TICK(1)")
+        c.run("TICK(HondaCRVGen1.Bay.EVERY)")
         check(c.eval("shown(v)") == "EngineBay", "%s: the hood removed: the bay" % c.player)
     net.item(7, "EngineDoor", True)
     for c in (A, B, C):
-        c.run("TICK(%d)" % HOLD)
+        c.run("TICK(%d + HondaCRVGen1.Bay.EVERY)" % HOLD)
         check(c.eval("shown(v)") == "EngineBayLow", "%s: the hood refitted shut: the stand-in" % c.player)
     S.run("TICK(50)")
     check(S.eval("v.parts.CRVEngineBay.calls") == 0, "server: no setModelVisible, ever")
 
 
+COUNT_CALLS = r'''
+CALLS = 0
+local function counted(cls, name)
+    local f = cls[name]
+    cls[name] = function(...) CALLS = CALLS + 1; return f(...) end
+end
+for _, n in ipairs({ "getPartById", "getId", "isRemovedFromWorld" }) do counted(Veh, n) end
+for _, n in ipairs({ "getInventoryItem", "getDoor" }) do counted(Part, n) end
+counted(Door, "isOpen")
+'''
+
+
+def idle_cost():
+    """Perf (H-LUA-I2, 2026-10-24): Bay.OnTick updated every car every tick (~8 game calls a car a tick) for hoods
+    that are shut nearly always. Now a car is updated every tick only while its grace or hold runs, every car every
+    Bay.EVERY ticks. 20 idle CR-Vs over 600 ticks: game calls per tick before ~160, now a tenth; a hood closing on
+    one of them still counts its hold down every tick (the stand-in exactly CLOSE_HOLD after the full pass)."""
+    print("\n=== idle cost, 20 cars")
+    s = side("sp")
+    s.run("CARS = {}; for i = 1, 20 do local v = crv(100 + i); createPhysics(v); CARS[i] = v end")
+    s.run(COUNT_CALLS)
+    s.run("TICK(600)")
+    per_tick = s.eval("CALLS") / 600.0
+    every = s.eval("HondaCRVGen1.Bay.EVERY")
+    print("     %.1f game calls per tick (Bay.EVERY %d)" % (per_tick, every))
+    check(every >= 5 and per_tick <= 20 * 8.0 / every + 1, "20 idle cars: %.1f calls a tick (was ~160)" % per_tick)
+    # one car opens and shuts its hood here: per tick while its hold runs, the others still idle
+    s.run("v = CARS[1]; a = ISOpenVehicleDoor:new(newPlayer('me'), v, v.parts.EngineDoor); a:start(); a:complete(); "
+          "TICK(HondaCRVGen1.Bay.EVERY)")
+    check(s.eval("shown(v)") == "EngineBay", "the opened hood: the bay")
+    s.run("hood(v, false); TICK(HondaCRVGen1.Bay.EVERY); CALLS = 0; TICK(60)")
+    busy = s.eval("CALLS") / 60.0
+    check(s.eval("shown(v)") == "EngineBay" and s.eval("HondaCRVGen1.Bay.cars[101].hold") > 0, "held while it swings shut")
+    check(busy <= 8 + 20 * 8.0 / every + 1, "one hood swinging: %.1f calls a tick (the busy car every tick)" % busy)
+    s.run("TICK(%d)" % HOLD)
+    check(s.eval("shown(v)") == "EngineBayLow" and s.eval("HondaCRVGen1.Bay.cars[101].hold") == 0, "the stand-in after the hold")
+
+
+def hood_cache_reset():
+    """I-DIFF-1 (mutation bay-hoodcache): the car's entry keeps the hood part and its door (perf 2026-10-24); a part
+    init (Bay.Init: the parts re-made) must look them up again, or the bay follows the old hood's door."""
+    print("\n=== hood cache reset on init")
+    s = side("sp")
+    s.run("v = crv(3); createPhysics(v); TICK(20)")
+    check(s.eval("shown(v)") == "EngineBayLow", "hood cache: shut hood, the stand-in")
+    s.run("local h = v:addPart('EngineDoor'); h.item = newItem('EngineDoor1'); "
+          "h.door = setmetatable({ open = true, locked = false }, Door); createPhysics(v); TICK(20)")
+    check(s.eval("shown(v)") == "EngineBay",
+          "hood cache: after the part init the new (open) hood is read, not the cached old one (%s)" % s.eval("shown(v)"))
+
+
 def main():
     single_player()
     multiplayer()
+    idle_cost()
+    hood_cache_reset()
     print("\n%d FAIL(S)" % len(FAILS))
     for f in FAILS:
         print("  - " + f)

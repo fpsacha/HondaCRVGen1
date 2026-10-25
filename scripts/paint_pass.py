@@ -425,8 +425,13 @@ FINISH_LIFT = {"solid": 1.0, "metallic": 1.5, "pearl": 1.25}
 # spec/paint-colours.md) are unchanged; only how they are levelled: {Honda code: {"belt": vertical level replacing
 # LEVEL_BASE + LEVEL_GAIN x L, "up_k": x the up-lift toward the top colour}}. White's belt 111 -> 120 and its tops
 # toward ~200 (lift x2.7); silver's belt 86 -> 72 (tops ~135); gold keeps the formula and its beige
+# Sebring Silver 72 -> 100, tops x1.5 (bug wave 1, owner's choice 2026-10-24: "yes I want a light silver"): at the
+# KI5-range 72 the silver skin read as dark charcoal next to photos of the real NH-552M (scratch hunt_visual
+# ref_cmp.png); now a light metallic grey under Taffeta White's 120 / ~200, its tops lifting toward a cool
+# silver (paint_textures.PAINTS) so it stays apart from the warm white (belt 108 x1.4 with the chip's neutral top
+# read almost as the white skin in pzview, 2026-10-24) (spec/paint-colours.md)
 SKIN_TUNE = {"NH-578": {"belt": 120.0, "up_k": 2.7},
-             "NH-552M": {"belt": 72.0}}
+             "NH-552M": {"belt": 100.0, "up_k": 1.5}}
 
 # --- door handles, EX trim (build_details: body-colour bezel and grip) ----------------------------------------
 # A body-colour handle on a body-colour door reads by the dark finger pocket behind its grip (1998 EX in

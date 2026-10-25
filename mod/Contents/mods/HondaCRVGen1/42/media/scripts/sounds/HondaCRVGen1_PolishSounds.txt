@@ -2,8 +2,8 @@ module Base
 {
 	/* Honda CR-V (RD1) sounds, synthesised by scripts/features/_polish_sounds.py (no recordings).
 	   The engine layers are played and pitched by client/HondaCRVGen1_Polish.lua on top of the game's
-	   own VehicleEngineSmallCar event; the horn is the vehicle script's horn (looped while held). The doors,
-	   gate and hood use the vanilla sounds (2026-10-22). */
+	   own VehicleEngineSmallCar event. The horn (2026-10-24), doors, gate and hood (2026-10-22) use the
+	   vanilla sounds. */
 
 	sound CRVGen1EngineLow
 	{
@@ -28,18 +28,6 @@ module Base
 			file = media/sound/CRVGen1_EngineHigh.ogg,
 			distanceMax = 80,
 			volume = 0.6,
-		}
-	}
-
-	sound CRVGen1Horn
-	{
-		category = Vehicle,
-		loop = true,
-		clip
-		{
-			file = media/sound/CRVGen1_Horn.ogg,
-			distanceMax = 500,
-			volume = 0.8,
 		}
 	}
 }

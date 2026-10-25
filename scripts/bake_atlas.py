@@ -730,6 +730,11 @@ ZONE = {
     "lights_rh": (0.25, 0.0, 0.0), "lights_lh": (0.75, 0.0, 0.0), "lights_rt": (0.0, 0.75, 0.0), "lights_lt": (0.0, 0.25, 0.0),
     "stop_r": (0.5, 0.25, 0.0), "stop_l": (0.5, 0.75, 0.0),
     "hood": (1.0, 0.0, 0.5), "boot": (0.0, 1.0, 0.5),
+    # the combined stop / tail lens's stop part (bug wave 3, H-VP-1): its side's stop zone with blue 2/255, 0.0078
+    # from the stop colour, so the game and Project Viewpoint (both match a zone within 0.01) light it as a stop
+    # lamp, and the mod's shader (gen_shaders LAMP_RULE) tells it from the high stop lamp (plain stop_l). Never
+    # baked (snap_zones would round it away): compose_textures.mark_combined_stop writes it on the shipped Mask
+    "stop_rc": (0.5, 0.25, 0.0078431), "stop_lc": (0.5, 0.75, 0.0078431),
 }
 LAMP_MATS = {"Phare", "Phare_vitre", "Phare_orange", "Reflect_orange", "Feux_rouge", "Feux_orange", "Feux_stop",
              "Feux_blanc", "Reflect_red", "AccLens"}
@@ -785,7 +790,17 @@ STOP_ZONE = "stop_l"
 # side's stop zone, its lower half the tail zone, so braking lights the cluster, not only the high stop lamp
 # (until 2026-10-17 stop_r had no texel and the main lamps never lit on the brake), and with the lights on
 # and braking the whole lens glows. Feux_rouge spans z 1.174..1.392 on each side (crv_kotris.blend).
+# Bug wave 3 (H-VP-1, 2026-10-24): wave 1's lamp guard made the whole lens a tail zone (a tail / stop edge inside
+# one UV island is no zone at every cap), so Project Viewpoint, which lights each zone from the game's own
+# switches, lit only the high stop lamp on the brake in daylight. Now the two parts are their own islands, packed
+# as one rigid group per side with the stop block planar_uv.GROUP_GAP away from the tail block (shell_tris:
+# LENS_GROUPS), so no capped texel mixes them; the game lights the tail part with the lights and the stop part on
+# the brake, and the mod's shader still glows the whole lens softly with the lights (compose marks the stop part
+# stop_rc / stop_lc, gen_shaders LAMP_RULE).
 TAIL_STOP_Z = 1.283
+LENS_OBJECT = "body"                 # the D-pillar clusters (kotris's Feux_* faces) are body faces ...
+LENS_Y = -1.0                        # ... behind this
+LENS_GROUPS = {"lights_rt": (0, 1), "stop_r": (0, 2), "lights_lt": (1, 1), "stop_l": (1, 2)}   # zone -> (group, split)
 STOP_BOX = (0.15, 1.45, -1.80)       # |x| below, z above, y below: kotris's lamp is |x| < 0.09, z 1.53-1.58, y -1.85..-1.89
 FEATURE_ZONES = features.zones()     # feature meshes (acc_<feature>_*): the zone each dents and greys with
 
@@ -1267,7 +1282,7 @@ def shell_tris(objs, space="shell"):
     from mathutils import Vector
     zone_names = list(ZONE)
     mat_names = []
-    cols = {k: [] for k in ("pos", "obj", "mat", "gen", "zone", "w", "loops")}
+    cols = {k: [] for k in ("pos", "obj", "mat", "gen", "zone", "w", "group", "split", "loops")}
     for oi, ob in enumerate(objs):
         me = ob.data
         nv, npoly = len(me.vertices), len(me.polygons)
@@ -1300,12 +1315,23 @@ def shell_tris(objs, space="shell"):
         pos = co[vidx[loops]]
         cen = pos.mean(axis=1)
         zone = [zone_names.index(zone_of(ob.name, names[mi[i]], Vector(cen[i]))) for i in range(npoly)]
+        # the D-pillar lamp clusters as rigid groups (planar_uv GROUP_GAP): tail and stop parts never share an
+        # island and lie GROUP_GAP apart on the sheet (LENS_GROUPS)
+        grp = np.full(npoly, -1, dtype=np.int64)
+        spl = np.zeros(npoly, dtype=np.int64)
+        if ob.name == LENS_OBJECT:
+            for i in range(npoly):
+                g = LENS_GROUPS.get(zone_names[zone[i]])
+                if g is not None and cen[i][1] < LENS_Y and not _stop_lamp(names[mi[i]], Vector(cen[i])):
+                    grp[i], spl[i] = g
         cols["pos"].append(pos)
         cols["obj"].append(np.full(npoly, oi))
         cols["mat"].append(lut[np.minimum(mi, len(names) - 1)])
         cols["gen"].append(gen)
         cols["zone"].append(np.array(zone, dtype=np.int64))
         cols["w"].append(np.array(_face_weights(ob, space), dtype=np.float64))
+        cols["group"].append(grp)
+        cols["split"].append(spl)
         cols["loops"].append(loops)
     tris = {k: np.concatenate(v) for k, v in cols.items() if k != "loops"}
     tris.update(obj_names=[ob.name for ob in objs], mat_names=mat_names, zone_names=zone_names)
@@ -1776,10 +1802,46 @@ def _paint_zones(objs):
             attr = me.color_attributes.new(ZONE_ATTR, 'FLOAT_COLOR', 'CORNER')
         names = [m.name if m else "?" for m in me.materials]
         part = _base_name(ob.name)
+        low = _lens_low_zones(part) if part == LENS_OBJECT and part != ob.name else None
+        mw = ob.matrix_world
         for poly in me.polygons:
-            col = ZONE[zone_of(part, names[poly.material_index], poly.center)]
+            z = zone_of(part, names[poly.material_index], poly.center)
+            if low is not None and z in LENS_GROUPS:
+                z = low(mw @ poly.center) or z
+            col = ZONE[z]
             for li in poly.loop_indices:
                 attr.data[li].color = (col[0], col[1], col[2], 1.0)
+
+
+def _lens_low_zones(part):
+    """For the full-detail twin of LENS_OBJECT: point (world) -> the D-pillar lamp zone of the nearest LOW face
+    (zone_of at its centre), None off the lens. The zone bake projects the twin onto the low faces, and the
+    twin's lens faces split at TAIL_STOP_Z by their own centres: along the split a low stop triangle (in the stop
+    block of its rigid group, LENS_GROUPS) took tail texels from the twin, which no guard can make pure (bug wave
+    3, scratch build: 0.7-3.7 % of the lens's lit fragments unlit at 1024-256). With the low face's zone the
+    projected zones follow the low triangles, the ones planar_uv grouped."""
+    from mathutils import Vector
+    from mathutils.bvhtree import BVHTree
+    ob = bpy.data.objects.get(part)
+    if ob is None:
+        return None
+    me, mw = ob.data, ob.matrix_world
+    names = [m.name if m else "?" for m in me.materials]
+    verts = [mw @ v.co for v in me.vertices]
+    polys = [list(p.vertices) for p in me.polygons]
+    zones = []
+    for p in me.polygons:
+        c = sum((verts[i] for i in p.vertices), Vector()) / len(p.vertices)
+        zones.append(zone_of(part, names[p.material_index], c))
+    tree = BVHTree.FromPolygons(verts, polys)
+
+    def look(pt):
+        _loc, _n, fi, dist = tree.find_nearest(pt, 0.02)
+        if fi is None:
+            return None
+        z = zones[fi]
+        return z if z in LENS_GROUPS else None
+    return look
 
 
 # Weathering: a dirt field over the whole car, baked as its own map (shell_grime etc.) and mixed

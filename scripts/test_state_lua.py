@@ -5,6 +5,7 @@ state migrated onto it (HondaCRVGen1Accessories.lua).
 
     python scripts\test_state_lua.py
 """
+import os
 import sys
 
 from lua_harness import Net, Side
@@ -161,6 +162,86 @@ def multiplayer():
           "server-only refusal, unknown car ok")
 
 
+ONLINE = r'''
+function getOnlinePlayers()
+    local list = {}
+    for _, name in ipairs({ 'alice', 'bob', 'carol' }) do if PLAYERS[name] then list[#list + 1] = PLAYERS[name] end end
+    return { size = function() return #list end, get = function(_, i) return list[i + 1] end }
+end
+'''
+
+
+def announcements():
+    """H-MP-1 / H-MP-I3 (2026-10-24). Every "changed" carries seq (rising per server run) and session (the run's id);
+    a client applies a key's announcement only when it is newer than the last one it applied for that car, so a resent
+    old command (ClientCommand is reliable but unordered) cannot undo a newer value. A new car object under the id, or
+    another server run, starts fresh. The command goes only to the online players within State.STREAM tiles of the car
+    on both axes (vanilla's relevance: at most 12 chunks = 96 tiles, UdpConnection.isRelevantTo); a player who
+    streams the car in later reads the state from its mod data."""
+    net = Net()
+    server = Side("server", net)
+    a = Side("client", net, player="alice")
+    b = Side("client", net, player="bob")
+    c = Side("client", net, player="carol")
+    for side in (server, a, b, c):
+        side.load(*STATE)
+        side.run(DEFINE)
+    S = "HondaCRVGen1.State"
+    server.run(ONLINE)
+    check(server.eval("%s.STREAM" % S) >= 96 + 16, "the stream margin covers vanilla's widest relevance (96 tiles)")
+    # alice at the car, bob 100 tiles off on x (inside the widest relevance), carol 300 tiles off
+    server.run("newPlayer('alice', 100, 100); newPlayer('bob', 200, 100); newPlayer('carol', 400, 100); "
+               "v = newVehicle(7, {'CRVTest', 'CRVOther'})")
+    for side in (a, b, c):
+        side.run("v = newVehicle(7, {'CRVTest', 'CRVOther'}); %s.refresh(v); LOG = {}" % S)
+    server.run("%s.set(v, 'test_colour', 'blue')" % S)
+    cmds = [p for p in net.to_clients if p[1] == "changed"]
+    check(sorted(p[3] for p in cmds) == ["alice", "bob"], "sent to the players in stream range only: %s" % [p[3] for p in cmds])
+    net.drop_commands = False
+    net.moddata.clear()                                            # carol: not even the mod data reaches her (not relevant)
+    net.pump()
+    check(a.eval("%s.get(v, 'test_colour')" % S) == "blue" and b.eval("%s.get(v, 'test_colour')" % S) == "blue", "alice, bob")
+    check(c.eval("%s.get(v, 'test_colour')" % S) == "none" and not log(c), "carol heard nothing")
+    # carol drives up: the car streams in again (a new object) with the mod data; her init reads it
+    c.run("v = newVehicle(7, {'CRVTest', 'CRVOther'}); v.parts.CRVTest.md.crv_test_colour = 'blue'; %s.refresh(v, 'test_colour')" % S)
+    check(c.eval("%s.get(v, 'test_colour')" % S) == "blue", "carol streams it in later: the state comes with the car")
+    # numbering: two quick changes, the first resent late (after the second), and a duplicate
+    server.run("%s.set(v, 'test_colour', 'black')" % S)
+    c1 = net.take()
+    server.run("%s.set(v, 'test_colour', 'none')" % S)
+    c2 = net.take()
+    seqs = [p[2]["seq"] for k, p in c1 + c2 if k == "cmd" and p[3] == "alice"]
+    check(len(seqs) == 2 and seqs[0] < seqs[1], "rising numbers %s" % seqs)
+    a.run("LOG = {}")
+    net.deliver(c2 + c1 + c2)
+    a.run("TICK(%d)" % (a.eval("%s.POLL" % S) * 4))
+    check(a.eval("%s.get(v, 'test_colour')" % S) == "none", "the late older announcement is dropped: %s" % a.eval("%s.get(v, 'test_colour')" % S))
+    check([e["value"] for e in log(a)] == ["none"], "one change heard, nothing undone: %s" % log(a))
+    # a stale one for a key does not block another key
+    server.run("%s.set(v, 'test_level', 2)" % S)
+    net.pump()
+    check(a.eval("%s.get(v, 'test_level')" % S) == 2, "another key's newer announcement applies")
+    # a new car object under the id (streamed out and back): fresh record, an announcement with an old number applies
+    old = [p for k, p in c1 if k == "cmd" and p[3] == "alice"][0]
+    a.run("v = newVehicle(7, {'CRVTest', 'CRVOther'}); %s.refresh(v)" % S)
+    a.trigger("OnServerCommand", old[0], old[1], a.table(old[2]))
+    check(a.eval("%s.get(v, 'test_colour')" % S) == "black", "a new car object starts a fresh record")
+    # the server restarts: numbers from 1 again under a new session id; the client takes them
+    a.trigger("OnServerCommand", "HondaCRVGen1", "changed",
+              a.table({"vehicle": 7, "key": "test_colour", "value": "blue", "seq": 1, "session": -5}))
+    check(a.eval("%s.get(v, 'test_colour')" % S) == "blue", "another server run (session): its first number applies")
+    a.trigger("OnServerCommand", "HondaCRVGen1", "changed",
+              a.table({"vehicle": 7, "key": "test_colour", "value": "none", "seq": 1, "session": -5}))
+    check(a.eval("%s.get(v, 'test_colour')" % S) == "blue", "the same number again (a duplicate) is dropped")
+    # no player list (getOnlinePlayers missing): every client, as before
+    server.run("getOnlinePlayers = nil; %s.set(v, 'test_level', 3)" % S)
+    check([p[3] for p in net.to_clients if p[1] == "changed"] == [None], "no player list: broadcast")
+    net.pump()
+    check(c.eval("%s.get(v, 'test_level')" % S) == 3, "broadcast reached carol")
+    print("STATE announcements: numbered (late / duplicate dropped, new car and new server run start fresh), "
+          "sent only to players in stream range")
+
+
 def rack_over_mp():
     """The roof rack's cargo state, set on the server from the container and drawn by a client."""
     net = Net()
@@ -220,10 +301,104 @@ end
     print("STATE rack cargo over multiplayer: server derives, client draws; reinstall reset caught by the poll")
 
 
+def caches_pruned():
+    """H-LUA-3 (2026-10-24): the drawing side's per-car caches (Acc.shown, Clutter.shown, Awning.shown; Function's
+    seatsShown) kept every CR-V a client ever drew. State.prunable registers a cache; the client poll (State.POLL
+    ticks) drops the entries of cars that left the world by the same test it prunes State.tracked with (State.gone:
+    removed from the world, or another car now under that id), and keeps the rest. The hunt's probe: 50 kitted cars
+    streamed in and out on a client, then 300 ticks."""
+    c = Side("client", Net(), player="bob")
+    c.load(*ACC)
+    c.run(DEFINE)
+    S = "HondaCRVGen1.State"
+    c.run("CACHE = %s.prunable({}); %s.prunable(CACHE)" % (S, S))
+    check(c.eval("(function() local n = 0 for _, t in ipairs(%s.caches) do if t == CACHE then n = n + 1 end end return n end)()" % S) == 1,
+          "registered once")
+    c.run("for id = 1, 50 do local v = newVehicle(id, {'CRVRoofRack'}); CACHE[id] = { vehicle = v }; "
+          "local rack = v.parts.CRVRoofRack; rack.item = newItem('Base.CRVGen1_RoofRack'); rack.cont = newContainer(50, 0); "
+          "rack.models = { 'CRVRoofRack', 'RackLoad1', 'RackLoad2', 'RackLoad3' }; HondaCRVGen1.Acc.Init(v, rack) end")
+    c.run("live = newVehicle(77, {'CRVTest'}); CACHE[77] = { vehicle = live }; CACHE[78] = { vehicle = live }")
+    c.run("for id = 1, 50 do VEHICLES[id].removed = true; VEHICLES[id] = nil end; TICK(300)")
+    left = c.eval("(function() local t = {} for id, _ in pairs(CACHE) do t[#t + 1] = id end table.sort(t) "
+                  "return table.concat(t, ',') end)()")
+    check(left == "77", "removed cars and a stale id dropped, the live car kept: %s" % left)
+    n = c.eval("(function() local n = 0 for _ in pairs(HondaCRVGen1.Acc.shown) do n = n + 1 end return n end)()")
+    check(n == 0, "Acc.shown: %d removed cars still referenced" % n)
+    check(c.eval("%s.gone(nil, 1)" % S) and not c.eval("%s.gone(live, 77)" % S) and c.eval("%s.gone(live, 78)" % S),
+          "State.gone: nil, the live car, another id")
+    # the reach a timed action's complete() re-checks (State.near): in the car, or within REACH tiles
+    c.run("p = newPlayer('walker', 100, 100)")
+    check(c.eval("%s.near(p, live)" % S), "at the car: near")
+    c.run("p.x = 100 + %s.REACH + 0.5" % S)
+    check(not c.eval("%s.near(p, live)" % S), "past REACH: not near")
+    c.run("p.vehicle = live")
+    check(c.eval("%s.near(p, live)" % S), "inside the car: near")
+    print("STATE caches: prunable caches lose the cars that left the world on the client poll; State.near")
+
+
+def part_cache_reset():
+    """I-DIFF-1 (mutation partof-nocache-reset): the client poll keeps each tracked car's part objects (State.partOf,
+    perf 2026-10-24); State.refresh, which every part init calls, must drop that cache, or a part made after the
+    first poll (cached as missing) is never read again: its synced values are lost to the poll."""
+    c = Side("client", Net(), player="bob")
+    c.load(*STATE)
+    c.run(DEFINE)
+    S = "HondaCRVGen1.State"
+    c.run("v = newVehicle(9, {'CRVOther'}); %s.refresh(v); TICK(%s.POLL * 2)" % (S, S))
+    check(c.eval("%s.tracked[9].parts.CRVTest" % S) is False,"the poll cached CRVTest as missing")
+    c.run("p = v:addPart('CRVTest'); p.md.crv_test_colour = 'blue'; %s.refresh(v)" % S)   # the part's init
+    c.run("LOG = {}; p.md.crv_test_colour = 'black'; TICK(%s.POLL * 2)" % S)              # a mod data packet alone
+    got = [(e["key"], e["value"]) for e in log(c)]
+    check(got == [("test_colour", "black")], "the poll reads the new part after its init: %s" % got)
+    print("STATE part cache: a part init (State.refresh) drops the poll's part cache")
+
+
+def smashed():
+    """H-PLAY-4 (2026-10-24): crash-scene CR-Vs spawned like new: BaseVehicle.setSmashed(side) (42.21) looks up
+    SmashedCarDefinitions.cars[scriptName][side:lower()] and, only when it finds a script there, replaces the car with
+    a new one of it (part conditions 0.5 +- 60, engine 0, glove box gone, VehicleEngine.setSmashed); "skin" is read
+    with rawgetInt (missing = -1: keep the car's skin). Every CR-V script must map every side to itself, also when
+    vanilla's file (which sets cars = {}) loads after ours."""
+    import glob
+    import re
+    import crv_paths
+    from lua_harness import LUA_DIR
+    vanilla = os.path.join(crv_paths.GAME_MEDIA, "lua", "shared", "Definitions", "SmashedCarDefinitions.lua")
+    check(os.path.exists(vanilla), "vanilla %s" % vanilla)
+    vdir = os.path.join(os.path.dirname(LUA_DIR), "scripts", "vehicles")
+    scripts = sorted("Base." + n for f in glob.glob(os.path.join(vdir, "*.txt"))
+                     for n in re.findall(r"^\s*vehicle\s+(\w+)", open(f, encoding="utf-8").read(), re.M))
+    check(len(scripts) == 3, "3 CR-V vehicle scripts: %s" % scripts)
+    for order in ("vanilla first", "ours first"):
+        s = Side("server" if order == "ours first" else "sp")
+        files = ("shared/HondaCRVGen1_State.lua", "shared/HondaCRVGen1_Vehicles.lua", "shared/HondaCRVGen1_Smashed.lua")
+        if order == "vanilla first":
+            s.load(vanilla, *files)
+        else:
+            s.load(*files)
+            s.load(vanilla)
+            check(s.eval("SmashedCarDefinitions.cars['Base.HondaCRVGen1']") is None, "vanilla's file reset the table")
+            s.trigger("OnGameBoot")
+        for script in scripts:
+            for side in ("Front", "Rear", "Left", "Right"):
+                got = s.eval("(SmashedCarDefinitions.cars[%r] or {})[string.lower(%r)]" % (script, side))
+                check(got == script, "%s: setSmashed(%r) -> %r (want the same script)" % (order, side, got))
+            check(s.eval("SmashedCarDefinitions.cars[%r].skin" % script) is None, "%s: no skin entry (keeps the paint)" % script)
+        check(s.eval("SmashedCarDefinitions.cars['Base.CarNormal'].front") == "Base.CarNormalSmashedFront", "vanilla entries kept")
+        s.run("SmashedCarDefinitions.cars['Base.HondaCRVGen1'] = { front = 'Other.Mod' }")
+        s.trigger("OnInitGlobalModData")
+        check(s.eval("SmashedCarDefinitions.cars['Base.HondaCRVGen1'].front") == "Other.Mod", "another mod's entry is not replaced")
+    print("STATE smashed: every CR-V script maps each crash side to itself in SmashedCarDefinitions (either load order)")
+
+
 def main():
     single_player()
     multiplayer()
+    announcements()
     rack_over_mp()
+    caches_pruned()
+    part_cache_reset()
+    smashed()
     print("STATE LUA TESTS OK")
 
 

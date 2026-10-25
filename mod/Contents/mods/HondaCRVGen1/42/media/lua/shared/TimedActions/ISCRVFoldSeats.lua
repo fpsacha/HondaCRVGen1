@@ -1,5 +1,6 @@
 require "TimedActions/ISBaseTimedAction"
 require "HondaCRVGen1_Shared"
+require "HondaCRVGen1_Lift"                -- Lift.report: the outcome to the acting player
 
 -- Fold the CR-V's rear seats flat (on = true) as a bare load floor (mode "cargo") or into a made-up bed
 -- (mode "bed", the default), switch folded seats from one to the other (on = true with the other mode: a
@@ -47,16 +48,21 @@ function ISCRVFoldSeats:isValid()
     return (ISCRVFoldSeats.check(self.vehicle, self.on, self.mode))
 end
 
+-- from a seat (the in-car radial) the character neither turns nor plays the standing loot animation, as vanilla's
+-- in-car actions (ISOpenCloseVehicleWindow)
 function ISCRVFoldSeats:waitToStart()
+    if self.character:getVehicle() then return false end
     self.character:faceThisObject(self.vehicle)
     return self.character:shouldBeTurning()
 end
 
 function ISCRVFoldSeats:update()
+    if self.character:getVehicle() then return end
     self.character:faceThisObject(self.vehicle)
 end
 
 function ISCRVFoldSeats:start()
+    if self.character:getVehicle() then return end
     self:setActionAnim("Loot")
     self.character:SetVariable("LootPosition", "Mid")
 end
@@ -76,16 +82,27 @@ function ISCRVFoldSeats:doneText()
     return want == S.MODE_BED and "IGUI_CRV_SeatsFolded" or "IGUI_CRV_SeatsFoldedFlat"
 end
 
--- the acting client: feedback only, no state
+-- the acting client: no state, and no outcome text: the authoritative side may still refuse (complete())
 function ISCRVFoldSeats:perform()
-    HaloTextHelper.addText(self.character, getText(self:doneText()))
     ISBaseTimedAction.perform(self)
 end
 
--- the authoritative side: check again, then change the state (saved, synced, listeners fired)
+-- the authoritative side: check again (the player still at the car: the server never runs isValid for a
+-- client's action), then change the state (saved, synced, listeners fired) and tell the player how it went
+-- (HondaCRVGen1.Lift.report: a halo in single player, the server's answer to that client in multiplayer)
 function ISCRVFoldSeats:complete()
-    if not ISCRVFoldSeats.check(self.vehicle, self.on, self.mode) then return false end
+    local report = HondaCRVGen1.Lift.report
+    if not HondaCRVGen1.State.near(self.character, self.vehicle) then
+        report(self.character, false, nil)
+        return false
+    end
+    local ok, why = ISCRVFoldSeats.check(self.vehicle, self.on, self.mode)
+    if not ok then
+        report(self.character, false, why)
+        return false
+    end
     HondaCRVGen1.Shared.setFold(self.vehicle, self.on, ISCRVFoldSeats.target(self.on, self.mode))
+    report(self.character, true, self:doneText())
     return true
 end
 

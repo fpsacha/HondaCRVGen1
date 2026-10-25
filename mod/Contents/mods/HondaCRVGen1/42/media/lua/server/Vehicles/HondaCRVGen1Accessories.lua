@@ -166,8 +166,34 @@ function Acc.Create(vehicle, part)
     end
 end
 
--- vehicles with something fitted, by vehicle id: { vehicle = BaseVehicle, snap = { partId = condition } }
+-- vehicles with something fitted, by vehicle id: { vehicle = BaseVehicle, snap = { partId = condition },
+-- list = the fitted protectors (Acc.fittedList; nil: rebuild it on the next pass) }
 Acc.watch = {}
+
+-- the car's fitted protectors with their part objects, built once per change (init, install, uninstall, an item
+-- that went away) rather than looked up on every pass (perf 2026-10-24: the loop asked every Acc.COVERS part of
+-- every watched car for its item every 3 ticks): { { id =, part =, covered = { { id =, part = }, ... } }, ... }
+function Acc.fittedList(vehicle)
+    local list = {}
+    for accId, covered in pairs(Acc.COVERS) do
+        local acc = vehicle:getPartById(accId)
+        if acc and acc:getInventoryItem() then
+            local parts = {}
+            for _, pid in ipairs(covered) do
+                local p = vehicle:getPartById(pid)
+                if p then parts[#parts + 1] = { id = pid, part = p } end
+            end
+            list[#list + 1] = { id = accId, part = acc, covered = parts }
+        end
+    end
+    return list
+end
+
+-- the protector list of a watched car is stale (a protector installed, removed or re-made)
+function Acc.dirty(vehicle)
+    local e = vehicle and Acc.watch[vehicle:getId()]
+    if e and e.vehicle == vehicle then e.list = nil end
+end
 
 function Acc.Init(vehicle, part)
     local hook = Acc.PART_HOOKS[part:getId()]            -- (armour feature) the guard's variant model
@@ -182,6 +208,8 @@ function Acc.Init(vehicle, part)
     local e = Acc.watch[id]
     if not e or e.vehicle ~= vehicle then
         Acc.watch[id] = { vehicle = vehicle, snap = {} }
+    else
+        e.list = nil                                     -- a protector (re)fitted: list them again
     end
 end
 
@@ -198,6 +226,7 @@ function Acc.UninstallComplete(vehicle, part, item)
         Acc.shown[id] = nil
         State.set(vehicle, Acc.RACK_KEY, 0)
     end
+    if Acc.COVERS[part:getId()] then Acc.dirty(vehicle) end
     vehicle:doDamageOverlay()
 end
 
@@ -225,13 +254,20 @@ end
 
 -- authoritative side: cars with a roof rack fitted whose fill is followed, by vehicle id: { vehicle = BaseVehicle }
 Acc.racks = {}
--- drawing side: the cargo state each car's rack shows now, by vehicle id: { vehicle = BaseVehicle, state = 0..3 }
-Acc.shown = {}
+-- drawing side: the cargo state each car's rack shows now, by vehicle id: { vehicle = BaseVehicle, state = 0..3 };
+-- the State poll drops the cars that left the world
+Acc.shown = State.prunable({})
 
 -- 0 = empty or no rack, else the cargo state for the container's fill. ItemContainer.getMaxWeight()
 -- is the capacity for a part container and getCapacityWeight() what is in it (both floats).
+local fillState
 function Acc.rackState(part)
     if not part or not part:getInventoryItem() then return 0 end
+    return fillState(part)
+end
+
+-- the state for the rack container's fill (the rack's item already known to be there)
+fillState = function(part)
     local c = part:getItemContainer()
     if not c then return 0 end
     local max = c:getMaxWeight()
@@ -276,6 +312,8 @@ function Acc.resetRack(vehicle, part)
         local e = Acc.racks[id]
         if not e or e.vehicle ~= vehicle then
             Acc.racks[id] = { vehicle = vehicle }
+        else
+            e.part = nil                         -- a part init: look the part up again
         end
         Acc.updateRack(vehicle, part)
     end
@@ -292,6 +330,11 @@ State.watchPart(Acc.RACK_PART, function(vehicle, part)
     Acc.showRack(vehicle, part)
 end)
 
+-- perf 2026-10-24: the rack part is kept in its entry (Acc.resetRack, from the part's init, drops it), the stored
+-- state is read from the part's mod data and State.set only runs when the fill moved to another state; a car no
+-- player is within Acc.RACK_NEAR tiles of is looked at every Acc.RACK_SLOW-th pass (State.due: nobody can load it)
+Acc.RACK_NEAR = 30
+Acc.RACK_SLOW = 8
 local rackTicks = 0
 function Acc.OnTickRack()
     rackTicks = rackTicks + 1
@@ -300,64 +343,150 @@ function Acc.OnTickRack()
         local v = e.vehicle
         if v == nil or v:isRemovedFromWorld() or v:getId() ~= id then
             Acc.racks[id] = nil
-        else
-            local part = v:getPartById(Acc.RACK_PART)
-            if part and part:getInventoryItem() then
-                Acc.updateRack(v, part)
-            else
+        elseif State.due(e, v, Acc.RACK_NEAR, Acc.RACK_SLOW, rackTicks) then
+            local part = e.part
+            if part == nil then
+                part = v:getPartById(Acc.RACK_PART) or false
+                e.part = part
+            end
+            local state = part and part:getInventoryItem() and fillState(part)
+            if not state then
                 Acc.racks[id] = nil                 -- rack gone: its models went with the item
+            elseif state ~= State.getFrom(part:getModData(), Acc.RACK_KEY) then
+                Acc.updateRack(v, part)
             end
         end
     end
 end
 
--- One pass over a vehicle. Returns false once nothing protective is fitted any more.
-function Acc.guard(vehicle, snap)
-    local any = false
-    for accId, covered in pairs(Acc.COVERS) do
-        local acc = vehicle:getPartById(accId)
-        local fitted = acc and acc:getInventoryItem() ~= nil
-        any = any or fitted
-        local active = fitted and acc:getCondition() > 0
-        if fitted and covered[1] == accId and not active then
-            active = (snap[accId] or 0) > 0             -- covers itself: a hit took it to 0 since the last pass
-        end
-        local floorOf = active and Acc.FLOOR[accId]
-        for _, pid in ipairs(covered) do
-            local p = vehicle:getPartById(pid)
-            if p and p:getInventoryItem() then
-                local now, was = p:getCondition(), snap[pid]
-                local floor = floorOf and floorOf(vehicle, acc, p)
-                if floor and (was == nil or was < floor) then was = floor end
-                if active and was and now < was then
-                    p:setCondition(was)
-                    vehicle:transmitPartCondition(p)
-                    snap[pid] = was
-                    local w = wear(accId, was - now, vehicle, acc)
-                    if w > 0 then
-                        acc:setCondition(math.max(0, acc:getCondition() - w))
-                        vehicle:transmitPartCondition(acc)
-                        active = acc:getCondition() > 0
-                    end
-                    if pid == accId then snap[pid] = acc:getCondition() end   -- its own wear is not a hit
-                else
-                    snap[pid] = now                     -- repaired, replaced, or unguarded: follow it
-                end
+-- One pass over a vehicle (e: its Acc.watch entry, or a bare snapshot table for a one-off pass). Returns false
+-- once nothing protective is fitted any more.
+-- (re)build a watch entry's protector list; the parts no listed protector covers any more lose their snapshot, so
+-- they follow from scratch when one is fitted again (an old snapshot would be given back as if it were a hit)
+local function relist(vehicle, e)
+    e.list = Acc.fittedList(vehicle)
+    local keep = {}
+    for _, f in ipairs(e.list) do
+        for _, c in ipairs(f.covered) do keep[c.id] = true end
+    end
+    for pid, _ in pairs(e.snap) do
+        if not keep[pid] then e.snap[pid] = nil end
+    end
+    return e.list
+end
+
+-- perf 2026-10-24: a pass costs one call per covered part while nothing happens to the car (its condition, compared
+-- with the snapshot; a protector that covers itself, the arch guards, is that part). The protector's item, condition
+-- and floor and the covered part's item are asked only when a covered part's condition moved, when it has no
+-- snapshot or sits under its last known floor, and on every Acc.ITEM_EVERY-th pass (the sweep). An uninstall leaves a
+-- part's condition as it was (42.21 VehiclePart.setInventoryItem(null) does not touch it), so a removal nobody
+-- reported (Acc.dirty: every protector's uninstall complete calls it) is followed within ITEM_EVERY passes, long
+-- before anything can be installed again; a covered part found with another item than the one it had (a swap between
+-- two looks) is followed from its new condition, never given back the old item's. The floor (Acc.FLOOR) is asked once
+-- per protector item: a FLOOR function answers from the protector's installed item alone
+Acc.ITEM_EVERY = 8
+
+function Acc.guard(vehicle, e)
+    if e.snap == nil then e = { snap = e } end           -- (old form: Acc.guard(vehicle, snap))
+    local snap = e.snap
+    local list = e.list or relist(vehicle, e)
+    if #list == 0 then return false end
+    local pass = (e.pass or 0) + 1
+    e.pass = pass
+    local sweep = Acc.ITEM_EVERY <= 1 or pass % Acc.ITEM_EVERY == 1
+    for _, f in ipairs(list) do
+        local accId, acc = f.id, f.part
+        local covered = f.covered
+        local accCond = nil                              -- the protector's condition, read once a pass when needed
+        local loaded, active, floorOf = false, false, nil
+        for _, c in ipairs(covered) do
+            local pid, p = c.id, c.part
+            local own = pid == accId
+            local now
+            if own then
+                if accCond == nil then accCond = acc:getCondition() end
+                now = accCond
             else
-                snap[pid] = nil
+                now = p:getCondition()
+            end
+            local was = snap[pid]
+            local known = f.floors and f.floors[pid] or nil   -- the floor found for it before (no call)
+            if sweep or was == nil or now ~= was or (known and was < known) then
+                if not loaded then                       -- the protector, once this pass
+                    loaded = true
+                    local accItem = acc:getInventoryItem()
+                    if accItem == nil then
+                        e.list = nil                     -- it came off (a debug removal, a lift conversion): list again
+                        break
+                    end
+                    if accCond == nil then accCond = acc:getCondition() end
+                    active = accCond > 0
+                    if not active and covered[1] and covered[1].id == accId then
+                        active = (snap[accId] or 0) > 0  -- covers itself: a hit took it to 0 since the last pass
+                    end
+                    floorOf = active and Acc.FLOOR[accId] or nil
+                    if f.item ~= accItem then
+                        f.item, f.floors = accItem, {}   -- the floors are per protector item
+                    end
+                end
+                local floor = nil
+                if floorOf then
+                    floor = f.floors[pid]
+                    if floor == nil then
+                        floor = floorOf(vehicle, acc, p) or false
+                        f.floors[pid] = floor
+                    end
+                    floor = floor or nil
+                end
+                local item = own or p:getInventoryItem()
+                if item and not own then
+                    if c.item ~= nil and item ~= c.item then was = nil end   -- another item since: follow it
+                    c.item = item
+                end
+                if item then
+                    if floor and (was == nil or was < floor) then was = floor end
+                    if active and was and now < was then
+                        p:setCondition(was)
+                        vehicle:transmitPartCondition(p)
+                        snap[pid] = was
+                        local w = wear(accId, was - now, vehicle, acc)
+                        if w > 0 then
+                            acc:setCondition(math.max(0, acc:getCondition() - w))
+                            vehicle:transmitPartCondition(acc)
+                            accCond = acc:getCondition()
+                            active = accCond > 0
+                        elseif own then
+                            accCond = was                -- it gave itself back what it lost
+                        end
+                        if own then snap[pid] = accCond end     -- its own wear is not a hit
+                    else
+                        snap[pid] = now                  -- repaired, replaced, or unguarded: follow it
+                    end
+                else
+                    snap[pid] = nil
+                    c.item = nil
+                end
             end
         end
     end
-    return any
+    if e.list == nil then return #relist(vehicle, e) > 0 end   -- one came off: anything left to watch?
+    return true
 end
 
+-- a car no player is within Acc.NEAR tiles of is guarded every Acc.SLOW-th pass (State.due): what damages a car
+-- comes from a player's doing (zombies thump a car they chase a player into or round, crashes, shots); the glass
+-- floor (Armour.GLASS_FLOOR) covers several thumps between two passes anyway
+Acc.NEAR = 60
+Acc.SLOW = 4
 local ticks = 0
 function Acc.OnTick()
     ticks = ticks + 1
     if ticks % Acc.EVERY ~= 0 then return end
     for id, e in pairs(Acc.watch) do
         local v = e.vehicle
-        if v == nil or v:isRemovedFromWorld() or v:getId() ~= id or not Acc.guard(v, e.snap) then
+        if v == nil or v:isRemovedFromWorld() or v:getId() ~= id then
+            Acc.watch[id] = nil
+        elseif State.due(e, v, Acc.NEAR, Acc.SLOW, ticks) and not Acc.guard(v, e) then
             Acc.watch[id] = nil
         end
     end

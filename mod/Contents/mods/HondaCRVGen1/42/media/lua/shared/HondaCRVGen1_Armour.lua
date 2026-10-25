@@ -155,6 +155,8 @@ end
 
 function Armour.UninstallComplete(vehicle, part, item)
     vehicle:doDamageOverlay()
+    -- the protection loop lists its protectors again at once (it asks a protector's item only now and then)
+    if HondaCRVGen1.Acc and HondaCRVGen1.Acc.dirty then HondaCRVGen1.Acc.dirty(vehicle) end
 end
 
 -- armoured windows stay shut (opening only; closing is always allowed)

@@ -67,7 +67,7 @@ _TABLE_PROPS = [
     ("IsLow", ""),
     ("IsMoveAble", ""),
     ("IsTable", ""),
-    ("Material", "SmallSheetMetal"),
+    ("Material", "SmallMetalPlates"),         # a scrap / repair definition of ISMoveableDefinitions (SmallSheetMetal is an item, not one)
     ("Material2", "Plastic"),
     ("PickUpWeight", "60"),
     ("Surface", "28"),

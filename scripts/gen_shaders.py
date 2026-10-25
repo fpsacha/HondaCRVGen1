@@ -55,7 +55,44 @@ CONSTS = ("\nconst float CRV_SMOOTH = 0.0;   // 0 = stock 3-step banding, 1 = pl
           "const float CRV_SHINE = 28.0;\n"
           "const float CRV_SPEC = 0.0;\n"
           "const float CRV_RIM = 0.0;\n"
-          "const float CRV_GLOSS = 0.33;  // body reflection x (0.5 + 1.5 gloss): 0.33 = the stock reflection\n")
+          "const float CRV_GLOSS = 0.33;  // body reflection x (0.5 + 1.5 gloss): 0.33 = the stock reflection\n"
+          "const float CRV_TAIL = %.2f;   // combined stop / tail lens: its glow with the tail lights only (brake = 1)\n"
+          "const float CRV_MARK = 0.0039;  // Mask blue >= this on a stop zone: the combined lens's stop part (2/255)\n"
+          % 0.0)
+# Combined stop / tail lamps (bug wave 1, 2026-10-24). The RD1's D-pillar lens is one dual-filament lamp: tail with the
+# lights, full on the brake. The game has no zone for that (BaseVehicle lights lights_*t from the tail light parts and
+# stop_* from stoplightsOn + battery alone), and a lens split into a tail half and a stop half draws a dark seam at
+# every texture size (the shader matches zone colours within 0.01 on a bilinear sample). compose_textures.lamp_guard
+# gives each D-pillar lens ONE zone, its side's tail zone; here a tail-zone fragment lights at TAIL_LEVEL of the lit
+# lens with the tail lights on, and fully while braking (lights on or off), unless the lamp is uninstalled. The high
+# stop lamp (stop zone) and the head lamps keep the stock rule. TextureLightsEnables2[c][r] pairs with texen2[c][r]
+# (dommat4): tail R / L = [0][3] / [1][0] (colZone20 / 21), stop R / L = [1][1] / [1][2] (colZone22 / 23).
+# Bug wave 3 (H-VP-1, 2026-10-24): Project Viewpoint never runs this shader and lights each zone from the game's
+# switches, so the all-tail lens lit only with the lights there (braking in daylight: just the high stop lamp).
+# The lens is now its tail part (tail zone) and its stop part (the side's stop zone), separate UV islands far
+# enough apart that no capped texel mixes them (bake_atlas LENS_GROUPS, planar_uv.GROUP_GAP): the game's stock
+# rule and Viewpoint light the tail part with the lights and the stop part on the brake. The combined rule stays
+# here for the look the owner approved (the whole lens glows softly with the lights, fully on the brake): the
+# stop part carries Mask blue 2/255 (stop_rc / stop_lc, compose_textures.mark_combined_stop; 0.0078 from the
+# stop colour, inside every renderer's 0.01) and lights like the tail part of its side: CRV_TAIL with that
+# side's tail light, fully on the brake, grey with that side's tail lamp removed. The high stop lamp (plain
+# stop_l) and the head lamps keep t1en.
+TAIL_LEVEL = 0.40
+MARK_LEVEL = 0.0039                  # CRV_MARK: half the tag's 2/255
+CONSTS = CONSTS.replace("%.2f;" % 0.0, "%.2f;" % TAIL_LEVEL)
+assert "CRV_MARK = %.4f;" % MARK_LEVEL in CONSTS
+LAMP_RULE = ("\t// combined stop / tail lens (gen_shaders TAIL_LEVEL): its tail part (tail zones) and its stop part (a stop zone\n"
+             "\t// with Mask blue >= CRV_MARK) glow at CRV_TAIL with their side's tail light, fully while braking, and grey\n"
+             "\t// with their side's tail lamp removed; the high stop lamp and the head lamps keep t1en\n"
+             "\tfloat crvMark = step(CRV_MARK, texColorMask.z);\n"
+             "\tfloat crvCombR = texen2[1][1] * crvMark;\n"
+             "\tfloat crvCombL = texen2[1][2] * crvMark;\n"
+             "\tt4en = max(t4en, step(0.5, crvCombR * TextureUninstall2[0][3] + crvCombL * TextureUninstall2[1][0]));\n"
+             "\tfloat crvTailZone = clamp(texen2[0][3] + texen2[1][0] + crvCombR + crvCombL, 0.0, 1.0);\n"
+             "\tfloat crvTailOn = step(0.5, (texen2[0][3] + crvCombR) * TextureLightsEnables2[0][3]"
+             " + (texen2[1][0] + crvCombL) * TextureLightsEnables2[1][0]) * (1.0 - t4en);\n"
+             "\tfloat crvBrake = step(0.5, TextureLightsEnables2[1][1] + TextureLightsEnables2[1][2]) * (1.0 - t4en);\n"
+             "\tfloat crvLamp = mix(t1en, max(CRV_TAIL * crvTailOn, crvBrake), crvTailZone);\n")
 
 
 def read(name):
@@ -102,6 +139,10 @@ def build():
     fr = must(fr, "\tfloat noTintAlpha = clamp(windowAlpha + frontAlpha + tailAlpha, 0.0, 1.0);\n",
               "\tfloat noTintAlpha = clamp(windowAlpha + frontAlpha + tailAlpha, 0.0, 1.0);\n"
               "\tif (t4en > 0.5 && windowAlpha > 0.5) discard;\n")
+    fr = must(fr, "\tfloat t4en = step(0.5, dommat4(texen1, TextureUninstall1) + dommat4(texen2, TextureUninstall2) );\n",
+              "\tfloat t4en = step(0.5, dommat4(texen1, TextureUninstall1) + dommat4(texen2, TextureUninstall2) );\n" + LAMP_RULE)
+    fr = must(fr, "\tcol = mix(col, texColorLights.xyz, texColorLights.a*t1en);\n",
+              "\tcol = mix(col, texColorLights.xyz, texColorLights.a*crvLamp);\n")
     fr = must(fr, "(1.0-ref_en)*(0.05 + ReflectionParam.z*0.3)", "(1.0-ref_en)*(0.05 + ReflectionParam.z*0.3)*(0.5 + 1.5*gloss)")
     fr = must(fr, "\tcol *= lighting * TintColourNew;\n",
               "\tcol *= lighting * TintColourNew;\n\n"

@@ -17,7 +17,7 @@ Meshes (BUILD, Blender): two wheels in the wheel FBX, centred on their own hub l
                     nuts and a small cap, on the same tyre
   the AT tyre       a 24-sided lathe carcass (groove floors 13 mm under the tread) with an all-terrain
                     tread of our own (2026-10-14 review: the old two rows of big bricks read as a mud
-                    or military tyre): 30 pitches of four staggered rows, two interlocking centre rows
+                    or military tyre): 26 pitches of four staggered rows, two interlocking centre rows
                     of slanted ~4.5 x 4.5 cm blocks either side of a zig-zag centre groove, and two
                     shoulder rows whose blocks roll over the shoulder into moderate sidewall lugs (4-8 mm
                     proud, long / short; on the outer side only since 2026-10-19), every section convex
@@ -51,7 +51,10 @@ TYRE_R = 0.381                  # 30 x 9.50R15 LT
 TYRE_W = 0.241
 TYRE_HALF = 0.1205
 SEG = 24                        # lathe segments (the stock wheel's 24)
-PITCHES = 30                    # tread pitches (7.98 cm at the crown): four staggered blocks each
+PITCHES = 26                    # tread pitches (9.2 cm at the crown): four staggered blocks each. 30 until the
+                                # optimization pass 2026-10-24 (208 tris a tyre, 5 tyres a lifted car): 26 reads as
+                                # the same tread at every zoom; 24 read chunkier, and dropping the blocks' walls
+                                # along the axle showed holes in three-quarter views (both tried, optgeo)
 ALLOY_HUB = (4.0, 0.0, TYRE_R)  # where BUILD puts the wheels (object space = world, identity objects)
 STEEL_HUB = (6.0, 0.0, TYRE_R)
 STOCK_X, STEEL_X = "0.7200", "0.7350"   # wheel offset x: the alloy keeps the stock track, the steel wheel's
@@ -396,7 +399,8 @@ def _steel_rim(F, hub, fr, P):
     face_in = rings2[0]
     # the face between r 0.170 and 0.112 with eight round vent windows: one plane (a cone's sliver
     # triangles shaded as streaks across the face)
-    n_holes, hole_r, hole_c, hole_n, t_face = 8, 0.024, 0.141, 10, 0.036
+    # octagonal windows (decagons until 2026-10-24: 4.8 cm across, 16 px at the game's zoom; 64 tris a rim)
+    n_holes, hole_r, hole_c, hole_n, t_face = 8, 0.024, 0.141, 8, 0.036
     holes = []
     for h in range(n_holes):
         a = 2 * math.pi * (h + 0.5) / n_holes
@@ -909,7 +913,7 @@ TRANSLATIONS = {
     },
     "Tooltip": {
         "Tooltip_CRV_Lift_Kit": "A 3 in. suspension lift for the Honda CRV: longer springs, spacers, shocks, "
-                                "four 30x9.50R15 all-terrain tyres and a set of black steel wheels.",
+                                "four 30x9.50R15 all-terrain tires and a set of black steel wheels.",
         "Tooltip_CRV_Lift_Magazine": "Teaches how to build a lift kit for a compact SUV.",
         "Tooltip_CRV_Lift_Needs": "Needs: ",
         "Tooltip_CRV_Lift_NeedKit": "a CRV lift kit",
@@ -938,10 +942,10 @@ DISTRIBUTIONS = [
     # the kit: rare, in garages, auto shops and mechanic crates (MechanicsItem also follows the Mechanics loot slider)
     {"list": "GarageMechanics", "item": "Base.CRVGen1_LiftKit", "weight": 0.3},
     {"list": "CrateMechanics", "item": "Base.CRVGen1_LiftKit", "weight": 0.4},
-    {"list": "MechanicShelfMisc", "item": "Base.CRVGen1_LiftKit", "weight": 0.2},
+    {"list": "MechanicShelfSuspension", "item": "Base.CRVGen1_LiftKit", "weight": 0.2},
     {"list": "MechanicSpecial", "item": "Base.CRVGen1_LiftKit", "weight": 0.5},
     # the magazine: car-supply and automotive shelves, magazine racks
-    {"list": "CarSupplyMagazines", "item": "Base.CRVGen1_LiftMagazine", "weight": 2.0},
+    {"list": "CarSupplyLiterature", "item": "Base.CRVGen1_LiftMagazine", "weight": 2.0},
     {"list": "BookstoreAutomotive", "item": "Base.CRVGen1_LiftMagazine", "weight": 1.0},
     {"list": "MagazineRackMixed", "item": "Base.CRVGen1_LiftMagazine", "weight": 0.2},
     {"list": "CrateMagazines", "item": "Base.CRVGen1_LiftMagazine", "weight": 0.2},

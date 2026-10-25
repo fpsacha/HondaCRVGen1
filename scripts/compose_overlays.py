@@ -9,7 +9,8 @@ rectangles. How the game draws it (ISVehicleMechanics.renderCarOverlay, B42): th
 <prefix>base.png untinted at CarList.x/y (10, 0), then every part's <prefix><img>.png at the same
 spot, multiplied by the part's condition colour at alpha 0.9 (a missing part blinks red); the
 mouse test (isMouseOverPart) uses PartList[id].vehicles[prefix] = {x, y, x2, y2} in WINDOW
-coordinates, i.e. image coordinates + (10, 0). Every image is 263 x 600.
+coordinates, i.e. image coordinates + (10, 0). Every image is drawn on a 263 x 600 sheet and shipped cut
+after its last drawn column and row (ship_crop: same screen pixels, a quarter to a thirtieth of the video memory).
 
 The vanilla sheets (4door_, suv_ ...) are line art: the base holds every outline (white, ~2 px on the
 body, ~1.6 px on the panels), the car's inside filled opaque black, the part icons (battery, engine,
@@ -815,6 +816,21 @@ def preview(images, lua_rects, path):
     return path
 
 
+def ship_crop(im):
+    """The sheet as shipped: cut after its last drawn column and row (one transparent texel kept), never on the
+    left or top. Video memory (optimization pass, 2026-10-24, projectzomboid.jar B42): a loose PNG is padded
+    to the next power of two per side (ImageData widthHW / heightHW) with no size cap, so every 263 x 600 sheet
+    was a 512 x 1024 RGBA texture, 2 MB, 112 MB for the set once the mechanics window has drawn it (vanilla's
+    own sheets sit in a packed atlas). UIElement.DrawTextureScaledUniform draws a texture at x + offsetX, y +
+    offsetY, getWidth() x getHeight() times the scale: what is cut is fully transparent and drew nothing, the
+    rest lands on the same screen pixels (the hit rectangles are Lua numbers, untouched)."""
+    a = np.asarray(im.convert("RGBA"))[..., 3]
+    ys, xs = np.nonzero(a)
+    if not len(xs):
+        return im
+    return im.crop((0, 0, min(im.width, int(xs.max()) + 2), min(im.height, int(ys.max()) + 2)))
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     os.makedirs(os.path.dirname(LUA), exist_ok=True)
@@ -831,7 +847,7 @@ def main():
         if old.startswith(PREFIX) and old.endswith(".png"):
             os.remove(os.path.join(OUT, old))
     for img, im in images.items():
-        im.save(os.path.join(OUT, PREFIX + img + ".png"))
+        ship_crop(im).save(os.path.join(OUT, PREFIX + img + ".png"))
     # window coordinates (the sheet is drawn at CAR_X, CAR_Y), in the form the mouse test reads them:
     # x >= x and x <= x2 and y > y and y <= y2 on whole pixels, so the half-open pixel box [x0, x1) x
     # [y0, y1) is x0, y0 - 1, x1 - 1, y1 - 1
