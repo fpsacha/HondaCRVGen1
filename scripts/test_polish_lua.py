@@ -85,6 +85,17 @@ function Veh:getZ() return 0 end
 function Veh:isEngineRunning() return self.engine == true end
 function Veh:getEngineSpeed() return self.rpm or 0 end
 function Veh:getCurrentSpeedKmHour() return self.kmh or 0 end
+-- BaseVehicle.getTransmissionNumber: the TransmissionNumber index (R -1, N 0, Speed1.. 1..)
+function Veh:getTransmissionNumber() return self.gear or 0 end
+-- 42.21 CarController.control_Reverse(kmh) on the engine speed, one 60 Hz frame (GameTime multiplier / 0.8 = 1):
+-- toward 50 x kmh at most 100 rpm a frame down, toward 7000 at 0.02 (Speed Demon 0.06) of the gap up; the gear is R
+function reverseFrame(car, demon)
+    local e, s = car.rpm or 0, 1.5 * (car.kmh or 0)
+    car.gear = -1
+    e = e - math.min(0.5 * (e - 1000 * s / 30), 100)
+    e = e - math.min((demon and 0.06 or 0.02) * (e - 7000), 30 - s)
+    car.rpm = e
+end
 function Veh:getSkinIndex() return self.skin or 0 end
 -- the game's skin list: `template! = SUV` loads the vanilla SUV template's skin first, then our 8
 -- (VehicleScript.Load reads elements in order, 42.21), so 9 skins and skin 0 = vehicle_suvshell
@@ -409,6 +420,59 @@ def option_tests():
     print("POLISH OPTION: per-player engine volume (default 100 %, saved value read at start, x sandbox, 0 = off): ok")
 
 
+def reverse_tests():
+    """Player report (0.5.1): "strange whining noise when you go in reverse? very high pitch". 42.21's reverse
+    holds the engine speed at about 2100 rpm (Speed Demon: 5430) whatever the road speed; 5430 put the high layer
+    (the whine) at full volume while the car crawled backwards. In reverse the layer follows the road speed
+    through a short reverse gear on the low layer only; forward is unchanged."""
+    s = side("sp")
+    ceiling = 2400 / 1800.0          # a short reverse gear: at most 2400 rpm on the 1800 rpm low clip
+    s.run("car = spawnCar(1, 0); car.engine = true; car.rpm = 800; car.gear = 0; TICK(60)")
+    for demon, settle in ((False, 2100), (True, 5433)):
+        # ten seconds holding reverse: 0 to the game's ~27 km/h reverse top speed (maxSpeedReverse 40 / 1.5)
+        s.run("""car.rpm = 800; car.kmh = 0; car.gear = 0; TICK(120)
+                 MAXHV, MAXLP, MINLV = 0, 0, 1
+                 for i = 1, 600 do
+                     car.kmh = -27 * math.min(1, i / 400)
+                     reverseFrame(car, %s)
+                     TICK(1)
+                     if i > 30 then
+                         for _, e in ipairs(EMITTERS) do
+                             for _, snd in pairs(e.sounds) do
+                                 if snd.playing and snd.name == 'CRVGen1EngineHigh' then MAXHV = math.max(MAXHV, snd.volume) end
+                                 if snd.playing and snd.name == 'CRVGen1EngineLow' then
+                                     MAXLP = math.max(MAXLP, snd.pitch); MINLV = math.min(MINLV, snd.volume)
+                                 end
+                             end
+                         end
+                     end
+                 end""" % ("true" if demon else "false"))
+        who = "Speed Demon" if demon else "a driver"
+        check(abs(s.eval("car.rpm") - settle) < 60, "the game model: %s reverses at %d rpm (%s)" % (who, settle, s.eval("car.rpm")))
+        hv, lp, lv = s.eval("MAXHV"), s.eval("MAXLP"), s.eval("MINLV")
+        check(hv <= 0.01, "%s reversing: the high (whine) layer stays under 0.01 (max %.3f)" % (who, hv))
+        check(lp <= ceiling + 0.03, "%s reversing: the low layer's pitch stays under %.2f (max %.3f)" % (who, ceiling, lp))
+        check(lv > 0.05, "%s reversing: the low layer is heard (min volume %.3f)" % (who, lv))
+    check(s.eval("HondaCRVGen1.Polish.REVERSE_MAX") < s.eval("HondaCRVGen1.Polish.XFADE[1]"),
+          "the reverse ceiling sits under the cross-fade (the high layer stays silent)")
+    # the reverse layer rpm: idle plus the road speed through the gear, a little throttle, the ceiling
+    rpm = lambda e, kmh, gear: s.eval("(function() car.rpm = %r; car.kmh = %r; car.gear = %r; return HondaCRVGen1.Polish.rpm(car) end)()" % (e, kmh, gear))
+    check(abs(rpm(2000, 0, -1) - 1200) < 1e-6, "reverse against a wall: idle + slip (%s)" % rpm(2000, 0, -1))
+    check(abs(rpm(2000, -10, -1) - 1800) < 1e-6, "reverse at 10 km/h: 1800 rpm (%s)" % rpm(2000, -10, -1))
+    check(rpm(5333, -27, -1) == s.eval("HondaCRVGen1.Polish.REVERSE_MAX"), "Speed Demon at full reverse: the ceiling")
+    # a remote car whose engine speed reads 0: the reverse estimate, not the forward one
+    check(abs(rpm(0, -25, -1) - 2300) < 1e-6, "remote car reversing at 25 km/h, no engine speed: 2300 rpm (%s)" % rpm(0, -25, -1))
+    # forward unchanged: the game's rpm, and the road-speed fallback (abs) when it reads 0
+    check(rpm(6000, 120, 4) == 6000 and rpm(2000, 30, 1) == 2000, "forward: the game's engine speed as before")
+    check(abs(rpm(0, 60, 3) - 3500) < 1e-6 and abs(rpm(0, 0, 0) - 800) < 1e-6, "forward fallback as before")
+    check(rpm(900, -3, 0) == 900, "rolling back in neutral: the game's (idle) engine speed")
+    # no getTransmissionNumber (an older build): a road speed under -1 km/h counts as reverse
+    s.run("Veh.getTransmissionNumber = nil")
+    check(abs(rpm(5333, -10, None) - 1800) < 1e-6 and rpm(5333, 10, None) == 5333, "without the gear: the road speed's sign")
+    print("POLISH REVERSE: the layer stays on the low clip under %.2fx in reverse (2100 / Speed Demon 5430 rpm in game), "
+          "forward unchanged: ok" % ceiling)
+
+
 def mp_tests():
     net = Net()
     server = side("server", net)
@@ -460,6 +524,7 @@ def main():
     start_guard_tests()
     occupant_tests()
     option_tests()
+    reverse_tests()
     mp_tests()
     print("POLISH LUA TESTS OK")
 

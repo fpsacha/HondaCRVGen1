@@ -11,8 +11,10 @@ between 2600 and 3600 rpm. Each plays on a PRIVATE world emitter of its own that
 FMODSoundEmitter.setPitch (42.21) writes the pitch into every sound of the emitter it is called on, so
 pitching on the vehicle's own emitter would bend the vanilla engine and the horn too, and two layers
 on one emitter would share one pitch. Engine speed: BaseVehicle:getEngineSpeed() (rpm, the
-dashboard's needle); a remote car whose speed reads 0 while running (not synced to every client:
-unverified) falls back to an estimate from its road speed. Volume: sandbox PolishEngineVolume
+dashboard's needle; 42.21 VehiclePhysicsPacket carries it and the gear to every client); a car whose
+engine speed reads 0 while running falls back to an estimate from its road speed. In reverse the
+game's engine speed is a flat ~2100 rpm (Speed Demon ~5430) with no gear ratio, so the layer follows the
+road speed through a short reverse gear instead and stays on the low layer (REVERSE_*). Volume: sandbox PolishEngineVolume
 (percent, default 100; 0 = off) times the player's own mod option (Options > Mods, percent, default 100; 0 = off),
 held at MAX_MASTER (2x) when both are turned up.
 Which cars: the one the player sits in, then the nearest tracked running CR-Vs within RANGE (Polish.candidates).
@@ -46,6 +48,17 @@ Polish.PITCH_MS = 50           -- at most one setPitch per layer this often
 Polish.PITCH_STEP = 0.02       -- relative pitch change worth a setPitch (about a third of a semitone)
 Polish.SILENT = 0.002          -- a layer this quiet is not re-pitched (it is when it is heard again)
 Polish.SMOOTH = 0.25           -- rpm smoothing per 60 Hz frame: the gear changes glide
+-- Reverse (player report 0.5.1, "strange whining noise when you go in reverse"). 42.21 CarController.control_Reverse
+-- has no reverse ratio: per frame it adds -min(0.5 * (rpm - 50 * kmh), 100) and +k * (7000 - rpm) (k = 0.02, 0.06
+-- with Speed Demon) in that order, so the engine speed sits near 2100 rpm (Speed Demon: 5430) whatever the road speed, from a
+-- standstill on. 5430 put the high layer (the whine) at full volume while the car crawls backwards. The layer follows
+-- the road speed through a short reverse gear instead, plus a little throttle slip, held under XFADE[1] (low layer
+-- only). Reverse = BaseVehicle:getTransmissionNumber() < 0 (TransmissionNumber.R index -1; VehiclePhysicsPacket syncs
+-- it with the engine speed to every client), or, without that method, a road speed under -REVERSE_KMH.
+Polish.REVERSE_RPM_PER_KMH = 60
+Polish.REVERSE_SLIP = 400      -- rpm the throttle adds over the road-speed figure (the game's rpm above idle, capped)
+Polish.REVERSE_MAX = 2400      -- the layer's ceiling in reverse: under XFADE[1], so the high layer stays silent
+Polish.REVERSE_KMH = 1
 
 Polish.cars = {}               -- vehicle -> { emLow, emHigh, low, high, rpm, at, pitch = {}, pitchAt = {} }
 
@@ -104,12 +117,24 @@ Events.OnGameBoot.Add(Polish.createOptions)
 Events.OnGameStart.Add(Polish.OnGameStart)
 
 --- engine speed in rpm: the engine's own, or an estimate from the road speed when it reads 0
+-- (in reverse: the road speed through the reverse gear, see REVERSE_RPM_PER_KMH)
+function Polish.isReverse(vehicle, kmh)
+    if vehicle.getTransmissionNumber then
+        return (tonumber(vehicle:getTransmissionNumber()) or 0) < 0
+    end
+    return kmh < -Polish.REVERSE_KMH
+end
+
 function Polish.rpm(vehicle)
     local r = 0
     if vehicle.getEngineSpeed then r = tonumber(vehicle:getEngineSpeed()) or 0 end
+    local kmh = tonumber(vehicle:getCurrentSpeedKmHour()) or 0
+    if Polish.isReverse(vehicle, kmh) then
+        local slip = r > 100 and clamp(r - Polish.IDLE, 0, Polish.REVERSE_SLIP) or 0
+        return clamp(Polish.IDLE + math.abs(kmh) * Polish.REVERSE_RPM_PER_KMH + slip, Polish.IDLE, Polish.REVERSE_MAX)
+    end
     if r > 100 then return r end
-    local kmh = math.abs(tonumber(vehicle:getCurrentSpeedKmHour()) or 0)
-    return Polish.IDLE + clamp(kmh * 45, 0, 4800)
+    return Polish.IDLE + clamp(math.abs(kmh) * 45, 0, 4800)
 end
 
 --- {lowPitch, lowVolume, highPitch, highVolume} for an rpm (pure: tested by scripts/test_polish_lua.py)
