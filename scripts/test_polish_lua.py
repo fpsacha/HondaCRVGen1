@@ -96,6 +96,88 @@ function reverseFrame(car, demon)
     e = e - math.min((demon and 0.06 or 0.02) * (e - 7000), 30 - s)
     car.rpm = e
 end
+-- 42.21 CarController.update, one 60 Hz frame of the driver's keys on the engine speed and the gear (bytecode,
+-- multiplier / 0.8 = 1). keys: "fwd", "back", "brake" or nil. dir = the road speed's sign, 0 under 0.5 m/s.
+--   forward key: rolling backwards -> isBreak, else isGas; backward key: rolling forwards -> isBreak, else isGasR;
+--   brake key -> isBreak; isBreak -> control_Braking, isGas -> control_ForwardNew, isGasR -> control_Reverse,
+--   nothing -> control_NoControl.
+-- control_NoControl: gear N; engine speed over the idle (script engineIdleSpeed, 750 by default) -20 a frame,
+--   at or under it +20. control_Braking: gear N; over the idle -Rand(10..30), else +Rand(0..19).
+-- control_ForwardNew (simplified: first gear, +10 rpm a frame up to its gearChange (4000 here), -min(0.5 x over, 10) above).
+-- The road speed: a plain model (reverse tops out at maxSpeedReverse 40 / 1.5 = 26.7 km/h, where control_Reverse
+-- zeroes the engine force).
+GAME_IDLE = 750
+function gameFrame(car, keys, demon)
+    local kmh = car.kmh or 0
+    local dir = (math.abs(kmh) < 1.8) and 0 or (kmh > 0 and 1 or -1)
+    local state = "none"
+    if keys == "brake" then state = "brake"
+    elseif keys == "fwd" then state = dir < 0 and "brake" or "fwd"
+    elseif keys == "back" then state = dir > 0 and "brake" or "back" end
+    local e = car.rpm or 0
+    if state == "back" then
+        reverseFrame(car, demon)
+        car.kmh = math.max(kmh - 0.07, -26.7)
+        return
+    elseif state == "fwd" then
+        car.gear = 1                                    -- first gear: up 10 a frame, over its gearChange down
+        car.rpm = e > 4000 and (e - math.min(0.5 * (e - 4000), 10)) or math.min(e + 10, 4000)
+        car.kmh = kmh + 0.08
+        return
+    elseif state == "brake" then
+        car.gear = 0
+        car.rpm = e > GAME_IDLE and (e - math.random(10, 30)) or (e + math.random(0, 19))
+        local d = keys == "brake" and 0.5 or 0.35
+        car.kmh = kmh > 0 and math.max(kmh - d, 0) or math.min(kmh + d, 0)
+        return
+    end
+    car.gear = 0
+    car.rpm = e > GAME_IDLE and (e - 20) or (e + 20)
+    car.kmh = kmh > 0 and math.max(kmh - 0.05, 0) or math.min(kmh + 0.05, 0)
+end
+-- every playing layer's pitch and volume this frame: LAYERS.low / LAYERS.high = { pitch, volume }
+function readLayers()
+    local out = {}
+    for _, e in ipairs(EMITTERS) do
+        for _, snd in pairs(e.sounds) do
+            if snd.playing then
+                local k = snd.name == "CRVGen1EngineHigh" and "high" or "low"
+                out[k] = { snd.pitch, snd.volume }
+            end
+        end
+    end
+    return out
+end
+-- drive a sequence { {keys, frames}, ... } and measure the layers frame by frame: the worst frame-to-frame jump
+-- of a heard layer's pitch (semitones), of either layer's volume, and the loudest the high layer got
+function driveAndMeasure(car, seq, demon)
+    local prev = readLayers()
+    local worstSemi, worstVol, maxHigh, trace = 0, 0, 0, {}
+    for _, step in ipairs(seq) do
+        for i = 1, step[2] do
+            gameFrame(car, step[1], demon)
+            TICK(1)
+            local now = readLayers()
+            for _, k in ipairs({ "low", "high" }) do
+                local a, b = prev[k], now[k]
+                if a and b then
+                    if math.min(a[2], b[2]) > 0.01 then          -- heard on both frames
+                        local semi = math.abs(12 * math.log(b[1] / a[1]) / math.log(2))
+                        if semi > worstSemi then worstSemi = semi end
+                    end
+                    local dv = math.abs(b[2] - a[2])
+                    if dv > worstVol then worstVol = dv end
+                end
+            end
+            if now.high and now.high[2] > maxHigh then maxHigh = now.high[2] end
+            trace[#trace + 1] = { step[1] or "-", car.gear, car.kmh, car.rpm,
+                                  now.low and now.low[1] or 0, now.low and now.low[2] or 0,
+                                  now.high and now.high[1] or 0, now.high and now.high[2] or 0 }
+            prev = now
+        end
+    end
+    return worstSemi, worstVol, maxHigh, trace
+end
 function Veh:getSkinIndex() return self.skin or 0 end
 -- the game's skin list: `template! = SUV` loads the vanilla SUV template's skin first, then our 8
 -- (VehicleScript.Load reads elements in order, 42.21), so 9 skins and skin 0 = vehicle_suvshell
@@ -473,6 +555,73 @@ def reverse_tests():
           "forward unchanged: ok" % ceiling)
 
 
+REVERSE_SEQS = {
+    # (keys, frames at 60 Hz) on gameFrame, the 42.21 CarController model
+    "hold R from a stop, release, coast": [("back", 360), (None, 180)],
+    "short taps, 0.5 s on / 0.5 s off": [("back", 30), (None, 30)] * 8,
+    "quick taps, 0.25 s on / 0.4 s off": [("back", 15), (None, 24)] * 10,
+    "R from a 12 km/h forward roll (brakes, then R)": [("fwd", 150), ("back", 360), (None, 120)],
+    "top reverse speed, then the brake key": [("back", 480), ("brake", 120), (None, 60)],
+    "R, then the forward key until first gear": [("back", 300), ("fwd", 50)],
+    "R, release 1 s, R again": [("back", 180), (None, 60), ("back", 180), (None, 120)],
+}
+
+
+def lua_seq(seq):
+    return "{" + ",".join("{%s,%d}" % ("nil" if k is None else repr(k), n) for k, n in seq) + "}"
+
+
+def reverse_pop_tests():
+    """Player report (0.5.2): "it still pops up when reversing". The game's R lasts only while the key is held: a
+    release (control_NoControl) or the brakes (control_Braking) put the gear in N at once with the engine speed still at
+    the reverse 2100 (Speed Demon 5430) rpm, decaying ~20 rpm a frame, and every tap goes R -> N -> R. 0.5.2 left
+    reverse mode with the gear: each release jumped the layer to the game's high figure (Speed Demon: the high layer
+    at ~0.5 volume) and each new press dropped it again (up to 17 semitones in one frame). Measured frame by frame over
+    real reversing sequences: no heard layer's pitch moves more than 2 semitones a frame (forward driving's own worst
+    is ~1.7), no volume more than 0.05 a frame, and the high layer stays silent. Forward driving is untouched: no
+    reverse latch or glide, the layer follows the game's engine speed exactly."""
+    for demon in (False, True):
+        who = "Speed Demon" if demon else "a driver"
+        for name, seq in REVERSE_SEQS.items():
+            s = side("sp")
+            s.run("car = spawnCar(1, 0); car.engine = true; car.rpm = 750; car.kmh = 0; car.gear = 0; TICK(120)")
+            s.run("W1, W2, W3 = driveAndMeasure(car, %s, %s)" % (lua_seq(seq), "true" if demon else "false"))
+            semi, dv, hv = s.eval("W1"), s.eval("W2"), s.eval("W3")
+            check(semi <= 2.0, "%s, %s: a pitch jump of %.2f semitones in one frame (want <= 2)" % (who, name, semi))
+            check(dv <= 0.05, "%s, %s: a volume jump of %.3f in one frame (want <= 0.05)" % (who, name, dv))
+            check(hv <= 0.01, "%s, %s: the high (whine) layer reached %.3f (want silent)" % (who, name, hv))
+    # forward driving: never latched, never gliding, the layer's target is the game's engine speed every frame
+    s = side("sp")
+    s.run("""car = spawnCar(1, 0); car.engine = true; car.rpm = 750; car.kmh = 0; car.gear = 0; TICK(120)
+             BAD = 0
+             local seq = { {'fwd', 480}, {nil, 120}, {'fwd', 180}, {'brake', 120}, {nil, 120} }
+             for _, st in ipairs(seq) do
+                 for i = 1, st[2] do
+                     gameFrame(car, st[1], true)
+                     TICK(1)
+                     local c = HondaCRVGen1.Polish.cars[car]
+                     if c.rev or c.glide or HondaCRVGen1.Polish.rpm(car, c) ~= car.rpm then BAD = BAD + 1 end
+                 end
+             end""")
+    check(s.eval("BAD") == 0, "forward driving: %d frames off the game's engine speed (want 0)" % s.eval("BAD"))
+    # the latch: R, then N while rolling back with the game still high -> still reverse; the game's engine speed
+    # down to the reverse figure, or a forward gear, or rolling forwards -> released
+    P = "HondaCRVGen1.Polish"
+    s.run("lc = {}; car.rpm, car.kmh, car.gear = 5430, -10, -1")
+    check(s.eval("%s.rpm(car, lc)" % P) == 1800 and s.eval("lc.rev") is True, "R at 10 km/h: the reverse figure, latched")
+    s.run("car.gear = 0")
+    check(s.eval("%s.rpm(car, lc)" % P) == 1800 and s.eval("lc.rev") is True, "released (N), game still at 5430: held")
+    s.run("car.rpm = 1700")
+    check(s.eval("%s.rpm(car, lc)" % P) == 1700 and s.eval("lc.rev") is False, "the game's engine speed down to it: unlatched")
+    s.run("lc = {}; car.rpm, car.gear = 5430, -1; %s.rpm(car, lc); car.gear = 1" % P)
+    check(s.eval("%s.rpm(car, lc)" % P) == 5430 and s.eval("lc.rev") is False, "a forward gear: unlatched")
+    s.run("lc = {}; car.rpm, car.gear = 5430, -1; %s.rpm(car, lc); car.gear = 0; car.kmh = 3" % P)
+    check(s.eval("%s.rpm(car, lc)" % P) == 5430 and s.eval("lc.rev") is False, "rolling forwards: unlatched")
+    print("POLISH REVERSE POPS: %d reversing sequences x 2 drivers, worst <= 2 semitones / 0.05 volume a frame, high "
+          "layer silent; latch held through N, released by the game, a forward gear or forward roll; forward exact: ok"
+          % len(REVERSE_SEQS))
+
+
 def mp_tests():
     net = Net()
     server = side("server", net)
@@ -525,6 +674,7 @@ def main():
     occupant_tests()
     option_tests()
     reverse_tests()
+    reverse_pop_tests()
     mp_tests()
     print("POLISH LUA TESTS OK")
 

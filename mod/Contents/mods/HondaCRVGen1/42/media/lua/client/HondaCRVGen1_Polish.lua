@@ -14,7 +14,8 @@ on one emitter would share one pitch. Engine speed: BaseVehicle:getEngineSpeed()
 dashboard's needle; 42.21 VehiclePhysicsPacket carries it and the gear to every client); a car whose
 engine speed reads 0 while running falls back to an estimate from its road speed. In reverse the
 game's engine speed is a flat ~2100 rpm (Speed Demon ~5430) with no gear ratio, so the layer follows the
-road speed through a short reverse gear instead and stays on the low layer (REVERSE_*). Volume: sandbox PolishEngineVolume
+road speed through a short reverse gear instead and stays on the low layer (REVERSE_*); reverse mode is latched
+through the game's R -> N -> R of every key release and tap, so a release never jumps the layer up. Volume: sandbox PolishEngineVolume
 (percent, default 100; 0 = off) times the player's own mod option (Options > Mods, percent, default 100; 0 = off),
 held at MAX_MASTER (2x) when both are turned up.
 Which cars: the one the player sits in, then the nearest tracked running CR-Vs within RANGE (Polish.candidates).
@@ -59,6 +60,16 @@ Polish.REVERSE_RPM_PER_KMH = 60
 Polish.REVERSE_SLIP = 400      -- rpm the throttle adds over the road-speed figure (the game's rpm above idle, capped)
 Polish.REVERSE_MAX = 2400      -- the layer's ceiling in reverse: under XFADE[1], so the high layer stays silent
 Polish.REVERSE_KMH = 1
+-- Reverse pops (player report 0.5.2, "it still pops up when reversing"). The game's R lasts only while the key is
+-- held: on release (control_NoControl) or braking (control_Braking) the gear drops to N at once and the engine speed
+-- decays from the reverse 2100 (Speed Demon 5430) by ~20 rpm a frame, and with every tap the gear goes R -> N -> R.
+-- 0.5.2 left reverse mode with the gear, so each release swapped the capped figure for the game's high one (Speed
+-- Demon: the high layer at ~0.5 volume for a second or more), and each new press swapped it back. Now reverse mode
+-- is LATCHED per car: it holds until the game's own engine speed has come down to the reverse figure (then both
+-- agree), a forward gear is engaged, or the car rolls forwards; while latched the layer is the game's engine speed
+-- held under the reverse gear's figure (never over it, never over REVERSE_MAX), and the layer's rpm moves at most
+-- REVERSE_SLEW rpm a second (the game's own N decay rate) until it has caught up after leaving reverse.
+Polish.REVERSE_SLEW = 1200
 
 Polish.cars = {}               -- vehicle -> { emLow, emHigh, low, high, rpm, at, pitch = {}, pitchAt = {} }
 
@@ -125,13 +136,33 @@ function Polish.isReverse(vehicle, kmh)
     return kmh < -Polish.REVERSE_KMH
 end
 
-function Polish.rpm(vehicle)
+-- the most the reverse gear lets the layer read at a road speed: idle + the road speed through the gear + the throttle
+-- slip, under REVERSE_MAX
+function Polish.reverseCap(kmh)
+    return clamp(Polish.IDLE + math.abs(kmh) * Polish.REVERSE_RPM_PER_KMH + Polish.REVERSE_SLIP, Polish.IDLE,
+                 Polish.REVERSE_MAX)
+end
+
+-- c (optional): the car's layer state, which carries the reverse latch (c.rev)
+function Polish.rpm(vehicle, c)
     local r = 0
     if vehicle.getEngineSpeed then r = tonumber(vehicle:getEngineSpeed()) or 0 end
     local kmh = tonumber(vehicle:getCurrentSpeedKmHour()) or 0
-    if Polish.isReverse(vehicle, kmh) then
-        local slip = r > 100 and clamp(r - Polish.IDLE, 0, Polish.REVERSE_SLIP) or 0
-        return clamp(Polish.IDLE + math.abs(kmh) * Polish.REVERSE_RPM_PER_KMH + slip, Polish.IDLE, Polish.REVERSE_MAX)
+    local rev = Polish.isReverse(vehicle, kmh)
+    if c then
+        if rev then
+            c.rev = true
+        elseif c.rev then
+            local gear = vehicle.getTransmissionNumber and tonumber(vehicle:getTransmissionNumber()) or 0
+            if gear > 0 or kmh > Polish.REVERSE_KMH or (r > 100 and r <= Polish.reverseCap(kmh)) then
+                c.rev = false
+            end
+        end
+        rev = c.rev
+    end
+    if rev then
+        if r > 100 then return math.min(r, Polish.reverseCap(kmh)) end
+        return clamp(Polish.IDLE + math.abs(kmh) * Polish.REVERSE_RPM_PER_KMH, Polish.IDLE, Polish.REVERSE_MAX)
     end
     if r > 100 then return r end
     return Polish.IDLE + clamp(math.abs(kmh) * 45, 0, 4800)
@@ -212,7 +243,15 @@ function Polish.update(vehicle, c, t)
         c.x, c.y, c.z = x, y, z
     end
     local k = 1 - (1 - Polish.SMOOTH) ^ (clamp(dt, 1, 500) / (1000 / 60))
-    c.rpm = c.rpm + (Polish.rpm(vehicle) - c.rpm) * k
+    local target = Polish.rpm(vehicle, c)
+    local d = (target - c.rpm) * k
+    if c.rev or c.glide then
+        -- reverse, and after it until the layer has caught up with the game: at most REVERSE_SLEW rpm a second
+        local step = Polish.REVERSE_SLEW * clamp(dt, 1, 500) / 1000
+        d = clamp(d, -step, step)
+        c.glide = c.rev or math.abs(target - (c.rpm + d)) > 5
+    end
+    c.rpm = c.rpm + d
     local lp, lv, hp, hv = Polish.mix(c.rpm, Polish.volumeSetting())
     pitchLayer(c, "low", c.emLow, c.low, lp, lv, t)
     pitchLayer(c, "high", c.emHigh, c.high, hp, hv, t)
