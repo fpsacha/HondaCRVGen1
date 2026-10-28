@@ -7,7 +7,7 @@ Unwrap the kotris parts and bake their flat material colours into texture atlase
 Four UV spaces, one per texture the game script references:
     shell    body + every opening panel + glass + spare (2048)   -> Vehicles_..._Shell / Mask / Lights
     interior interior + cabin (build_cabin.py)            (1024) -> Vehicles_..._Interior
-    wheel    wheel_FR                                      (512)  -> Vehicles_..._Wheel
+    wheel    wheel_FR                                      (1024) -> Vehicles_..._Wheel
     engine   engine_block                                  (512)  -> Vehicles_..._Engine
 Each space is laid out at that size and baked at SUPERSAMPLE x it (the anti-aliased bake, 2026-10-13);
 compose reduces the shipped sheets to it.
@@ -88,7 +88,9 @@ SPACES = {
     # wheel 256 -> 512 (2026-10-13, approved): the vehiclewheel shader's name starts with "vehicle",
     # so the default Vehicle Texture Size (512) loads it unhalved; at 256 the tyre's lettering and the
     # rim's windows were ~2 texels/cm, a soft blur at 326 px/m
-    "wheel": (["wheel_FR"], 512),
+    # 512 -> 1024 (2026-10-27, approved with the crowned alloy: ~3 MB more at Vehicle Texture Size 1024+; at the
+    # default 512 cap the game halves it back to today's density, the rim's double weight kept)
+    "wheel": (["wheel_FR"], 1024),
     "engine": (["engine_block"], 512),       # its own sheet: the shared atlas starved the cover lettering
 }
 # the feature plugins' meshes join their sheet's list and their own sheets follow (features.spaces; the
@@ -124,10 +126,12 @@ LIGHT_MATS = {
 # for the colour bake only, then restored. Lamp lenses keep their own colours.
 PALETTE = {
     "Pneu": (0.020, 0.020, 0.020),          # tyre rubber (KI5 tyres: lum p50 32 with a lighter sidewall ring)
-    "Jante": (0.335, 0.335, 0.345),         # alloy rim: sRGB ~156 before the wheel sheet's AO (0.26 read flat grey once
-                                            # the windows were real). Polish round 2 (R2-WA-5, values from the details
-                                            # team): spokes ship ~150-155 under a brighter centre cap (~195-205, the
-                                            # hubcap.png decal's own level); 0.32 shipped ~151 at the spoke centres
+    "Jante": (0.56, 0.565, 0.58),           # alloy rim: sRGB ~197-200 before the wheel sheet's AO and rim_tone's
+                                            # highlights (x 1 + rim_tone, the "gain" layer: crests ~212, chamfers and
+                                            # the lip's flange ~235-240). 2026-10-27 (the owner: "why does our tire look
+                                            # so bad compared to the 3d sketch?"): 0.335 (sRGB ~156, polish round 2)
+                                            # under the game's light read as flat mid grey; KI5's alloys (Range, GTR,
+                                            # Metro) ship their faces at ~190-220 with lighter lips
     "Plastique_noir": (0.030, 0.030, 0.033),
     "WellTub": (0.012, 0.012, 0.013),          # the cargo tub under the picnic table (build_table.WELL_MAT): black plastic
     "Partie_noir": (0.015, 0.015, 0.015),
@@ -198,6 +202,8 @@ TEXTURED = {
     #                                                      wrapped round the tyre the material sits on
     #   ("stripes", pitch_m, amount)                       diagonal weave (x + y + z), x (1 +amount / 1 -0.6 amount)
     #   ("attr", name)                                     multiplies by a float corner attribute (rack cargo AO)
+    #   ("gain", name)                                     multiplies by 1 + a float corner attribute (the alloy's
+    #                                                      rim_tone highlights); faces without it read 0: unchanged
     #   ("tint", rgb, gates)                               a flat linear colour where every gate passes (the
     #                                                      decal's gates: ("normal", ...), ("range", ...))
     # flat factors (5th value) damp the grain: at the game's zoom full-contrast grain reads as
@@ -249,7 +255,7 @@ TEXTURED = {
     # texels per screen pixel (GL_LINEAR, no mips); KI5's tyres and cladding are flat with drawn
     # detail. 4-8 % keeps a hint of grain without the shimmer.
     "Pneu":           [("noise", 90.0, 0.06)],
-    "Jante":          [("noise", 160.0, 0.04)],
+    "Jante":          [("noise", 160.0, 0.04), ("gain", "rim_tone")],   # the alloy's highlights (prep_parts.RIM_TONE)
     "RimWell":        [("noise", 160.0, 0.04), ("attr", "rim_shade")],   # every RimWell face carries it
     "Body_plastique": [("noise", 25.0, 0.05)],
     "Dessous":        [("noise", 40.0, 0.08)],
@@ -596,6 +602,12 @@ class _Textured:
             node.attribute_type = 'GEOMETRY'
             node.attribute_name = name
             return self._mix(nt, prev, node.outputs['Fac'])
+        if kind == "gain":                                       # x (1 + a float corner attribute): highlights painted
+            _k, name = spec[:2]                                  # by the geometry (prep_parts rim_tone); a face or a
+            node = self._new(nt, 'ShaderNodeAttribute', "gain")  # projection twin without it reads 0: x 1
+            node.attribute_type = 'GEOMETRY'
+            node.attribute_name = name
+            return self._mix(nt, prev, self._math(nt, 'ADD', node.outputs['Fac'], 1.0))
         if kind == "stripes":                                    # s = x + y + z: a diagonal on every seat plane
             _k, pitch, amount = spec
             sep = self._new(nt, 'ShaderNodeSeparateXYZ', "sep")
@@ -947,6 +959,9 @@ TEXEL_WEIGHT_GEN = {1: 0.35, 2: 0.2, 3: 0.25, 4: 0.6, 5: 0.6, 6: 4.0,   # genera
                     7: 1.0}          # exterior details (build_details): the 2.6 cm grip, 7 mm flap seam and mirror rim at paint density
 RIM_GEN = 8                          # the windowed alloy (prep_parts._rim_face): weight by material, x2 on the spare
 RIM_WEIGHT = {"Jante": 1.0, "RimWell": 0.5, "Rotor": 0.25}   # walls 5 cm deep: ~5 texels for their shade ramp
+# per sheet (2026-10-27, the crowned alloy): on the road wheel's own sheet the face, its chamfers and the lip get twice
+# the tyre's density (the 3-4 mm chamfer bands and the crest highlights; the sheet went 512 -> 1024 with it)
+RIM_WEIGHT_SPACE = {"wheel": {"Jante": 2.0}}
 TEXEL_WEIGHT_OBJ = {"arch_liners": 0.25, "bay_walls": 0.35, "antenna": 0.4}
 TEXEL_WEIGHT_OBJ.update(features.texel_weights())     # feature meshes on a sheet other than the shell
 TEXEL_WEIGHT_MAT.update(features.bake_mat_weights())  # feature materials
@@ -1099,7 +1114,7 @@ def _face_weights(ob, space):
         elif mat.startswith("DoorCard_"):
             w = DOOR_CARD_WEIGHT                         # painted door card (gen 5, but seen up close)
         elif gen[p.index] == RIM_GEN:
-            w = RIM_WEIGHT.get(mat, 0.5) * (SPARE_WEIGHT if space == "shell" else 1.0)
+            w = RIM_WEIGHT_SPACE.get(space, {}).get(mat, RIM_WEIGHT.get(mat, 0.5)) * (SPARE_WEIGHT if space == "shell" else 1.0)
         elif gen[p.index]:
             w = TEXEL_WEIGHT_GEN.get(gen[p.index], 0.3)
         elif ob.name in TEXEL_WEIGHT_OBJ:

@@ -215,7 +215,9 @@ def cluster():
 HUB_DECAL_R = 0.105        # the square's half size in metres (bake_atlas TEXTURED HubCap / lift.BAKE_TEXTURED)
 HUB_LUG_R = 0.057          # prep_parts.RIM_LUG_R: the 5 x 114.3 mm lug circle
 HUB_CAP_R = 0.032          # prep_parts.RIM_CAP_R: the H cap (review_wheels\ref\ex_fr_wheel.jpg)
-HUB_ALLOY = 152            # sRGB of the alloy face round the cap (bake_atlas PALETTE Jante 0.32 linear)
+HUB_ALLOY = 197            # sRGB of the alloy face round the cap (bake_atlas PALETTE Jante 0.56 linear since the crowned
+                           # alloy, 2026-10-27; 152 for the old 0.32 read as a dark octagon round the cap on the new silver)
+HUB_CAP_BASE = 214         # the cap's silver (was 205 over ~154 spokes): still a step brighter than the spokes
 
 
 def _honda_h(cx, cy, w, h):
@@ -267,7 +269,7 @@ def hubcap():
     rc = HUB_CAP_R * k                                    # the cap: hairline gap, silver dome lit from the upper left
     gap = 0.0016 * k
     d.ellipse([(c - rc - gap, c - rc - gap), (c + rc + gap, c + rc + gap)], fill=(a0 - 72, a0 - 72, a0 - 69))
-    base = 205                                            # 168 -> 205 (2026-10-17 round 2, R2-WA-5): the cap reads brighter than the spokes (~154)
+    base = HUB_CAP_BASE                                   # 168 -> 205 (2026-10-17 round 2, R2-WA-5) -> 214 (2026-10-27): brighter than the spokes
     steps = 24
     for i in range(steps):
         t = i / (steps - 1)                               # 0 outside .. 1 at the highlight

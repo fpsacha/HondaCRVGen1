@@ -39,7 +39,8 @@ MOD = os.path.join(ROOT, "mod", "Contents", "mods", "HondaCRVGen1")
 MEDIA = os.path.join(MOD, "common", "media")
 MB = 1024.0 * 1024.0
 CAPS = (256, 512, 1024, 2048)
-VEHICLE_MB = {256: 5.5, 512: 22.0, 1024: 76.0, 2048: 184.0}   # 0.4.4 (8 skins + Mask at 2048; see the report)
+VEHICLE_MB = {256: 5.5, 512: 22.0, 1024: 79.0, 2048: 187.0}   # 0.4.4 (8 skins + Mask at 2048; see the report);
+                                                               # 2026-10-27 the wheel sheet 512 -> 1024: +3 MB at 1024 / 2048
 OVERLAY_MB = 24.0                                              # 112 before ship_crop, 20.1 after
 MANUAL_MB = 16.0                                               # a spread; 64 before
 

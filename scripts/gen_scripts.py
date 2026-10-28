@@ -566,7 +566,9 @@ PASSENGERS = [
 AREAS = [
     # name, xywh = centre x, centre z, width, depth  (metres)
     ("Engine", "0.0000 2.6000 1.6000 0.8000"),
-    ("TruckBed", "0.5500 -2.7500 0.9000 0.8000"),      # PZ +x = left: beside the gate, which swings right
+    # the car's full width from the bumper (z -2.26) back 1.1 m, past the gate's spare, like vanilla's SUV (0.9451 wide =
+    # its extents); 0.5.4: was 0.9 x 0.8 beside the gate, too small to hit in Project Viewpoint (Chaser)
+    ("TruckBed", "0.0000 -2.8000 1.7500 1.1000"),
     ("SeatFrontLeft", "1.2500 0.2600 0.8000 1.0800"),
     ("SeatFrontRight", "-1.2500 0.2600 0.8000 1.0800"),
     ("SeatRearLeft", "1.2500 -0.7500 0.8000 0.9400"),

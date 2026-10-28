@@ -139,6 +139,28 @@ RIM_ROAD_PHASE = 90.0         # road wheels: a window centred straight up (objec
 RIM_WINDOW = ((0.076, 0.0), (0.085, -9.0), (0.100, -15.5), (0.144, -23.5), (0.1655, -25.0),
               (0.1665, 0.0), (0.1655, 25.0), (0.144, 23.5), (0.100, 15.5), (0.085, 9.0))
 RIM_SLOT = ((0.083, 0.0), (0.092, -3.0), (0.155, -2.7), (0.1650, 0.0), (0.155, 2.7), (0.092, 3.0))
+# 2026-10-27 (the owner: "why does our tire look so bad compared to the 3d sketch?", his reference the kotris
+# Sketchfab render: bright silver, five deep double spokes, chrome-like highlights). The spoke face was one flat
+# cone with the windows cut in: the spokes read as flat shapes with dark slots. Now every arm of a pair is CROWNED
+# (a crest along its middle, RIM_CREST_R, at the old face height; the flanks fall RIM_CROWN to the edge, so nothing
+# stands proud of the old envelope: the spare cover and the off-road can keep their fit) and every window and slot
+# has a machined CHAMFER round its mouth (RIM_CHAMFER: in-plane width, depth), a bright band in the paint. Under
+# the game's 3-step vehiclewheel lighting the flanks and chamfers take different steps: the spokes read sculpted.
+# The lip gets a flange crest and a valley before the face (_lathe_profile, RIM_LIP_*). Every rim face is generated
+# (gen RIM_GEN, baked direct) and carries the float corner attribute rim_tone: the colour bake multiplies the
+# silver by 1 + rim_tone (bake_atlas "gain"), the highlights painted where a machined alloy catches the light
+RIM_CROWN = 0.006             # crest above the flank's foot (the chamfer's top edge)
+RIM_CROWN_HUB = (0.080, 0.100, 0.35)  # ... only this share of it inside r 0.080, full from 0.100: round the hub the
+                                      # window tips sit 4-6 mm from the hub ring, and a full drop there made a star of
+                                      # steep facets round the cap
+RIM_CHAMFER = {"window": (0.004, 0.003), "slot": (0.0025, 0.002)}   # (in-plane width, depth) round each mouth
+RIM_CREST_R = (0.096, 0.124, 0.152)   # crest points along each arm (between the slot's ends, 0.083-0.165)
+RIM_LIP_CREST = (0.007, 0.0015)       # the flange's crest: this far inside the lip's outer ring, this much higher
+RIM_LIP_VALLEY = (0.008, 0.002)       # the valley: this far outside RIM_FACE_R, this much under the face's edge
+# rim_tone per corner (colour x (1 + tone)): the chamfers' top edge brightest, the crest and the flange next,
+# the flanks' foot plain silver
+RIM_TONE = {"crest": 0.16, "foot": 0.0, "hub": 0.08, "edge": 0.10, "chamfer_top": 0.42, "chamfer_low": 0.22,
+            "lip": 0.18, "lip_crest": 0.45, "valley": 0.0}
 MAT_DEV = {"Body": 0.005, "Body_plastique": 0.006}   # shape guard per material (default lowpoly.MAX_DEV,
                                                      # 12 mm): paint and cladding hold their roof ribs,
                                                      # arch flares and creases
@@ -1407,17 +1429,62 @@ def _window_phase(src, c, ax, u, v, r=0.135):
     return (math.degrees(math.atan2(sy, sx)) / RIM_SPOKES) % period
 
 
+def _inside2d(pt, poly):
+    """Even-odd point-in-polygon test in 2D (poly: a list of (x, y))."""
+    x, y = pt
+    inside = False
+    n = len(poly)
+    for p in range(n):
+        (x1, y1), (x2, y2) = poly[p], poly[(p + 1) % n]
+        if (y1 > y) != (y2 > y) and x < x1 + (y - y1) * (x2 - x1) / (y2 - y1):
+            inside = not inside
+    return inside
+
+
+def _inset2d(pts, width, r_min, r_max):
+    """Each point of the closed outline pts moved `width` away from the outline's inside (a miter offset,
+    capped at twice the width), pulled back where it would leave the ring r_min..r_max (the window tips
+    near the hub, the slot's outer tip near the lip)."""
+    n = len(pts)
+    area = sum(pts[i][0] * pts[(i + 1) % n][1] - pts[(i + 1) % n][0] * pts[i][1] for i in range(n))
+    sgn = 1.0 if area > 0 else -1.0         # counter-clockwise: the outward normal of p -> q is (dy, -dx)
+
+    def normal(a, b):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        ln = math.hypot(dx, dy) or 1.0
+        return (sgn * dy / ln, -sgn * dx / ln)
+    out = []
+    for i in range(n):
+        n1 = normal(pts[i - 1], pts[i])
+        n2 = normal(pts[i], pts[(i + 1) % n])
+        d = (n1[0] + n2[0], n1[1] + n2[1])
+        ln = math.hypot(*d) or 1.0
+        d = (d[0] / ln, d[1] / ln)
+        k = width / max(d[0] * n1[0] + d[1] * n1[1], 0.5)
+        for _ in range(20):
+            q = (pts[i][0] + d[0] * k, pts[i][1] + d[1] * k)
+            if r_min <= math.hypot(*q) <= r_max:
+                break
+            k *= 0.8
+        out.append(q)
+    return out
+
+
 def _rim_face(bm, c, ax, u, v, ring_out, t_hub, phase, hub_mat, hub_gen, mats):
     """The alloy's face inside the lip's last lathe ring `ring_out` (radius RIM_FACE_R): five spoke
     pairs with real windows (RIM_WINDOW between the pairs, RIM_SLOT between each pair's arms), every
     window a pocket whose walls run straight back past a disc RIM_DEPTH behind the face, and the hub
-    (a 16-segment cone, tip t_hub + 2 mm: the old cap's height, so the wheel's bounding box and the
-    spare cover's fit are unchanged). Face and walls are generated (gen RIM_GEN, baked flat: no ray
-    from the twin's painted dish lands on them); the walls carry the float corner attribute
-    rim_shade (1 at the face, RIM_SHADE_DEEP at the disc) that darkens them with depth in the colour
-    bake. Every face looks out of its pocket, so with back faces culled nothing in a window is
-    see-through. mats: material index by name (Jante, RimWell, Rotor). Returns face counts."""
-    from mathutils.geometry import tessellate_polygon
+    (a RIM_HUB_SEG cone, tip t_hub + 2 mm: the old cap's height, so the wheel's bounding box and the
+    spare cover's fit are unchanged). Since 2026-10-27 each arm is crowned (a crest polyline through
+    RIM_CREST_R at the old face height, the flanks falling RIM_CROWN to the mouths) and each mouth has a
+    chamfer (RIM_CHAMFER) down to the pocket's wall; the face is a constrained Delaunay triangulation of
+    the lip ring, the hub ring, the chamfers' top outlines and the crests. Face, chamfers and walls are
+    generated (gen RIM_GEN, baked direct: no ray from the twin's painted dish lands on them); the walls
+    carry the float corner attribute rim_shade (1 at the face, RIM_SHADE_DEEP at the disc) that darkens
+    them with depth, and every Jante corner carries rim_tone (RIM_TONE: the silver's highlights). Every
+    face looks out of its pocket, so with back faces culled nothing in a window is see-through.
+    mats: material index by name (Jante, RimWell, Rotor). Returns face counts."""
+    from mathutils.geometry import delaunay_2d_cdt
     if hub_gen == 6:                        # road wheels: the windows onto the decal's nuts (RIM_ROAD_PHASE: an
         up = Vector((0.0, 0.0, 1.0))        # angle in the object's y / z plane, where bake_atlas maps the decal)
         up = up - ax * up.dot(ax)
@@ -1425,11 +1492,12 @@ def _rim_face(bm, c, ax, u, v, ring_out, t_hub, phase, hub_mat, hub_gen, mats):
             a_up = math.degrees(math.atan2(up.dot(v), up.dot(u)))
             phase = (a_up + RIM_ROAD_PHASE - 90.0) % (360.0 / RIM_SPOKES)
     shade = bm.loops.layers.float.get("rim_shade") or bm.loops.layers.float.new("rim_shade")
-    gl = _gen_layer(bm)                     # after the float layer: adding one invalidates layer wrappers
+    tone = bm.loops.layers.float.get("rim_tone") or bm.loops.layers.float.new("rim_tone")
+    gl = _gen_layer(bm)                     # after the float layers: adding one invalidates layer wrappers
     t_out = sum((vt.co - c).dot(ax) for vt in ring_out) / len(ring_out)
     t_ring = t_hub - 0.002
 
-    def t_face(r):                          # the spoke face: a shallow cone from the hub to the lip
+    def t_face(r):                          # the crest: a shallow cone from the hub to the lip (the old face)
         k = min(max((r - RIM_HUB_R) / (RIM_FACE_R - RIM_HUB_R), 0.0), 1.0)
         return t_ring + (t_out - t_ring) * k
 
@@ -1437,29 +1505,98 @@ def _rim_face(bm, c, ax, u, v, ring_out, t_hub, phase, hub_mat, hub_gen, mats):
         a = math.radians(deg)
         return c + ax * (t_face(r) if t is None else t) + (u * math.cos(a) + v * math.sin(a)) * r
 
+    def at2(xy, drop):                      # a point of the face plane (2D) at the crest height minus drop
+        r = math.hypot(*xy)
+        return c + ax * (t_face(r) - drop) + u * xy[0] + v * xy[1]
+
+    def crown(xy):                          # the flank's fall at a mouth, less round the hub (RIM_CROWN_HUB)
+        r0, r1, k0 = RIM_CROWN_HUB
+        k = min(max((math.hypot(*xy) - r0) / (r1 - r0), 0.0), 1.0)
+        return RIM_CROWN * (k0 + (1.0 - k0) * k)
+
     def flat(p):                            # 2D in the face plane
         d = p - c
         return (d.dot(u), d.dot(v))
     hub_ring = [bm.verts.new(at(RIM_HUB_R, phase + 360.0 * k / RIM_HUB_SEG)) for k in range(RIM_HUB_SEG)]
-    loops = []
+    # the pockets' mouths: `low` = the outline itself (the wall's top, the chamfer's foot), `top` = the chamfer's
+    # top edge, inset into the spoke, where the flank begins
+    lows, tops, kinds = [], [], []
     for s in range(RIM_SPOKES):
-        for outline, centre in ((RIM_WINDOW, phase + 72.0 * s), (RIM_SLOT, phase + 36.0 + 72.0 * s)):
-            loops.append([bm.verts.new(at(r, centre + d)) for r, d in outline])
+        for kind, outline, centre in (("window", RIM_WINDOW, phase + 72.0 * s), ("slot", RIM_SLOT, phase + 36.0 + 72.0 * s)):
+            w, dep = RIM_CHAMFER[kind]
+            pts = [flat(at(r, centre + d)) for r, d in outline]
+            ins = _inset2d(pts, w, RIM_HUB_R + 0.004, RIM_FACE_R - 0.003)
+            lows.append([bm.verts.new(at2(p, crown(p) + dep)) for p in pts])
+            tops.append([bm.verts.new(at2(p, crown(p))) for p in ins])
+            kinds.append(kind)
+
+    def half(outline, r):                   # half angle (degrees) of a symmetric outline at radius r
+        pts = sorted((rr, abs(d)) for rr, d in outline if d >= 0.0)
+        for (r0, d0), (r1, d1) in zip(pts, pts[1:]):
+            if r0 <= r <= r1 and r1 > r0:
+                return d0 + (d1 - d0) * (r - r0) / (r1 - r0)
+        return pts[-1][1]
+    # the crests: each arm's middle between its window's side and its slot's side, at the old face height
+    crests = []
+    for s in range(RIM_SPOKES):
+        wc, pc = phase + 72.0 * s, phase + 36.0 + 72.0 * s
+        for sgn in (-1.0, 1.0):             # the arm before the slot (towards this window), then the one after it
+            pts = []
+            for r in RIM_CREST_R:
+                a0 = (wc + half(RIM_WINDOW, r)) if sgn < 0 else (pc + half(RIM_SLOT, r))
+                a1 = (pc - half(RIM_SLOT, r)) if sgn < 0 else (wc + 72.0 - half(RIM_WINDOW, r))
+                pts.append(bm.verts.new(at(r, 0.5 * (a0 + a1))))
+            crests.append(pts)
     made = []
-    # the face: the annulus between the lip ring and the hub ring with the windows as holes
-    polys = [list(ring_out), hub_ring] + loops
-    flat_v = [vt for poly in polys for vt in poly]
-    tris_ = tessellate_polygon([[flat(vt.co) + (0.0,) for vt in poly] for poly in polys])
-    for a, b, cc in tris_:
-        f = bm.faces.new((flat_v[a], flat_v[b], flat_v[cc]))
+    # the face: lip ring, hub ring, the chamfers' tops and the crests, triangulated with every one as a constraint;
+    # triangles inside the hub or a mouth (or outside the lip) are dropped
+    allv = list(ring_out) + hub_ring + [vt for loop in tops for vt in loop] + [vt for cr in crests for vt in cr]
+    index = {vt: i for i, vt in enumerate(allv)}
+    edges = []
+    for loop in [list(ring_out), hub_ring] + tops:
+        edges += [(index[loop[i]], index[loop[(i + 1) % len(loop)]]) for i in range(len(loop))]
+    for cr in crests:
+        edges += [(index[cr[i]], index[cr[i + 1]]) for i in range(len(cr) - 1)]
+    co2 = [Vector(flat(vt.co)) for vt in allv]
+    res = delaunay_2d_cdt(co2, edges, [], 0, 1e-7)
+    out_co, out_faces, orig = res[0], res[2], res[3]
+    if len(out_co) != len(allv) or any(len(o) != 1 for o in orig):
+        raise RuntimeError("_rim_face: the face's constraints cross (%d vertices in, %d out)" % (len(allv), len(out_co)))
+    vmap = [allv[o[0]] for o in orig]
+    lip2 = [flat(vt.co) for vt in ring_out]
+    hub2 = [flat(vt.co) for vt in hub_ring]
+    tops2 = [[flat(vt.co) for vt in loop] for loop in tops]
+    crest_set = {vt for cr in crests for vt in cr}
+    top_set = {vt for loop in tops for vt in loop}
+    hub_set = set(hub_ring)
+    for tri in out_faces:
+        vs = [vmap[i] for i in tri]
+        cen = tuple(sum(out_co[i][k] for i in tri) / 3.0 for k in range(2))
+        if not _inside2d(cen, lip2) or _inside2d(cen, hub2) or any(_inside2d(cen, t2) for t2 in tops2):
+            continue
+        f = bm.faces.new(vs)
         f.material_index = mats["Jante"]
         f[gl] = RIM_GEN
+        for lp in f.loops:
+            lp[tone] = (RIM_TONE["crest"] if lp.vert in crest_set else RIM_TONE["foot"] if lp.vert in top_set
+                        else RIM_TONE["hub"] if lp.vert in hub_set else RIM_TONE["edge"])
         made.append(f)
-    face_set = set(made)
-    # walls: each window outline straight back past the disc (2 mm under it: no hairline at the foot)
+    # the chamfers: each mouth's top edge down to its outline, Jante, the bright band
+    chamfers = []
+    for top, low in zip(tops, lows):
+        n = len(top)
+        for i in range(n):
+            j = (i + 1) % n
+            f = bm.faces.new((top[i], top[j], low[j], low[i]))
+            f.material_index = mats["Jante"]
+            f[gl] = RIM_GEN
+            for lp in f.loops:
+                lp[tone] = RIM_TONE["chamfer_top"] if lp.vert in top_set else RIM_TONE["chamfer_low"]
+            chamfers.append(f)
+    # walls: each outline straight back past the disc (2 mm under it: no hairline at the foot)
     t_back = t_out - RIM_DEPTH
     walls = []
-    for loop in loops:
+    for loop in lows:
         n = len(loop)
         bottom = [bm.verts.new(vt.co - ax * ((vt.co - c).dot(ax) - t_back + 0.002)) for vt in loop]
         pts = [flat(vt.co) for vt in loop]
@@ -1471,13 +1608,7 @@ def _rim_face(bm, c, ax, u, v, ring_out, t_hub, phase, hub_mat, hub_gen, mats):
             # it must face into the window: a point just off the edge's middle along the normal lies inside
             mid = (loop[i].co + loop[j].co) * 0.5
             f.normal_update()
-            probe = flat(mid + f.normal * 0.002)
-            inside = False
-            for p in range(n):
-                (x1, y1), (x2, y2) = pts[p], pts[(p + 1) % n]
-                if (y1 > probe[1]) != (y2 > probe[1]) and probe[0] < x1 + (probe[1] - y1) * (x2 - x1) / (y2 - y1):
-                    inside = not inside
-            if not inside:
+            if not _inside2d(flat(mid + f.normal * 0.002), pts):
                 f.normal_flip()
             for lp in f.loops:
                 lp[shade] = 1.0 if lp.vert in loop else RIM_SHADE_DEEP
@@ -1497,22 +1628,12 @@ def _rim_face(bm, c, ax, u, v, ring_out, t_hub, phase, hub_mat, hub_gen, mats):
     for f in hub:
         f.material_index = hub_mat
         f[gl] = hub_gen
-    for f in made + disc + hub:
+    for f in made + chamfers + disc + hub:
         f.normal_update()
         if f.normal.dot(ax) < 0:
             f.normal_flip()
-    # tidy the face's triangulation (scanfill leaves slivers): rotate only edges inside the face
-    inner = [e for e in bm.edges if len(e.link_faces) == 2 and all(g in face_set for g in e.link_faces)]
-    if inner:
-        bmesh.ops.beautify_fill(bm, faces=made, edges=inner, use_restrict_tag=False, method='AREA')
-    face = 0
-    for f in bm.faces:
-        if f[gl] == RIM_GEN and f.material_index == mats["Jante"]:
-            face += 1
-            if f.normal.dot(ax) < 0:
-                f.normal_flip()
-    return {"face": face, "walls": len(walls), "disc": RIM_DISC_SEG - 2, "hub": len(hub),
-            "depth": t_out - t_back, "phase": phase}
+    return {"face": len(made), "chamfer": len(chamfers), "walls": len(walls), "disc": RIM_DISC_SEG - 2,
+            "hub": len(hub), "depth": t_out - t_back, "phase": phase}
 
 
 def _clear_hub(ob, r_clear=0.100):
@@ -2031,7 +2152,13 @@ def _lathe_profile(ob, c, ax, open_face=False):
     def face_t(rr):
         band = [t for t, r in outer if abs(r - rr) < 0.012]
         return max(band) if band else prof[-1][0] - 0.02
-    for rr in ((Rb - 0.004, RIM_FACE_R) if open_face else (Rb - 0.004, 0.5 * (Rb + 0.105), 0.105)):
+    if open_face:                           # the lip: outer ring, flange crest, valley, the face's edge (RIM_LIP_*)
+        t_lip, t_edge = face_t(Rb - 0.004), face_t(RIM_FACE_R)
+        for rr, tt in ((Rb - 0.004, t_lip), (Rb - 0.004 - RIM_LIP_CREST[0], t_lip + RIM_LIP_CREST[1]),
+                       (RIM_FACE_R + RIM_LIP_VALLEY[0], t_edge - RIM_LIP_VALLEY[1]), (RIM_FACE_R, t_edge)):
+            prof.append((tt, rr, "Jante"))
+        return prof, t_in, face_t(0.105)
+    for rr in (Rb - 0.004, 0.5 * (Rb + 0.105), 0.105):
         prof.append((face_t(rr), rr, "Jante"))
     return prof, t_in, face_t(0.105)
 
@@ -2055,6 +2182,7 @@ def _lathe_replace(ob, src, cap, rim=None, hub="Jante"):
     if rim is not None:                     # layers first: adding one later invalidates wrappers
         _gen_layer(bm)
         bm.loops.layers.float.new("rim_shade")
+        bm.loops.layers.float.new("rim_tone")
     rings = []
     for t, r, _m in prof:
         ring = []
@@ -2072,6 +2200,12 @@ def _lathe_replace(ob, src, cap, rim=None, hub="Jante"):
             f = bm.faces.new((rings[j][k], rings[j][k2], rings[j + 1][k2], rings[j + 1][k]))
             f.material_index = mi["Jante"] if lip else mi["Pneu"]
             made.append((f, ax if (lip and prof[j][2] == "Jante") else None))
+            if lip and rim is not None:     # the windowed alloy's lip: generated (baked direct) with its tones
+                f[bm.faces.layers.int[GEN]] = RIM_GEN
+                tone = bm.loops.layers.float["rim_tone"]
+                for lp in f.loops:          # rings counted from the face's edge: 0 edge, 1 valley, 2 crest, 3+ the lip
+                    k_from_face = len(prof) - 1 - (j if lp.vert in rings[j] else j + 1)
+                    lp[tone] = {0: RIM_TONE["edge"], 1: RIM_TONE["valley"], 2: RIM_TONE["lip_crest"]}.get(k_from_face, RIM_TONE["lip"])
     # the back of the wheel (inner bead to the axle), seen under the car from low: the dark well colour, not the
     # alloy's silver (2026-10-17 review WHL-6: "a flat silver disc")
     back_mi = mi["RimWell"] if "RimWell" in mi else _mat_index(me, "RimWell", lambda: _node_material("RimWell", (0.20, 0.20, 0.21), 0.6))
@@ -2106,8 +2240,9 @@ def _lathe_replace(ob, src, cap, rim=None, hub="Jante"):
 def _rim_report(info):
     if not info:
         return "closed dish"
-    return ("windowed rim: face %d, walls %d quads, disc %d, hub %d tris; pockets %.0f mm deep, phase %.1f deg"
-            % (info["face"], info["walls"], info["disc"], info["hub"], info["depth"] * 1000, info["phase"]))
+    return ("windowed rim: face %d tris, chamfers %d quads, walls %d quads, disc %d, hub %d tris; pockets %.0f mm deep, "
+            "phase %.1f deg" % (info["face"], info["chamfer"], info["walls"], info["disc"], info["hub"], info["depth"] * 1000,
+                                info["phase"]))
 
 
 def _spare_inserts(ob, c, ax):
@@ -5551,4 +5686,5 @@ def prep(report=print):
     return total
 
 
-prep()
+if __name__ != "prep_parts":       # run_rebuild execs it ("run"), blender --python runs it ("__main__"); an import (the
+    prep()                         # geometry tests: test_geometry_budget.py) only takes the functions

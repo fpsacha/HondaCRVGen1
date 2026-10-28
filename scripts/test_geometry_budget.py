@@ -118,10 +118,120 @@ def test_prune():
     del other
 
 
+def _synthetic_wheel():
+    """A stand-in for kotris's wheel_FR_hi: a 36-sided lathe of the stock profile (tyre Pneu, the lip and a dished
+    alloy face Jante, numbers measured on wheel_FR_hi 2026-10-27), hub at the road wheel's place, axle +x."""
+    import math
+    me = bpy.data.meshes.new("w_hi")
+    for n in ("Pneu", "Jante"):
+        me.materials.append(bpy.data.materials.get(n) or bpy.data.materials.new(n))
+    prof = [(-0.0885, 0.2086, 0), (-0.1038, 0.2826, 0), (-0.087, 0.3183, 0), (-0.0685, 0.3319, 0), (0.0685, 0.3319, 0),
+            (0.087, 0.3183, 0), (0.1038, 0.2826, 0), (0.0885, 0.2086, 0), (0.093, 0.2046, 1), (0.0888, 0.172, 1),
+            (0.0956, 0.105, 1), (0.0983, 0.068, 1)]
+    c = Vector((0.756, 1.3226, 0.3415))
+    bm = bmesh.new()
+    seg = 36
+    rings = [[bm.verts.new(c + Vector((t, r * math.cos(2 * math.pi * k / seg), r * math.sin(2 * math.pi * k / seg))))
+              for k in range(seg)] for t, r, _m in prof]
+    for j in range(len(rings) - 1):
+        for k in range(seg):
+            f = bm.faces.new((rings[j][k], rings[j][(k + 1) % seg], rings[j + 1][(k + 1) % seg], rings[j + 1][k]))
+            f.material_index = prof[j + 1][2]
+    tip = bm.verts.new(c + Vector((0.0983, 0.0, 0.0)))
+    for k in range(seg):
+        f = bm.faces.new((rings[-1][k], rings[-1][(k + 1) % seg], tip))
+        f.material_index = 1
+    bm.to_mesh(me)
+    bm.free()
+    ob = bpy.data.objects.new("w_hi", me)
+    bpy.context.scene.collection.objects.link(ob)
+    return ob, c
+
+
+def test_alloy():
+    """prep_parts._lathe_replace / _rim_face (2026-10-27, the crowned alloy): the road wheel within its budget (766 tris
+    before: +316 for crowned arms, chamfered mouths and the lip's flange), every arm crowned (its flanks under the crest)
+    and nothing standing proud of the old face (the spare cover and the off-road can fit round the spare's face), every
+    rim corner carrying rim_tone (the bake's highlights), and no see-through: rays from outside the wheel at up to 80
+    degrees off the axle meet a face that looks back at them (the game culls back faces)."""
+    import math
+    import numpy as np
+    from mathutils.bvhtree import BVHTree
+    import prep_parts as P
+    src, c = _synthetic_wheel()
+    me = src.data.copy()
+    ob = bpy.data.objects.new("w_low", me)
+    bpy.context.scene.collection.objects.link(ob)
+    info = P._lathe_replace(ob, src, cap=True, rim=src, hub="HubCap")
+    n = tris(ob)
+    check(n <= 1100, "stock alloy wheel within its budget: %d tris <= 1100 (766 before 2026-10-27)" % n)
+    check(info["chamfer"] == 5 * (len(P.RIM_WINDOW) + len(P.RIM_SLOT)), "every window and slot mouth chamfered (%d quads)" % info["chamfer"])
+    names = [m.name for m in ob.data.materials]
+    t_hub_tip = None
+    over, crest_fall, on_face = 0.0, [], 0
+    t_out = 0.0
+    for p in ob.data.polygons:
+        if names[p.material_index] == "HubCap":
+            for i in p.vertices:
+                t = ob.data.vertices[i].co.x - c.x
+                t_hub_tip = t if t_hub_tip is None else max(t_hub_tip, t)
+    gen = ob.data.attributes["gen"].data
+    tone = ob.data.attributes.get("rim_tone")
+    check(tone is not None and tone.domain == 'CORNER', "rim_tone is a corner attribute on the wheel")
+    jante = [p for p in ob.data.polygons if names[p.material_index] == "Jante"]
+    check(all(gen[p.index].value == P.RIM_GEN for p in jante), "every rim face is generated (gen %d: baked direct, with its tones)" % P.RIM_GEN)
+    tones = [tone.data[li].value for p in jante for li in p.loop_indices]
+    check(min(tones) >= 0.0 and abs(max(tones) - max(P.RIM_TONE.values())) < 1e-6,
+          "rim_tone on the rim's corners spans 0 .. %.2f (the chamfers' bright band)" % max(P.RIM_TONE.values()))
+    check(all(p.normal.x > 0.0 for p in jante), "every rim face looks out of the wheel")
+    # the old face: the cone from the hub ring (t_hub - 2 mm at RIM_HUB_R) to the lip ring (RIM_FACE_R)
+    ring = [ob.data.vertices[i].co for p in jante for i in p.vertices
+            if abs(math.hypot(ob.data.vertices[i].co.y - c.y, ob.data.vertices[i].co.z - c.z) - P.RIM_FACE_R) < 1e-5]
+    t_edge = sum(v.x - c.x for v in ring) / len(ring)
+    t_ring = t_hub_tip - 0.004
+
+    def t_face(r):
+        k = min(max((r - P.RIM_HUB_R) / (P.RIM_FACE_R - P.RIM_HUB_R), 0.0), 1.0)
+        return t_ring + (t_edge - t_ring) * k
+    for p in jante:
+        for i in p.vertices:
+            co = ob.data.vertices[i].co
+            r = math.hypot(co.y - c.y, co.z - c.z)
+            if P.RIM_HUB_R <= r <= P.RIM_FACE_R:
+                on_face += 1
+                over = max(over, (co.x - c.x) - t_face(r))
+                if 0.10 <= r <= 0.16:
+                    crest_fall.append(t_face(r) - (co.x - c.x))
+    check(over < 1e-5, "nothing on the spoke face stands proud of the old face (worst %+.2f mm)" % (over * 1000))
+    check(crest_fall and max(crest_fall) >= P.RIM_CROWN - 1e-5 and min(crest_fall) < 1e-5,
+          "the arms are crowned: crest on the old face, flanks falling %.1f mm and more to the chamfers" % (max(crest_fall) * 1000))
+    xs = [v.co.x for v in ob.data.vertices]
+    xs0 = [v.co.x for v in src.data.vertices]
+    check(max(xs) <= max(xs0) + 1e-6, "the wheel's outer face no further out than the twin's (%.4f <= %.4f)" % (max(xs), max(xs0)))
+    # see-through: rays at the rim face from outside, first hit must face the ray
+    bvh = BVHTree.FromObject(ob, bpy.context.evaluated_depsgraph_get())
+    ax, u, v = Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1))
+    rng = np.random.default_rng(7)
+    bad = 0
+    N = 20000
+    for _ in range(N):
+        r = 0.2 * math.sqrt(rng.random())
+        a = rng.random() * 2 * math.pi
+        tilt = math.radians(80.0) * math.sqrt(rng.random())
+        b = rng.random() * 2 * math.pi
+        d = -(ax * math.cos(tilt) + (u * math.cos(b) + v * math.sin(b)) * math.sin(tilt))
+        target = c + ax * 0.06 + (u * math.cos(a) + v * math.sin(a)) * r
+        hit, nrm, idx, dist = bvh.ray_cast(target - d * 1.0, d, 3.0)
+        if hit is None or nrm.dot(d) > 0:
+            bad += 1
+    check(bad == 0, "no see-through in the rim: %d of %d rays from outside met nothing or a back face" % (bad, N))
+
+
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     test_lift()
     test_prune()
+    test_alloy()
     if FAILS:
         print("GEOMETRY BUDGET TESTS: %d FAIL" % len(FAILS))
         sys.exit(1)
